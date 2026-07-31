@@ -9,33 +9,53 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: eco-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  source-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check offline source and embedded-secret policy
+        run: python3 scripts/check_source_policy.py
+
   test-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: false
-      - run: go test ./...
-      - run: go vet ./...
+      - name: Unit and source-regression tests
+        run: go test ./...
+      - name: Go vet
+        run: go vet ./...
 
   build-windows:
+    needs: [source-policy, test-linux]
     runs-on: windows-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: false
-      - name: Build and test
+      - name: Deterministic Windows build and tests
         shell: pwsh
         run: ./scripts/build-windows.ps1
       - name: Upload unsigned provenance artifact
         uses: actions/upload-artifact@v4
         with:
           name: eco-windows-unsigned-${{ github.sha }}
-          path: dist/ECO.exe
+          path: |
+            dist/ECO.exe
+            dist/ECO.exe.sha256
+            dist/build-receipt.json
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
