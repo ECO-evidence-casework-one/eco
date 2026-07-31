@@ -1,0 +1,26 @@
+# Build outputs
+/dist/
+/release/
+*.exe
+*.dll
+*.msi
+*.msix
+*.appx
+*.pdb
+
+# ECO local workspaces and backups
+*.ecobackup
+*.ecovault
+*.vault
+EvidenceCaseworkOne/
+
+# Editors and operating systems
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Test and coverage outputs
+coverage.out
+*.test

@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/ECO-evidence-casework-one/eco",
+  "prepared_at": "2026-07-31T08:40:00+01:00",
+  "source_build": "ECO-V25-20260730-N1-P3",
+  "license": "GPL-3.0-only",
+  "go_test": "PASS",
+  "go_vet": "PASS",
+  "deterministic_windows_cross_build": "PASS",
+  "unsigned_build_sha256": "14b078a90f3f5b9b0c829107edac429fcbcb01fd8b389714febef167c76f5dcc",
+  "unsigned_binary_included_in_repository_package": false,
+  "personal_reference_scan": "PASS",
+  "internal_path_scan": "PASS",
+  "note": "Upload repository files only. Do not upload user evidence, vaults, credentials or unsigned binaries as normal end-user releases."
+}

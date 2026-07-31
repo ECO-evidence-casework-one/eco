@@ -1,0 +1,39 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "Evidence-and-Casework-One-ECO-V25-N1-P3",
+  "documentNamespace": "https://github.com/ECO-evidence-casework-one/eco/sbom/ECO-V25-20260730-N1-P3",
+  "creationInfo": {
+    "created": "2026-07-31T07:40:00Z",
+    "creators": [
+      "Tool: ECO repository preparation"
+    ]
+  },
+  "packages": [
+    {
+      "name": "Evidence & Casework One",
+      "SPDXID": "SPDXRef-Package-ECO",
+      "versionInfo": "ECO-V25-20260730-N1-P3",
+      "downloadLocation": "https://github.com/ECO-evidence-casework-one/eco",
+      "filesAnalyzed": false,
+      "licenseConcluded": "GPL-3.0-only",
+      "licenseDeclared": "GPL-3.0-only",
+      "copyrightText": "Copyright 2026 Evidence & Casework One contributors",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/ECO-evidence-casework-one/eco@ECO-V25-20260730-N1-P3"
+        }
+      ]
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-ECO"
+    }
+  ]
+}
