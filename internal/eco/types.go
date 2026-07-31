@@ -3,8 +3,8 @@ package eco
 import "time"
 
 const (
-	BuildID   = "ECO-V25-20260730-N1-P3"
-	BuildName = "Evidence & Casework One Version 25 N1 — Native Evidence & Vision Foundation Preview 3"
+	BuildID   = "ECO-V25-20260731-N2-P1"
+	BuildName = "Evidence & Casework One Version 25 N2 — Native Document Vision Foundation Preview 1"
 	Schema    = 1
 )
 
@@ -44,6 +44,7 @@ type EvidenceItem struct {
 	ExtractedText   string           `json:"extracted_text,omitempty"`
 	Segments        []SourceSegment  `json:"segments,omitempty"`
 	Image           *ImageAssessment `json:"image,omitempty"`
+	OCR             *OCRReceipt      `json:"ocr,omitempty"`
 	Rotation        int              `json:"rotation,omitempty"`
 	DuplicateOf     string           `json:"duplicate_of,omitempty"`
 	NearDuplicateOf string           `json:"near_duplicate_of,omitempty"`
@@ -52,24 +53,74 @@ type EvidenceItem struct {
 }
 
 type ImageAssessment struct {
-	Width          int      `json:"width"`
-	Height         int      `json:"height"`
-	Megapixels     float64  `json:"megapixels"`
-	Brightness     float64  `json:"brightness"`
-	Contrast       float64  `json:"contrast"`
-	BlurVariance   float64  `json:"blur_variance"`
-	EdgeDensity    float64  `json:"edge_density"`
-	PerceptualHash string   `json:"perceptual_hash,omitempty"`
-	Orientation    string   `json:"orientation"`
-	QualityLabel   string   `json:"quality_label"`
-	Warnings       []string `json:"warnings,omitempty"`
+	Width                 int             `json:"width"`
+	Height                int             `json:"height"`
+	Megapixels            float64         `json:"megapixels"`
+	Brightness            float64         `json:"brightness"`
+	Contrast              float64         `json:"contrast"`
+	BlurVariance          float64         `json:"blur_variance"`
+	EdgeDensity           float64         `json:"edge_density"`
+	PerceptualHash        string          `json:"perceptual_hash,omitempty"`
+	Orientation           string          `json:"orientation"`
+	QualityLabel          string          `json:"quality_label"`
+	SkewCorrectionDegrees float64         `json:"skew_correction_degrees,omitempty"`
+	SkewConfidence        float64         `json:"skew_confidence,omitempty"`
+	GlareRatio            float64         `json:"glare_ratio,omitempty"`
+	ShadowImbalance       float64         `json:"shadow_imbalance,omitempty"`
+	BorderInkRatio        float64         `json:"border_ink_ratio,omitempty"`
+	ProbableDoublePage    bool            `json:"probable_double_page,omitempty"`
+	SuggestedCrop         *CropSuggestion `json:"suggested_crop,omitempty"`
+	Warnings              []string        `json:"warnings,omitempty"`
+}
+
+type NormalizedRegion struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+func (r NormalizedRegion) Valid() bool {
+	return r.X >= 0 && r.Y >= 0 && r.Width > 0 && r.Height > 0 && r.X+r.Width <= 1.000001 && r.Y+r.Height <= 1.000001
+}
+
+type OCRWord struct {
+	Text       string           `json:"text"`
+	Confidence float64          `json:"confidence"`
+	Region     NormalizedRegion `json:"region"`
+	Page       int              `json:"page"`
+}
+
+type OCRLine struct {
+	Text       string           `json:"text"`
+	Confidence float64          `json:"confidence"`
+	Region     NormalizedRegion `json:"region"`
+	Page       int              `json:"page"`
+	Words      []OCRWord        `json:"words,omitempty"`
+}
+
+type OCRReceipt struct {
+	Engine            string    `json:"engine"`
+	EngineVersion     string    `json:"engine_version,omitempty"`
+	Language          string    `json:"language,omitempty"`
+	Status            string    `json:"status"`
+	SourceSHA256      string    `json:"source_sha256"`
+	CreatedAt         time.Time `json:"created_at"`
+	AverageConfidence float64   `json:"average_confidence,omitempty"`
+	Words             []OCRWord `json:"words,omitempty"`
+	Lines             []OCRLine `json:"lines,omitempty"`
+	Warnings          []string  `json:"warnings,omitempty"`
 }
 
 type SourceSegment struct {
-	ID       string `json:"id"`
-	Ordinal  int    `json:"ordinal"`
-	Text     string `json:"text"`
-	PageHint string `json:"page_hint,omitempty"`
+	ID         string            `json:"id"`
+	Ordinal    int               `json:"ordinal"`
+	Text       string            `json:"text"`
+	PageHint   string            `json:"page_hint,omitempty"`
+	Page       int               `json:"page,omitempty"`
+	Region     *NormalizedRegion `json:"region,omitempty"`
+	Origin     string            `json:"origin,omitempty"`
+	Confidence float64           `json:"confidence,omitempty"`
 }
 
 type Matter struct {
@@ -96,26 +147,31 @@ type ChangeRecord struct {
 }
 
 type QuestionRecord struct {
-	ID                        string     `json:"id"`
-	AskedAt                   time.Time  `json:"asked_at"`
-	Question                  string     `json:"question"`
-	Intent                    string     `json:"intent"`
-	Answer                    string     `json:"answer"`
-	Citations                 []Citation `json:"citations,omitempty"`
-	Support                   string     `json:"support"`
-	ScopeIDs                  []string   `json:"scope_ids,omitempty"`
-	ReceiptID                 string     `json:"receipt_id"`
-	EvidenceConsidered        int        `json:"evidence_considered"`
-	RetrievedSegments         int        `json:"retrieved_segments"`
-	SuspiciousSourcesExcluded int        `json:"suspicious_sources_excluded"`
+	ID                           string     `json:"id"`
+	AskedAt                      time.Time  `json:"asked_at"`
+	Question                     string     `json:"question"`
+	Intent                       string     `json:"intent"`
+	Answer                       string     `json:"answer"`
+	Citations                    []Citation `json:"citations,omitempty"`
+	Support                      string     `json:"support"`
+	ScopeIDs                     []string   `json:"scope_ids,omitempty"`
+	ReceiptID                    string     `json:"receipt_id"`
+	EvidenceConsidered           int        `json:"evidence_considered"`
+	RetrievedSegments            int        `json:"retrieved_segments"`
+	SuspiciousSourcesExcluded    int        `json:"suspicious_sources_excluded"`
+	LowConfidenceSourcesExcluded int        `json:"low_confidence_sources_excluded"`
 }
 
 type Citation struct {
-	EvidenceID string  `json:"evidence_id"`
-	SegmentID  string  `json:"segment_id"`
-	Label      string  `json:"label"`
-	Quote      string  `json:"quote"`
-	Score      float64 `json:"score"`
+	EvidenceID string            `json:"evidence_id"`
+	SegmentID  string            `json:"segment_id"`
+	Label      string            `json:"label"`
+	Quote      string            `json:"quote"`
+	Score      float64           `json:"score"`
+	Page       int               `json:"page,omitempty"`
+	Region     *NormalizedRegion `json:"region,omitempty"`
+	Origin     string            `json:"origin,omitempty"`
+	Confidence float64           `json:"confidence,omitempty"`
 }
 
 type ImportProgress struct {

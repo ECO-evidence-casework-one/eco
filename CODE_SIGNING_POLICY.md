@@ -2,13 +2,13 @@
 
 ## Current position
 
-ECO does not yet have an approved trusted code-signing service. Unsigned development executables are not normal end-user releases and may be blocked by Windows Smart App Control.
+ECO does not yet have an approved trusted code-signing service. Unsigned development executables are provenance artifacts only, are not normal end-user releases and may be blocked by Windows Smart App Control.
+
+The SignPath Foundation application process was initiated on 31 July 2026. The web form did not display a submission confirmation, so SignPath support was contacted to confirm receipt or provide an alternative submission route. No approval is assumed.
 
 ## Intended SignPath route
 
-The project intends to apply to SignPath Foundation after the repository, public release record and project controls satisfy its conditions.
-
-Upon acceptance, official release pages will state:
+If SignPath Foundation accepts ECO, official signed release pages will state:
 
 > Free code signing provided by SignPath.io, certificate by SignPath Foundation.
 
@@ -16,25 +16,28 @@ No such claim applies before acceptance.
 
 ## Team roles
 
-Until dedicated teams are created:
+Current named role assignments are published in [MAINTAINERS.md](MAINTAINERS.md).
 
-- **Authors, committers and reviewers:** organisation owners with repository write access
-- **Signing approvers:** organisation owners authorised to approve releases
+- **Authors and committers:** people authorised to modify project source and build scripts.
+- **Reviewers:** maintainers responsible for reviewing contributions from people without direct write access.
+- **Signing approvers:** maintainers authorised to manually approve an exact automated build for signing.
 
-Role membership must remain visible through the GitHub organisation and repository permissions.
+During the early one-maintainer phase, one person may hold all roles. Signing approval remains a separate manual action and may not be automated away.
 
 ## Release controls
 
 1. Release binaries are built only from this public repository.
-2. Builds run in the declared automated workflow.
-3. Tests and source checks must pass.
-4. Every signing request requires manual approval.
-5. All executable project files in a release must be covered by the approved signing arrangement.
-6. Product name and version metadata must match the release.
-7. Files must not be modified after signing.
-8. SHA-256 checksums are generated after signing.
-9. Signature verification evidence accompanies each release.
-10. Releases include source, licence, privacy policy and known limitations.
+2. Source, build scripts and CI configuration are part of the reviewed signing input.
+3. Builds run in the declared automated workflow.
+4. Tests, source-policy checks and deterministic-rebuild checks must pass.
+5. Every signing request requires manual approval.
+6. Only ECO artifacts built from ECO-maintained source may be signed under the project arrangement.
+7. Product name and version metadata must match the release.
+8. Files must not be modified after signing.
+9. SHA-256 checksums are generated after signing.
+10. Signature-verification evidence accompanies each signed release.
+11. Releases include source, licence, privacy policy, SBOM and known limitations.
+12. A failed or disputed release is paused rather than bypassing signing controls.
 
 ## Privacy statement
 

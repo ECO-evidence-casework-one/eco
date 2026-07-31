@@ -24,9 +24,9 @@ func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
 	question = strings.TrimSpace(question)
 	intent := classifyIntent(question)
 	ws := v.Snapshot()
-	ranked, excluded := rankSegments(question, ws.Evidence, scopeIDs)
+	ranked, excluded, lowConfidenceExcluded := rankSegments(question, ws.Evidence, scopeIDs)
 	answer, citations, support := composeAnswer(intent, question, ranked, ws)
-	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: scopeIDs, ReceiptID: NewID("AIR"), EvidenceConsidered: len(ws.Evidence), RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded}
+	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: scopeIDs, ReceiptID: NewID("AIR"), EvidenceConsidered: len(ws.Evidence), RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded}
 	v.mu.Lock()
 	v.Workspace.Questions = append([]QuestionRecord{rec}, v.Workspace.Questions...)
 	v.addChangeUnlocked("user", "question-asked", "Asked ECO a source-backed local question", map[string]any{"question": truncate(question, 300), "intent": intent, "sources": len(citations)})
@@ -80,7 +80,7 @@ func classifyIntent(q string) string {
 	return best
 }
 
-func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSegment, int) {
+func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSegment, int, int) {
 	allowed := map[string]bool{}
 	for _, id := range scope {
 		allowed[id] = true
@@ -88,7 +88,7 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 	useScope := len(scope) > 0
 	query := tokenize(q)
 	if len(query) == 0 {
-		return nil, 0
+		return nil, 0, 0
 	}
 	type doc struct {
 		e      EvidenceItem
@@ -98,12 +98,17 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 	}
 	docs := []doc{}
 	excluded := 0
+	lowConfidenceExcluded := 0
 	df := map[string]int{}
 	for _, e := range evidence {
 		if useScope && !allowed[e.ID] {
 			continue
 		}
 		for _, s := range e.Segments {
+			if s.Origin == "ocr" && s.Confidence > 0 && s.Confidence < 0.35 {
+				lowConfidenceExcluded++
+				continue
+			}
 			if suspiciousInstruction.MatchString(s.Text) {
 				excluded++
 				continue
@@ -125,7 +130,7 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 		}
 	}
 	if len(docs) == 0 {
-		return nil, excluded
+		return nil, excluded, lowConfidenceExcluded
 	}
 	avg := 0.0
 	for _, d := range docs {
@@ -152,7 +157,7 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 	if len(out) > 12 {
 		out = out[:12]
 	}
-	return out, excluded
+	return out, excluded, lowConfidenceExcluded
 }
 
 func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (string, []Citation, string) {
@@ -179,7 +184,15 @@ func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (stri
 			continue
 		}
 		label := fmt.Sprintf("%s · §%d", r.Evidence.SafeName, r.Segment.Ordinal)
-		cites = append(cites, Citation{EvidenceID: r.Evidence.ID, SegmentID: r.Segment.ID, Label: label, Quote: truncate(candidate, 500), Score: r.Score})
+		if r.Segment.Origin == "ocr" {
+			label = fmt.Sprintf("%s · OCR page %d · %.0f%% confidence", r.Evidence.SafeName, max(1, r.Segment.Page), r.Segment.Confidence*100)
+		}
+		var region *NormalizedRegion
+		if r.Segment.Region != nil {
+			copyRegion := *r.Segment.Region
+			region = &copyRegion
+		}
+		cites = append(cites, Citation{EvidenceID: r.Evidence.ID, SegmentID: r.Segment.ID, Label: label, Quote: truncate(candidate, 500), Score: r.Score, Page: r.Segment.Page, Region: region, Origin: r.Segment.Origin, Confidence: r.Segment.Confidence})
 		sentences = append(sentences, candidate+" ["+label+"]")
 	}
 	if len(sentences) == 0 {
@@ -198,7 +211,14 @@ func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (stri
 	case "explain":
 		prefix = "In plain language, the source passages most relevant to your question say:"
 	}
-	return prefix + "\r\n\r\n• " + strings.Join(sentences, "\r\n\r\n• "), cites, "Directly supported by cited source passages"
+	support := "Directly supported by cited source passages"
+	for _, c := range cites {
+		if c.Origin == "ocr" {
+			support = "Supported by coordinate-bearing OCR suggestions — check wording against the highlighted image regions"
+			break
+		}
+	}
+	return prefix + "\r\n\r\n• " + strings.Join(sentences, "\r\n\r\n• "), cites, support
 }
 
 func diversify(in []rankedSegment, maxN int) []rankedSegment {

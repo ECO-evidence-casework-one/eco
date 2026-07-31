@@ -2,19 +2,19 @@
   "spdxVersion": "SPDX-2.3",
   "dataLicense": "CC0-1.0",
   "SPDXID": "SPDXRef-DOCUMENT",
-  "name": "Evidence-and-Casework-One-ECO-V25-N1-P3",
-  "documentNamespace": "https://github.com/ECO-evidence-casework-one/eco/sbom/ECO-V25-20260730-N1-P3",
+  "name": "Evidence-and-Casework-One-ECO-V25-N2-P1",
+  "documentNamespace": "https://github.com/ECO-evidence-casework-one/eco/sbom/ECO-V25-20260731-N2-P1",
   "creationInfo": {
-    "created": "2026-07-31T07:40:00Z",
+    "created": "2026-07-31T09:20:00Z",
     "creators": [
-      "Tool: ECO repository preparation"
+      "Tool: ECO controlled repository build"
     ]
   },
   "packages": [
     {
       "name": "Evidence & Casework One",
       "SPDXID": "SPDXRef-Package-ECO",
-      "versionInfo": "ECO-V25-20260730-N1-P3",
+      "versionInfo": "ECO-V25-20260731-N2-P1",
       "downloadLocation": "https://github.com/ECO-evidence-casework-one/eco",
       "filesAnalyzed": false,
       "licenseConcluded": "GPL-3.0-only",
@@ -24,9 +24,19 @@
         {
           "referenceCategory": "PACKAGE-MANAGER",
           "referenceType": "purl",
-          "referenceLocator": "pkg:golang/github.com/ECO-evidence-casework-one/eco@ECO-V25-20260730-N1-P3"
+          "referenceLocator": "pkg:golang/github.com/ECO-evidence-casework-one/eco@ECO-V25-20260731-N2-P1"
         }
       ]
+    },
+    {
+      "name": "Go standard library",
+      "SPDXID": "SPDXRef-Package-Go-Stdlib",
+      "versionInfo": "1.23.x",
+      "downloadLocation": "https://go.dev/",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "copyrightText": "Copyright The Go Authors"
     }
   ],
   "relationships": [
@@ -34,6 +44,11 @@
       "spdxElementId": "SPDXRef-DOCUMENT",
       "relationshipType": "DESCRIBES",
       "relatedSpdxElement": "SPDXRef-Package-ECO"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ECO",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Go-Stdlib"
     }
   ]
 }

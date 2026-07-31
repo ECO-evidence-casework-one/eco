@@ -69,3 +69,30 @@ func TestClipboardShortcutDoesNotStealNormalPaste(t *testing.T) {
 		}
 	}
 }
+
+func TestDocumentVisionPreviewControlsPresent(t *testing.T) {
+	src := windowsSource(t)
+	for _, required := range []string{"BoundedPreviewImage", "SuggestDocumentBounds", "SkewCorrectionDegrees", "case 'C'", "case 'D'", "case 'A'", "case 'Q'", "adaptive reading mode"} {
+		if !strings.Contains(src, required) {
+			t.Fatalf("missing document-vision preview safeguard %q", required)
+		}
+	}
+}
+
+func TestCoordinateCitationHighlightingPresent(t *testing.T) {
+	src := windowsSource(t)
+	for _, required := range []string{"pendingCitationRegion", "exact OCR region highlighted", "rotateNormalizedRegion", "drawHighlightRect"} {
+		if !strings.Contains(src, required) {
+			t.Fatalf("missing coordinate citation feature %q", required)
+		}
+	}
+}
+
+func TestNativeSourceContainsNoBrowserOrLocalhostRuntime(t *testing.T) {
+	src := windowsSource(t)
+	for _, forbidden := range []string{"\"net/http\"", "ListenAndServe", "brave.exe", "msedge.exe", "chrome.exe"} {
+		if strings.Contains(strings.ToLower(src), strings.ToLower(forbidden)) {
+			t.Fatalf("native Windows source contains forbidden browser/server runtime %q", forbidden)
+		}
+	}
+}

@@ -1,8 +1,8 @@
 # ECO roadmap
 
-## Version 25 N1 — Native Evidence & Vision Foundation
+## Version 25 N1 — Native Evidence Foundation
 
-Current native foundation:
+Completed source foundation:
 
 - independent Windows desktop window;
 - encrypted local vault;
@@ -11,26 +11,34 @@ Current native foundation:
 - exact and near-duplicate foundations;
 - native image preview and reading modes;
 - deterministic source-backed evidence retrieval;
-- matters, review queues, backups and integrity checks.
-
-Remaining N1 work:
-
-- direct Windows stability and accessibility evidence;
-- signed delivery route;
-- stronger transactional storage and migration testing;
-- complete native viewer controls.
+- Matters, review queues, backups and integrity checks;
+- DPI and interface-thread stability corrections.
 
 ## Version 25 N2 — Document Vision
 
-- bundled local OCR;
-- exact word and line coordinates;
-- source-region highlighting;
-- image quality assessment and correction;
-- deskew, crop and perspective correction;
-- page grouping and ordering;
+### N2 P1 completed in source
+
+- page-boundary detection;
+- crop and deskew preview foundations;
+- adaptive reading enhancement;
+- expanded image-quality assessment;
+- perspective-correction foundation;
+- coordinate-bearing OCR receipt and source-region model;
+- source-hash gate and low-confidence OCR exclusion;
+- exact OCR citation highlighting foundation.
+
+### Remaining N2 work
+
+- exact approved bundled OCR engine and language data;
+- isolated OCR worker process;
+- OCR cancellation, timeout and memory limits;
+- interactive crop and four-corner perspective controls;
+- derived-image receipt and encrypted derivative storage;
+- page grouping, splitting and ordering;
 - native PDF rendering;
 - structured Office and email extraction;
-- OCR disagreement review.
+- OCR disagreement review;
+- direct Windows image-to-answer execution evidence.
 
 ## Version 25 N3 — Local AI
 

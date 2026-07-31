@@ -92,6 +92,10 @@ func AssessImage(img image.Image) ImageAssessment {
 		edgeDensity = edgeCount / lapCount
 	}
 
+	glareRatio, shadowImbalance, borderInkRatio, probableDoublePage := imageVisionMetrics(img)
+	skewCorrection, skewConfidence := EstimateSkewAngle(img)
+	cropRect, cropConfidence := SuggestDocumentBounds(img)
+
 	warnings := []string{}
 	if w < 900 || h < 900 {
 		warnings = append(warnings, "Resolution may be too low for dependable small-text reading.")
@@ -108,6 +112,21 @@ func AssessImage(img image.Image) ImageAssessment {
 	if blurVar < 90 {
 		warnings = append(warnings, "The image may be blurred. Check important wording against the original view.")
 	}
+	if glareRatio > 0.08 {
+		warnings = append(warnings, "Bright glare may obscure part of the page. Compare important wording with the original photograph.")
+	}
+	if shadowImbalance > 55 {
+		warnings = append(warnings, "Lighting is uneven across the image and may hide faint text.")
+	}
+	if borderInkRatio > 0.28 {
+		warnings = append(warnings, "Dark content reaches the image edge. A page corner or wording may be cut off.")
+	}
+	if math.Abs(skewCorrection) >= 1.0 && skewConfidence >= 0.12 {
+		warnings = append(warnings, fmt.Sprintf("The page appears skewed by about %.1f°. ECO can preview a non-destructive deskew correction.", -skewCorrection))
+	}
+	if probableDoublePage {
+		warnings = append(warnings, "This may contain two photographed pages. Review whether the image should be split before OCR.")
+	}
 	if float64(w*h)/1_000_000 > 80 {
 		warnings = append(warnings, "This is an unusually large image. ECO will use bounded preview processing.")
 	}
@@ -118,11 +137,18 @@ func AssessImage(img image.Image) ImageAssessment {
 	if len(warnings) > 1 {
 		label = fmt.Sprintf("Check %d quality warnings", len(warnings))
 	}
+	var crop *CropSuggestion
+	if cropConfidence >= 0.45 && cropRect != img.Bounds() {
+		crop = &CropSuggestion{Region: rectToNormalized(cropRect, img.Bounds()), Confidence: cropConfidence}
+	}
 	return ImageAssessment{
 		Width: w, Height: h, Megapixels: float64(w*h) / 1_000_000,
 		Brightness: mean, Contrast: std, BlurVariance: blurVar,
 		Orientation: orientation, QualityLabel: label, Warnings: warnings,
 		EdgeDensity: edgeDensity, PerceptualHash: DifferenceHash(img),
+		SkewCorrectionDegrees: skewCorrection, SkewConfidence: skewConfidence,
+		GlareRatio: glareRatio, ShadowImbalance: shadowImbalance, BorderInkRatio: borderInkRatio,
+		ProbableDoublePage: probableDoublePage, SuggestedCrop: crop,
 	}
 }
 
@@ -172,6 +198,9 @@ func HashDistance(a, b string) int {
 func ApplyReadingMode(img image.Image, mode string) image.Image {
 	if mode == "original" || mode == "" {
 		return img
+	}
+	if mode == "adaptive" {
+		return AdaptiveThreshold(img)
 	}
 	b := img.Bounds()
 	dst := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))

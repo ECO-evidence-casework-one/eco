@@ -152,7 +152,21 @@ func (v *Vault) Snapshot() Workspace {
 		if v.Workspace.Evidence[i].Image != nil {
 			img := *v.Workspace.Evidence[i].Image
 			img.Warnings = append([]string(nil), v.Workspace.Evidence[i].Image.Warnings...)
+			if v.Workspace.Evidence[i].Image.SuggestedCrop != nil {
+				crop := *v.Workspace.Evidence[i].Image.SuggestedCrop
+				img.SuggestedCrop = &crop
+			}
 			out.Evidence[i].Image = &img
+		}
+		if v.Workspace.Evidence[i].OCR != nil {
+			ocr := *v.Workspace.Evidence[i].OCR
+			ocr.Warnings = append([]string(nil), v.Workspace.Evidence[i].OCR.Warnings...)
+			ocr.Words = append([]OCRWord(nil), v.Workspace.Evidence[i].OCR.Words...)
+			ocr.Lines = append([]OCRLine(nil), v.Workspace.Evidence[i].OCR.Lines...)
+			for j := range ocr.Lines {
+				ocr.Lines[j].Words = append([]OCRWord(nil), v.Workspace.Evidence[i].OCR.Lines[j].Words...)
+			}
+			out.Evidence[i].OCR = &ocr
 		}
 	}
 	out.Matters = append([]Matter(nil), v.Workspace.Matters...)
@@ -163,7 +177,120 @@ func (v *Vault) Snapshot() Workspace {
 	out.Questions = append([]QuestionRecord(nil), v.Workspace.Questions...)
 	for i := range out.Questions {
 		out.Questions[i].Citations = append([]Citation(nil), v.Workspace.Questions[i].Citations...)
+		for j := range out.Questions[i].Citations {
+			if v.Workspace.Questions[i].Citations[j].Region != nil {
+				region := *v.Workspace.Questions[i].Citations[j].Region
+				out.Questions[i].Citations[j].Region = &region
+			}
+		}
 		out.Questions[i].ScopeIDs = append([]string(nil), v.Workspace.Questions[i].ScopeIDs...)
+	}
+	return out
+}
+
+// ApplyOCRResult records a coordinate-bearing local OCR result after the OCR
+// worker has completed. The original encrypted evidence object is untouched.
+func (v *Vault) ApplyOCRResult(evidenceID string, receipt OCRReceipt, segments []SourceSegment) error {
+	if err := ValidateOCRReceipt(receipt); err != nil {
+		return err
+	}
+	if err := validateOCRSegments(receipt, segments); err != nil {
+		return err
+	}
+	v.opMu.RLock()
+	defer v.opMu.RUnlock()
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for i := range v.Workspace.Evidence {
+		item := &v.Workspace.Evidence[i]
+		if item.ID != evidenceID {
+			continue
+		}
+		if receipt.SourceSHA256 != item.SHA256 {
+			return errors.New("OCR receipt source SHA-256 does not match the preserved original")
+		}
+
+		// Preserve a complete in-memory rollback point. The active workspace must
+		// not retain an OCR result if the authenticated metadata write fails.
+		oldItem := cloneEvidenceItem(*item)
+		oldChangeLen := len(v.Workspace.Changes)
+		oldUpdatedAt := v.Workspace.UpdatedAt
+		oldBuildID := v.Workspace.BuildID
+
+		kept := make([]SourceSegment, 0, len(item.Segments)+len(segments))
+		for _, seg := range item.Segments {
+			if seg.Origin != "ocr" {
+				kept = append(kept, seg)
+			}
+		}
+		for _, seg := range segments {
+			copySeg := seg
+			if seg.Region != nil {
+				region := *seg.Region
+				copySeg.Region = &region
+			}
+			kept = append(kept, copySeg)
+		}
+		item.Segments = kept
+		copyReceipt := cloneOCRReceipt(receipt)
+		item.OCR = &copyReceipt
+		item.Readable = len(item.Segments) > 0
+		switch receipt.Status {
+		case "ready":
+			item.Status = "OCR ready — review required"
+		case "no-text":
+			item.Status = "OCR found no text — review image"
+		case "failed":
+			item.Status = "OCR failed safely — original preserved"
+		}
+		item.Warnings = append(item.Warnings, receipt.Warnings...)
+		v.addChangeUnlocked("ocr-worker", "ocr-result-added", "Added coordinate-bearing OCR reading for "+item.SafeName, map[string]any{"id": item.ID, "engine": receipt.Engine, "engine_version": receipt.EngineVersion, "status": receipt.Status, "lines": len(receipt.Lines), "average_confidence": receipt.AverageConfidence})
+		if err := v.saveUnlocked(); err != nil {
+			*item = oldItem
+			v.Workspace.Changes = v.Workspace.Changes[:oldChangeLen]
+			v.Workspace.UpdatedAt = oldUpdatedAt
+			v.Workspace.BuildID = oldBuildID
+			return fmt.Errorf("persist OCR result: %w", err)
+		}
+		return nil
+	}
+	return os.ErrNotExist
+}
+
+func cloneOCRReceipt(receipt OCRReceipt) OCRReceipt {
+	out := receipt
+	out.Warnings = append([]string(nil), receipt.Warnings...)
+	out.Words = append([]OCRWord(nil), receipt.Words...)
+	out.Lines = append([]OCRLine(nil), receipt.Lines...)
+	for i := range out.Lines {
+		out.Lines[i].Words = append([]OCRWord(nil), receipt.Lines[i].Words...)
+	}
+	return out
+}
+
+func cloneEvidenceItem(item EvidenceItem) EvidenceItem {
+	out := item
+	out.Warnings = append([]string(nil), item.Warnings...)
+	out.MatterIDs = append([]string(nil), item.MatterIDs...)
+	out.Segments = append([]SourceSegment(nil), item.Segments...)
+	for i := range out.Segments {
+		if item.Segments[i].Region != nil {
+			region := *item.Segments[i].Region
+			out.Segments[i].Region = &region
+		}
+	}
+	if item.Image != nil {
+		img := *item.Image
+		img.Warnings = append([]string(nil), item.Image.Warnings...)
+		if item.Image.SuggestedCrop != nil {
+			crop := *item.Image.SuggestedCrop
+			img.SuggestedCrop = &crop
+		}
+		out.Image = &img
+	}
+	if item.OCR != nil {
+		ocr := cloneOCRReceipt(*item.OCR)
+		out.OCR = &ocr
 	}
 	return out
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"image"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -71,6 +72,7 @@ type application struct {
 	previewErr                                                                string
 	matterCreated                                                             string
 	matterErr                                                                 string
+	pendingCitationRegion                                                     *eco.NormalizedRegion
 }
 
 var app *application
@@ -85,6 +87,11 @@ type previewState struct {
 	rotation      int
 	mode          string
 	zoom          float64
+	cropEnabled   bool
+	deskewEnabled bool
+	cropRect      image.Rectangle
+	assessment    eco.ImageAssessment
+	highlight     *eco.NormalizedRegion
 	pixels        []byte
 	width, height int
 }
@@ -116,7 +123,7 @@ func main() {
 	if root == "" {
 		root, _ = os.UserConfigDir()
 	}
-	root = filepath.Join(root, "EvidenceCaseworkOne", "V25N1")
+	root = filepath.Join(root, "EvidenceCaseworkOne", "V25N2")
 	v, err := eco.OpenVault(root)
 	if err != nil {
 		messageBox(0, "ECO vault could not open", err.Error(), MB_OK|MB_ICONERROR)
@@ -143,9 +150,9 @@ func main() {
 	app.layoutControls(initial.Right, initial.Bottom)
 	showWindow(app.hwnd, SW_SHOW)
 	procUpdateWindow.Call(app.hwnd)
-	whatsMarker := filepath.Join(root, "whats-seen-N1-P3")
+	whatsMarker := filepath.Join(root, "whats-seen-N2-P1")
 	if _, err := os.Stat(whatsMarker); os.IsNotExist(err) {
-		messageBox(app.hwnd, "What’s new — Evidence & Casework One Version 25 N1", "NATIVE FOUNDATION PREVIEW 3\r\n\r\n• Corrected DPI and Windows display-scaling layout faults.\r\n• Rebuilt the Home layout so text, step cards and status cards reflow instead of being cut off.\r\n• Removed encrypted-workspace cloning from the Windows paint path.\r\n• Background evidence tasks now report back through the Windows message queue instead of directly changing controls.\r\n• Corrected ampersand rendering in product and settings labels.\r\n• Reduced synchronous work on the interface thread and added safer refresh points.\r\n• Preserved the native standalone, encrypted-vault, file-signature, image-assessment and source-backed evidence features from P2.\r\n\r\nAutomatic OCR and a generative local language model are still not bundled in N1 P3; this build is a stability and usable-layout correction.", MB_OK|MB_ICONINFORMATION)
+		messageBox(app.hwnd, "What’s new — Evidence & Casework One Version 25 N2", "DOCUMENT VISION FOUNDATION PREVIEW 1\r\n\r\n• Added conservative photographed-page boundary detection and non-destructive auto-crop preview.\r\n• Added bounded skew estimation and non-destructive deskew preview.\r\n• Added adaptive black-and-white reading enhancement.\r\n• Added glare, uneven-lighting, edge-cutoff and probable double-page assessment.\r\n• Added perspective-correction foundations for a later four-corner correction studio.\r\n• Added coordinate-bearing OCR receipt and exact image-region source models.\r\n• Added a vault integration gate that refuses OCR results whose source hash or coordinates do not match the preserved original.\r\n• Preserved the standalone native window, encrypted live vault, streaming intake, signature checks, duplicate detection, Matters, source-backed search and transactional backups.\r\n\r\nA bundled OCR engine and generative local language model are not yet included in N2 P1. This source milestone builds and tests the native document-vision and OCR provenance foundation before those components are approved and bundled.", MB_OK|MB_ICONINFORMATION)
 		_ = os.WriteFile(whatsMarker, []byte(eco.BuildID), 0600)
 	}
 	var msg MSG
@@ -533,9 +540,9 @@ func (a *application) drawHome(hdc uintptr, rc RECT) {
 		leftRight = x + 390
 	}
 
-	drawTextFont(hdc, "VERSION 25 N1 • NATIVE EVIDENCE & VISION FOUNDATION", RECT{x + 42, heroTop + 28, leftRight, heroTop + 52}, a.fontLabel, rgb(188, 239, 233), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, "VERSION 25 N2 • NATIVE DOCUMENT VISION FOUNDATION", RECT{x + 42, heroTop + 28, leftRight, heroTop + 52}, a.fontLabel, rgb(188, 239, 233), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	drawTextFont(hdc, "Native. Private.\r\nSource-backed.", RECT{x + 42, heroTop + 58, leftRight, heroTop + 158}, a.fontHero, rgb(255, 255, 255), DT_LEFT|DT_WORDBREAK)
-	drawTextFont(hdc, "Preserve evidence inside an encrypted local vault, inspect real file types, assess photographs and ask questions using only readable source passages.", RECT{x + 42, heroTop + 163, leftRight, heroTop + 226}, a.fontBody, rgb(225, 246, 242), DT_LEFT|DT_WORDBREAK)
+	drawTextFont(hdc, "Preserve evidence inside an encrypted local vault, detect photographed pages, preview crop and deskew corrections, and ask questions using only validated readable source passages.", RECT{x + 42, heroTop + 163, leftRight, heroTop + 226}, a.fontBody, rgb(225, 246, 242), DT_LEFT|DT_WORDBREAK)
 
 	add := RECT{x + 42, heroTop + 248, x + 190, heroTop + 292}
 	a.drawButton(hdc, "add", "+  Add evidence", add, true)
@@ -544,7 +551,7 @@ func (a *application) drawHome(hdc uintptr, rc RECT) {
 	mat := RECT{x + 344, heroTop + 248, x + 498, heroTop + 292}
 	a.drawButton(hdc, "goMatters", "▤  Matters", mat, false)
 
-	steps := []string{"1   Add and encrypt evidence", "2   Review file and image quality", "3   Ask from exact local sources"}
+	steps := []string{"1   Add and encrypt evidence", "2   Review page quality and vision suggestions", "3   Ask from exact validated local sources"}
 	sy := heroTop + 42
 	for _, text := range steps {
 		r := RECT{stepsLeft, sy, right - 36, sy + 64}
@@ -614,7 +621,7 @@ func (a *application) drawEvidence(hdc uintptr, rc RECT) {
 	right := rc.Right - 25
 	drawTextFont(hdc, "EVIDENCE INTAKE STUDIO", RECT{x, 94, right, 120}, a.fontLabel, rgb(44, 104, 101), DT_LEFT|DT_SINGLELINE)
 	drawTextFont(hdc, "Preserve, identify and inspect evidence", RECT{x, 122, right, 160}, a.fontHeading, rgb(20, 61, 59), DT_LEFT|DT_SINGLELINE)
-	drawTextFont(hdc, "Files are streaming-hashed, encrypted and checked from their contents before a reader sees them.", RECT{x, 165, right - 240, 198}, a.fontBody, rgb(87, 106, 109), DT_LEFT|DT_SINGLELINE)
+	drawTextFont(hdc, "Files are streaming-hashed, encrypted, type-checked and assessed for page boundaries, skew, glare and reading quality.", RECT{x, 165, right - 240, 198}, a.fontBody, rgb(87, 106, 109), DT_LEFT|DT_SINGLELINE)
 	a.drawButton(hdc, "add", "+  Add files", RECT{right - 180, 118, right, 164}, true)
 	a.drawButton(hdc, "addFolder", "+  Add folder", RECT{right - 375, 118, right - 195, 164}, false)
 	a.drawButton(hdc, "pasteImage", "Paste image", RECT{right - 545, 118, right - 390, 164}, false)
@@ -683,9 +690,13 @@ func (a *application) drawEvidenceDetail(hdc uintptr, r RECT) {
 		y += 8
 		drawTextFont(hdc, "LOCAL IMAGE ASSESSMENT", RECT{r.Left + 22, y, r.Right - 22, y + 22}, a.fontLabel, rgb(46, 104, 101), DT_LEFT|DT_SINGLELINE)
 		y += 28
-		summary := fmt.Sprintf("%d × %d pixels · %.1f MP · %s\r\nBrightness %.0f/255 · Contrast %.0f · Blur variance %.0f · Edge density %.2f\r\n%s", imgA.Width, imgA.Height, imgA.Megapixels, imgA.Orientation, imgA.Brightness, imgA.Contrast, imgA.BlurVariance, imgA.EdgeDensity, imgA.QualityLabel)
-		drawTextFont(hdc, summary, RECT{r.Left + 22, y, r.Right - 22, y + 90}, a.fontSmall, rgb(71, 93, 96), DT_LEFT|DT_WORDBREAK)
-		y += 96
+		cropText := "No confident page-boundary suggestion"
+		if imgA.SuggestedCrop != nil {
+			cropText = fmt.Sprintf("Page-boundary suggestion %.0f%% confidence", imgA.SuggestedCrop.Confidence*100)
+		}
+		summary := fmt.Sprintf("%d × %d pixels · %.1f MP · %s\r\nBrightness %.0f/255 · Contrast %.0f · Blur %.0f · Edge density %.2f\r\nSkew correction %.1f° (%.0f%% confidence) · Glare %.1f%% · Lighting imbalance %.0f\r\n%s · %s", imgA.Width, imgA.Height, imgA.Megapixels, imgA.Orientation, imgA.Brightness, imgA.Contrast, imgA.BlurVariance, imgA.EdgeDensity, imgA.SkewCorrectionDegrees, imgA.SkewConfidence*100, imgA.GlareRatio*100, imgA.ShadowImbalance, cropText, imgA.QualityLabel)
+		drawTextFont(hdc, summary, RECT{r.Left + 22, y, r.Right - 22, y + 112}, a.fontSmall, rgb(71, 93, 96), DT_LEFT|DT_WORDBREAK)
+		y += 118
 	}
 	if len(e.Warnings) > 0 {
 		drawTextFont(hdc, "REVIEW WARNINGS", RECT{r.Left + 22, y, r.Right - 22, y + 22}, a.fontLabel, rgb(130, 88, 0), DT_LEFT|DT_SINGLELINE)
@@ -711,7 +722,7 @@ func (a *application) drawAsk(hdc uintptr, rc RECT) {
 	right := rc.Right - 25
 	drawTextFont(hdc, "ASK ECO", RECT{x, 94, right, 120}, a.fontLabel, rgb(44, 104, 101), DT_LEFT|DT_SINGLELINE)
 	drawTextFont(hdc, "Evidence conversation", RECT{x, 122, right, 158}, a.fontHeading, rgb(20, 61, 59), DT_LEFT|DT_SINGLELINE)
-	drawTextFont(hdc, "Local deterministic retrieval • no model download • no cloud • every material answer is tied to readable source passages", RECT{x, 160, right, 190}, a.fontBody, rgb(83, 104, 107), DT_LEFT|DT_SINGLELINE)
+	drawTextFont(hdc, "Local deterministic retrieval • no model download • no cloud • coordinate-bearing OCR sources are accepted only through the validated OCR receipt gate", RECT{x, 160, right, 190}, a.fontBody, rgb(83, 104, 107), DT_LEFT|DT_SINGLELINE)
 
 	inspectorLeft := right - 330
 	r := RECT{inspectorLeft, 238, right, rc.Bottom - 58}
@@ -721,7 +732,7 @@ func (a *application) drawAsk(hdc uintptr, rc RECT) {
 	last := a.lastQuestion
 	a.mu.Unlock()
 	if len(last.Citations) == 0 {
-		drawTextFont(hdc, "Ask a supported question. ECO will list the exact source passages used in its answer here. Image OCR is not yet bundled, so image wording cannot be cited in this preview.", RECT{r.Left + 18, r.Top + 50, r.Right - 18, r.Bottom - 18}, a.fontSmall, rgb(75, 97, 99), DT_LEFT|DT_WORDBREAK)
+		drawTextFont(hdc, "Ask a supported question. ECO will list the exact source passages used in its answer here. The coordinate-bearing OCR source model is implemented, but an approved bundled OCR engine is not yet included in N2 P1.", RECT{r.Left + 18, r.Top + 50, r.Right - 18, r.Bottom - 18}, a.fontSmall, rgb(75, 97, 99), DT_LEFT|DT_WORDBREAK)
 	} else {
 		y := r.Top + 50
 		for i, c := range last.Citations {
@@ -738,7 +749,7 @@ func (a *application) drawAsk(hdc uintptr, rc RECT) {
 	}
 	receipt := "Current mode: Built-in source-backed evidence engine"
 	if last.ReceiptID != "" {
-		receipt = fmt.Sprintf("Answer receipt %s · considered %d evidence items · ranked %d segments · excluded %d suspicious source segments", last.ReceiptID, last.EvidenceConsidered, last.RetrievedSegments, last.SuspiciousSourcesExcluded)
+		receipt = fmt.Sprintf("Answer receipt %s · considered %d evidence items · ranked %d segments · excluded %d suspicious and %d low-confidence OCR segments", last.ReceiptID, last.EvidenceConsidered, last.RetrievedSegments, last.SuspiciousSourcesExcluded, last.LowConfidenceSourcesExcluded)
 	}
 	drawTextFont(hdc, receipt, RECT{x, rc.Bottom - 45, right, rc.Bottom - 20}, a.fontSmall, rgb(25, 105, 102), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 }
@@ -990,7 +1001,7 @@ func (a *application) handleGlobalShortcut(vk uint32) bool {
 		}
 	}
 	if vk == VK_F1 {
-		messageBox(a.hwnd, "ECO help", "Ctrl+U: add evidence files\r\nCtrl+Shift+V: paste a clipboard image\r\nCtrl+B: create encrypted backup\r\nCtrl+R: restore encrypted backup safely\r\nAlt+1..7: change workspace\r\nUp/Down: select evidence\r\nEnter: open selected preview\r\n\r\nImage preview: R rotates, + and - zoom, Esc closes.", MB_OK|MB_ICONINFORMATION)
+		messageBox(a.hwnd, "ECO help", "Ctrl+U: add evidence files\r\nCtrl+Shift+V: paste a clipboard image\r\nCtrl+B: create encrypted backup\r\nCtrl+R: restore encrypted backup safely\r\nAlt+1..7: change workspace\r\nUp/Down: select evidence\r\nEnter: open selected preview\r\n\r\nImage preview: R rotate 90°, C auto-crop suggestion, D deskew suggestion, O original colour, G greyscale, H fixed high contrast, A adaptive reading mode, Q quality report, +/− zoom, Esc close.", MB_OK|MB_ICONINFORMATION)
 		return true
 	}
 	return false
@@ -1217,7 +1228,19 @@ func (a *application) openCitation(index int) {
 	for i, e := range a.view.Evidence {
 		if e.ID == c.EvidenceID {
 			a.selected = i
-			messageBox(a.hwnd, "Exact cited passage — "+c.Label, c.Quote+"\r\n\r\nECO support classification: "+last.Support+"\r\n\r\nSelect OK to open the preserved source preview next.", MB_OK|MB_ICONINFORMATION)
+			a.mu.Lock()
+			if c.Region != nil {
+				region := *c.Region
+				a.pendingCitationRegion = &region
+			} else {
+				a.pendingCitationRegion = nil
+			}
+			a.mu.Unlock()
+			note := "Select OK to open the preserved source preview next."
+			if c.Region != nil {
+				note = "Select OK to open the preserved source preview with the exact OCR region highlighted."
+			}
+			messageBox(a.hwnd, "Exact cited passage — "+c.Label, c.Quote+"\r\n\r\nECO support classification: "+last.Support+"\r\n\r\n"+note, MB_OK|MB_ICONINFORMATION)
 			a.openSelectedPreview()
 			return
 		}
@@ -1243,13 +1266,24 @@ func (a *application) openSelectedPreview() {
 		a.progress = eco.ImportProgress{Name: e.SafeName, Stage: "Preparing encrypted image preview"}
 		a.mu.Unlock()
 		invalidate(a.hwnd)
-		go func(item eco.EvidenceItem) {
+		a.mu.Lock()
+		var citationRegion *eco.NormalizedRegion
+		if a.pendingCitationRegion != nil {
+			region := *a.pendingCitationRegion
+			citationRegion = &region
+			a.pendingCitationRegion = nil
+		}
+		a.mu.Unlock()
+		go func(item eco.EvidenceItem, highlight *eco.NormalizedRegion) {
 			data, err := a.vault.ReadEvidence(item.ID, 120*1024*1024)
 			if err == nil {
 				var img image.Image
 				img, _, err = eco.DecodeSupportedImage(data)
 				if err == nil {
-					state := &previewState{itemID: item.ID, title: item.SafeName, original: img, rotation: item.Rotation, mode: "original", zoom: 1}
+					assessment := eco.AssessImage(img)
+					previewImage := eco.BoundedPreviewImage(img, 8_000_000)
+					cropRect, _ := eco.SuggestDocumentBounds(previewImage)
+					state := &previewState{itemID: item.ID, title: item.SafeName, original: previewImage, rotation: item.Rotation, mode: "original", zoom: 1, assessment: assessment, cropRect: cropRect, highlight: highlight}
 					state.rebuild()
 					a.mu.Lock()
 					a.pendingPreview = state
@@ -1262,7 +1296,7 @@ func (a *application) openSelectedPreview() {
 				a.mu.Unlock()
 			}
 			procPostMessageW.Call(a.hwnd, msgPreviewReady, 0, 0)
-		}(e)
+		}(e, citationRegion)
 		return
 	}
 	if e.ExtractedText != "" {
@@ -1273,7 +1307,7 @@ func (a *application) openSelectedPreview() {
 		messageBox(a.hwnd, "Readable source preview — "+e.SafeName, text, MB_OK|MB_ICONINFORMATION)
 		return
 	}
-	messageBox(a.hwnd, "Original preserved", "ECO preserved and encrypted this original, but N1 P3 does not yet have a safe native reader for its contents.", MB_OK|MB_ICONINFORMATION)
+	messageBox(a.hwnd, "Original preserved", "ECO preserved and encrypted this original, but N2 P1 does not yet have an approved native reader for its contents.", MB_OK|MB_ICONINFORMATION)
 }
 
 func (a *application) rotateSelected() {
@@ -1446,15 +1480,39 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 				p.rotation = (p.rotation + 90) % 360
 				p.rebuild()
 				_ = app.vault.SetRotation(p.itemID, p.rotation)
+			case 'C':
+				if p.highlight != nil {
+					break
+				}
+				if p.cropRect != p.original.Bounds() && !p.cropRect.Empty() {
+					p.cropEnabled = !p.cropEnabled
+					p.rebuild()
+				}
+			case 'D':
+				if p.highlight != nil {
+					break
+				}
+				if math.Abs(p.assessment.SkewCorrectionDegrees) >= 0.25 && p.assessment.SkewConfidence >= 0.08 {
+					p.deskewEnabled = !p.deskewEnabled
+					p.rebuild()
+				}
 			case 'G':
 				p.mode = "greyscale"
 				p.rebuild()
 			case 'H':
 				p.mode = "contrast"
 				p.rebuild()
+			case 'A':
+				p.mode = "adaptive"
+				p.rebuild()
 			case 'O':
 				p.mode = "original"
 				p.rebuild()
+			case 'Q':
+				report := previewQualityReport(p)
+				previewMu.Unlock()
+				messageBox(hwnd, "Local document-vision assessment", report, MB_OK|MB_ICONINFORMATION)
+				return 0
 			case VK_ADD, VK_OEM_PLUS:
 				p.zoom *= 1.15
 				if p.zoom > 5 {
@@ -1500,7 +1558,15 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 }
 
 func (p *previewState) rebuild() {
-	p.image = eco.ApplyReadingMode(eco.RotateImage(p.original, p.rotation), p.mode)
+	img := p.original
+	if p.cropEnabled && !p.cropRect.Empty() && p.cropRect != p.original.Bounds() {
+		img = eco.CropImage(img, p.cropRect)
+	}
+	if p.deskewEnabled {
+		img = eco.RotateImageAngle(img, p.assessment.SkewCorrectionDegrees)
+	}
+	img = eco.RotateImage(img, p.rotation)
+	p.image = eco.ApplyReadingMode(img, p.mode)
 	b := p.image.Bounds()
 	p.width, p.height = b.Dx(), b.Dy()
 	p.pixels = make([]byte, p.width*p.height*4)
@@ -1517,6 +1583,23 @@ func (p *previewState) rebuild() {
 	}
 }
 
+func previewQualityReport(p *previewState) string {
+	a := p.assessment
+	crop := "No confident page-boundary suggestion."
+	if a.SuggestedCrop != nil {
+		crop = fmt.Sprintf("Suggested page crop: %.0f%% confidence.", a.SuggestedCrop.Confidence*100)
+	}
+	doublePage := "No double-page pattern detected."
+	if a.ProbableDoublePage {
+		doublePage = "Possible two-page photograph detected; review before OCR."
+	}
+	warnings := "No quality warnings."
+	if len(a.Warnings) > 0 {
+		warnings = "• " + strings.Join(a.Warnings, "\r\n• ")
+	}
+	return fmt.Sprintf("Dimensions: %d × %d (%.1f MP)\r\nOrientation: %s\r\nBrightness: %.0f/255\r\nContrast: %.0f\r\nBlur variance: %.0f\r\nEdge density: %.3f\r\nGlare: %.1f%%\r\nLighting imbalance: %.0f\r\nEdge-dark-content ratio: %.1f%%\r\nSuggested deskew correction: %.1f° (%.0f%% confidence)\r\n%s\r\n%s\r\n\r\n%s", a.Width, a.Height, a.Megapixels, a.Orientation, a.Brightness, a.Contrast, a.BlurVariance, a.EdgeDensity, a.GlareRatio*100, a.ShadowImbalance, a.BorderInkRatio*100, a.SkewCorrectionDegrees, a.SkewConfidence*100, crop, doublePage, warnings)
+}
+
 func drawPreview(hwnd uintptr) {
 	previewMu.Lock()
 	p := previews[hwnd]
@@ -1527,23 +1610,69 @@ func drawPreview(hwnd uintptr) {
 	var rc RECT
 	procGetClientRect.Call(hwnd, uintptr(unsafe.Pointer(&rc)))
 	fillRect(hdc, rc, rgb(25, 39, 42))
-	fillRect(hdc, RECT{0, 0, rc.Right, 74}, rgb(6, 65, 73))
+	fillRect(hdc, RECT{0, 0, rc.Right, 96}, rgb(6, 65, 73))
 	if p == nil {
 		return
 	}
-	drawTextFont(hdc, p.title, RECT{24, 0, rc.Right - 24, 43}, app.fontHeading, rgb(255, 255, 255), DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS)
-	drawTextFont(hdc, fmt.Sprintf("Native encrypted source preview · %d × %d · rotation %d° · %s mode · zoom %.0f%%   |   R rotate   O original   G greyscale   H high contrast   +/− zoom   Esc close", p.width, p.height, p.rotation, p.mode, p.zoom*100), RECT{24, 42, rc.Right - 24, 70}, app.fontSmall, rgb(196, 232, 228), DT_LEFT|DT_SINGLELINE)
+	drawTextFont(hdc, p.title, RECT{24, 0, rc.Right - 24, 42}, app.fontHeading, rgb(255, 255, 255), DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS)
+	cropState := "crop off"
+	if p.cropEnabled {
+		cropState = "crop on"
+	}
+	deskewState := "deskew off"
+	if p.deskewEnabled {
+		deskewState = fmt.Sprintf("deskew %.1f°", p.assessment.SkewCorrectionDegrees)
+	}
+	highlightState := ""
+	if p.highlight != nil {
+		highlightState = " · exact source region highlighted"
+	}
+	drawTextFont(hdc, fmt.Sprintf("%d × %d · rotation %d° · %s · %s · %s · zoom %.0f%%%s", p.width, p.height, p.rotation, p.mode, cropState, deskewState, p.zoom*100, highlightState), RECT{24, 39, rc.Right - 24, 64}, app.fontSmall, rgb(196, 232, 228), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, "R rotate · C auto-crop · D deskew · O original · G greyscale · H fixed contrast · A adaptive · Q quality · +/− zoom · Esc close", RECT{24, 63, rc.Right - 24, 90}, app.fontSmall, rgb(218, 242, 238), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	availW := float64(rc.Right - 40)
-	availH := float64(rc.Bottom - 104)
+	availH := float64(rc.Bottom - 126)
 	scale := minFloat(availW/float64(p.width), availH/float64(p.height)) * p.zoom
 	dw := int32(float64(p.width) * scale)
 	dh := int32(float64(p.height) * scale)
 	dx := (rc.Right - dw) / 2
-	dy := 86 + (int32(availH)-dh)/2
+	dy := 108 + (int32(availH)-dh)/2
 	info := BITMAPINFO{BmiHeader: BITMAPINFOHEADER{BiSize: uint32(unsafe.Sizeof(BITMAPINFOHEADER{})), BiWidth: int32(p.width), BiHeight: -int32(p.height), BiPlanes: 1, BiBitCount: 32, BiCompression: BI_RGB}}
 	if len(p.pixels) > 0 {
 		procStretchDIBits.Call(hdc, uintptr(dx), uintptr(dy), uintptr(dw), uintptr(dh), 0, 0, uintptr(p.width), uintptr(p.height), uintptr(unsafe.Pointer(&p.pixels[0])), uintptr(unsafe.Pointer(&info)), DIB_RGB_COLORS, SRCCOPY)
 	}
+	if p.highlight != nil {
+		r := rotateNormalizedRegion(*p.highlight, p.rotation)
+		hx0 := dx + int32(math.Round(r.X*float64(dw)))
+		hy0 := dy + int32(math.Round(r.Y*float64(dh)))
+		hx1 := dx + int32(math.Round((r.X+r.Width)*float64(dw)))
+		hy1 := dy + int32(math.Round((r.Y+r.Height)*float64(dh)))
+		drawHighlightRect(hdc, RECT{hx0, hy0, hx1, hy1}, rgb(255, 185, 35))
+	}
+}
+
+func rotateNormalizedRegion(r eco.NormalizedRegion, rotation int) eco.NormalizedRegion {
+	rotation = ((rotation % 360) + 360) % 360
+	switch rotation {
+	case 90:
+		return eco.NormalizedRegion{X: 1 - (r.Y + r.Height), Y: r.X, Width: r.Height, Height: r.Width}
+	case 180:
+		return eco.NormalizedRegion{X: 1 - (r.X + r.Width), Y: 1 - (r.Y + r.Height), Width: r.Width, Height: r.Height}
+	case 270:
+		return eco.NormalizedRegion{X: r.Y, Y: 1 - (r.X + r.Width), Width: r.Height, Height: r.Width}
+	default:
+		return r
+	}
+}
+
+func drawHighlightRect(hdc uintptr, r RECT, colour uintptr) {
+	if r.Right <= r.Left || r.Bottom <= r.Top {
+		return
+	}
+	thickness := int32(4)
+	fillRect(hdc, RECT{r.Left, r.Top, r.Right, r.Top + thickness}, colour)
+	fillRect(hdc, RECT{r.Left, r.Bottom - thickness, r.Right, r.Bottom}, colour)
+	fillRect(hdc, RECT{r.Left, r.Top, r.Left + thickness, r.Bottom}, colour)
+	fillRect(hdc, RECT{r.Right - thickness, r.Top, r.Right, r.Bottom}, colour)
 }
 
 func fillRect(hdc uintptr, r RECT, color uintptr) {
