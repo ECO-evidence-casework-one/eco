@@ -34,6 +34,18 @@ The N2 P1 source adds:
 
 A bundled OCR engine and generative local language model are **not yet included**. The OCR provenance and source-region system is implemented first so future engines cannot inject unvalidated text into the evidence index.
 
+## Later local development and independent control
+
+The source currently published on `main` remains `ECO-V25-20260731-N2-P1`.
+
+Later native Windows candidates are developed and independently inspected before any source promotion. These private candidates do not automatically replace the public source milestone and are not releases.
+
+`ECO-V32-20260801-M1-P1` was independently reproducible but was held before Windows execution because runtime-provenance, final one-file packaging and current release-evidence requirements were incomplete.
+
+Version 34 is under active development and has not yet entered independent intake.
+
+See [Current project status](docs/status/CURRENT_STATUS.md) and the [current release gate](docs/control/CURRENT_RELEASE_GATE.md).
+
 ## Important release warning
 
 There is currently **no approved signed end-user release**. New unsigned Windows executables may be blocked by Windows Smart App Control. Do not weaken Windows security controls to run an ECO development build.
