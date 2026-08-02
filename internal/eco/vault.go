@@ -2,6 +2,7 @@ package eco
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
@@ -49,6 +50,12 @@ func OpenVault(root string) (*Vault, error) {
 	if err := v.loadWorkspace(); err != nil {
 		return nil, err
 	}
+	if err := cleanupInterruptedReadingCopies(root); err != nil {
+		return nil, fmt.Errorf("clean interrupted derived reading state: %w", err)
+	}
+	if err := v.recoverPreservations(); err != nil {
+		return nil, fmt.Errorf("recover preservation state: %w", err)
+	}
 	return v, nil
 }
 
@@ -78,7 +85,7 @@ func loadOrCreateMasterKey(path string) ([]byte, error) {
 
 func newWorkspace() Workspace {
 	now := time.Now().UTC()
-	return Workspace{Schema: Schema, BuildID: BuildID, CreatedAt: now, UpdatedAt: now, Evidence: []EvidenceItem{}, Matters: []Matter{}, Changes: []ChangeRecord{}, Questions: []QuestionRecord{}, SelectedPage: "home"}
+	return Workspace{Schema: Schema, BuildID: BuildID, CreatedAt: now, UpdatedAt: now, Evidence: []EvidenceItem{}, Preservations: []PreservationRecord{}, Matters: []Matter{}, Changes: []ChangeRecord{}, Questions: []QuestionRecord{}, SelectedPage: "home"}
 }
 
 func (v *Vault) loadWorkspace() error {
@@ -149,6 +156,10 @@ func (v *Vault) Snapshot() Workspace {
 		out.Evidence[i].Warnings = append([]string(nil), v.Workspace.Evidence[i].Warnings...)
 		out.Evidence[i].Segments = append([]SourceSegment(nil), v.Workspace.Evidence[i].Segments...)
 		out.Evidence[i].MatterIDs = append([]string(nil), v.Workspace.Evidence[i].MatterIDs...)
+		if v.Workspace.Evidence[i].Extraction != nil {
+			extraction := *v.Workspace.Evidence[i].Extraction
+			out.Evidence[i].Extraction = &extraction
+		}
 		if v.Workspace.Evidence[i].Image != nil {
 			img := *v.Workspace.Evidence[i].Image
 			img.Warnings = append([]string(nil), v.Workspace.Evidence[i].Image.Warnings...)
@@ -169,6 +180,7 @@ func (v *Vault) Snapshot() Workspace {
 			out.Evidence[i].OCR = &ocr
 		}
 	}
+	out.Preservations = append([]PreservationRecord(nil), v.Workspace.Preservations...)
 	out.Matters = append([]Matter(nil), v.Workspace.Matters...)
 	for i := range out.Matters {
 		out.Matters[i].EvidenceIDs = append([]string(nil), v.Workspace.Matters[i].EvidenceIDs...)
@@ -200,14 +212,43 @@ func (v *Vault) ApplyOCRResult(evidenceID string, receipt OCRReceipt, segments [
 	v.opMu.RLock()
 	defer v.opMu.RUnlock()
 	v.mu.Lock()
+	var source EvidenceItem
+	found := false
+	for i := range v.Workspace.Evidence {
+		if v.Workspace.Evidence[i].ID == evidenceID {
+			source = cloneEvidenceItem(v.Workspace.Evidence[i])
+			found = true
+			break
+		}
+	}
+	v.mu.Unlock()
+	if !found {
+		return os.ErrNotExist
+	}
+	if !preservationUsable(source) {
+		return errors.New("OCR is blocked because the preserved source is not verified")
+	}
+	if receipt.SourceObject != source.ObjectFile || receipt.SourceSHA256 != source.SHA256 {
+		return errors.New("OCR receipt does not identify the verified preserved object")
+	}
+	for _, segment := range segments {
+		if segment.SourceObject != source.ObjectFile || segment.SourceSHA256 != source.SHA256 {
+			return errors.New("OCR source segment does not identify the verified preserved object")
+		}
+	}
+	if _, err := v.verifyPreservedObject(source.ID, source.ObjectFile, source.SHA256, source.Size); err != nil {
+		v.markEvidenceVerificationFailure(source.ID, err)
+		return fmt.Errorf("OCR is blocked because preserved source verification failed: %w", err)
+	}
+	v.mu.Lock()
 	defer v.mu.Unlock()
 	for i := range v.Workspace.Evidence {
 		item := &v.Workspace.Evidence[i]
 		if item.ID != evidenceID {
 			continue
 		}
-		if receipt.SourceSHA256 != item.SHA256 {
-			return errors.New("OCR receipt source SHA-256 does not match the preserved original")
+		if !preservationUsable(*item) || receipt.SourceObject != item.ObjectFile || receipt.SourceSHA256 != item.SHA256 {
+			return errors.New("OCR receipt source does not match the verified preserved object")
 		}
 
 		// Preserve a complete in-memory rollback point. The active workspace must
@@ -244,7 +285,7 @@ func (v *Vault) ApplyOCRResult(evidenceID string, receipt OCRReceipt, segments [
 			item.Status = "OCR failed safely — original preserved"
 		}
 		item.Warnings = append(item.Warnings, receipt.Warnings...)
-		v.addChangeUnlocked("ocr-worker", "ocr-result-added", "Added coordinate-bearing OCR reading for "+item.SafeName, map[string]any{"id": item.ID, "engine": receipt.Engine, "engine_version": receipt.EngineVersion, "status": receipt.Status, "lines": len(receipt.Lines), "average_confidence": receipt.AverageConfidence})
+		v.addChangeUnlocked("ocr-worker", "ocr-result-added", "Added coordinate-bearing OCR reading for "+item.SafeName, map[string]any{"id": item.ID, "object_file": item.ObjectFile, "source_sha256": item.SHA256, "engine": receipt.Engine, "engine_version": receipt.EngineVersion, "status": receipt.Status, "lines": len(receipt.Lines), "average_confidence": receipt.AverageConfidence})
 		if err := v.saveUnlocked(); err != nil {
 			*item = oldItem
 			v.Workspace.Changes = v.Workspace.Changes[:oldChangeLen]
@@ -273,6 +314,10 @@ func cloneEvidenceItem(item EvidenceItem) EvidenceItem {
 	out.Warnings = append([]string(nil), item.Warnings...)
 	out.MatterIDs = append([]string(nil), item.MatterIDs...)
 	out.Segments = append([]SourceSegment(nil), item.Segments...)
+	if item.Extraction != nil {
+		extraction := *item.Extraction
+		out.Extraction = &extraction
+	}
 	for i := range out.Segments {
 		if item.Segments[i].Region != nil {
 			region := *item.Segments[i].Region
@@ -333,128 +378,6 @@ func decryptBlob(key []byte, aad string, data []byte) ([]byte, error) {
 		return nil, errors.New("truncated encrypted blob")
 	}
 	return gcm.Open(nil, data[:gcm.NonceSize()], data[gcm.NonceSize():], []byte(aad))
-}
-
-func (v *Vault) ImportFile(path string, progress func(ImportProgress)) (EvidenceItem, bool, error) {
-	v.opMu.RLock()
-	defer v.opMu.RUnlock()
-	info, err := os.Stat(path)
-	if err != nil {
-		return EvidenceItem{}, false, err
-	}
-	if !info.Mode().IsRegular() {
-		return EvidenceItem{}, false, errors.New("only regular files can be imported")
-	}
-	if progress != nil {
-		progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Checking file type", Total: info.Size()})
-	}
-	det, err := DetectFile(path)
-	if err != nil {
-		return EvidenceItem{}, false, err
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return EvidenceItem{}, false, err
-	}
-	defer f.Close()
-	h := sha256.New()
-	buf := make([]byte, chunkSize)
-	var done int64
-	for {
-		n, rerr := f.Read(buf)
-		if n > 0 {
-			_, _ = h.Write(buf[:n])
-			done += int64(n)
-			if progress != nil {
-				progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Hashing original", Current: done, Total: info.Size()})
-			}
-		}
-		if rerr == io.EOF {
-			break
-		}
-		if rerr != nil {
-			return EvidenceItem{}, false, rerr
-		}
-	}
-	hash := hex.EncodeToString(h.Sum(nil))
-	v.mu.Lock()
-	for _, e := range v.Workspace.Evidence {
-		if e.SHA256 == hash {
-			v.mu.Unlock()
-			return e, true, nil
-		}
-	}
-	v.mu.Unlock()
-
-	id := NewID("EVD")
-	objectName := id + ".ecoobj"
-	objectPath := filepath.Join(v.Objects, objectName)
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return EvidenceItem{}, false, err
-	}
-	if progress != nil {
-		progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Encrypting original", Total: info.Size()})
-	}
-	if err := encryptStream(v.key, id, f, objectPath, info.Size(), progress, path, info.Name()); err != nil {
-		return EvidenceItem{}, false, err
-	}
-
-	item := EvidenceItem{ID: id, OriginalName: info.Name(), SafeName: SafeDisplayName(info.Name()), SourcePath: path, Size: info.Size(), SHA256: hash, DetectedType: det.Type, ExtensionType: det.ExtensionType, TypeMismatch: det.Mismatch, Status: "Preserved", ImportedAt: time.Now().UTC(), ObjectFile: objectName}
-	if det.Warning != "" {
-		item.Warnings = append(item.Warnings, det.Warning)
-	}
-	if det.Dangerous {
-		item.Status = "Quarantined"
-		item.Readable = false
-	} else {
-		if progress != nil {
-			progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Reading safely", Total: info.Size()})
-		}
-		text, segs, readWarnings := ExtractReadable(path, det.Type)
-		item.ExtractedText = text
-		item.Segments = segs
-		item.Warnings = append(item.Warnings, readWarnings...)
-		item.Readable = len(stringsTrim(text)) > 0
-		if item.Readable {
-			item.Status = "Ready"
-		} else if isImageType(det.Type) {
-			item.Status = "Image ready"
-		} else {
-			item.Status = "Preserved — contents not read"
-		}
-		if isImageType(det.Type) {
-			data, rerr := readFileBounded(path, 120*1024*1024)
-			if rerr == nil {
-				if img, _, derr := DecodeSupportedImage(data); derr == nil {
-					a := AssessImage(img)
-					item.Image = &a
-					item.Warnings = append(item.Warnings, a.Warnings...)
-					v.mu.Lock()
-					for _, existing := range v.Workspace.Evidence {
-						if existing.Image != nil && existing.Image.PerceptualHash != "" && HashDistance(a.PerceptualHash, existing.Image.PerceptualHash) <= 6 {
-							item.NearDuplicateOf = existing.ID
-							item.Warnings = append(item.Warnings, "This image appears visually similar to "+existing.SafeName+". Review both before excluding either one.")
-							break
-						}
-					}
-					v.mu.Unlock()
-				} else {
-					item.Warnings = append(item.Warnings, "Image preserved, but this native preview could not decode it for visual assessment.")
-				}
-			}
-		}
-	}
-	v.mu.Lock()
-	v.Workspace.Evidence = append([]EvidenceItem{item}, v.Workspace.Evidence...)
-	v.Workspace.SelectedID = item.ID
-	v.addChangeUnlocked("system", "evidence-imported", "Imported and encrypted "+item.SafeName, map[string]any{"id": item.ID, "sha256": item.SHA256, "type": item.DetectedType, "size": item.Size})
-	err = v.saveUnlocked()
-	v.mu.Unlock()
-	if err != nil {
-		return EvidenceItem{}, false, err
-	}
-	return item, false, nil
 }
 
 func encryptStream(key []byte, objectID string, src io.Reader, dstPath string, size int64, progress func(ImportProgress), sourcePath, name string) error {
@@ -527,11 +450,124 @@ func encryptStream(key []byte, objectID string, src io.Reader, dstPath string, s
 	if err := os.Rename(tmp, dstPath); err != nil {
 		return err
 	}
+	if err := os.Chmod(dstPath, 0400); err != nil {
+		return err
+	}
 	ok = true
 	return nil
 }
 
+func encryptStreamContext(ctx context.Context, key []byte, objectID string, src io.Reader, dstPath string, size int64, progress func(ImportProgress), sourcePath, name string) (int64, string, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return 0, "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return 0, "", err
+	}
+	prefix := make([]byte, 4)
+	if _, err := rand.Read(prefix); err != nil {
+		return 0, "", err
+	}
+	if _, err := os.Lstat(dstPath); err == nil {
+		return 0, "", errors.New("preserved object path already exists")
+	} else if !os.IsNotExist(err) {
+		return 0, "", err
+	}
+	tmp := dstPath + ".tmp"
+	out, err := os.OpenFile(tmp, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if err != nil {
+		return 0, "", err
+	}
+	closed := false
+	keepTemp := false
+	defer func() {
+		if !closed {
+			_ = out.Close()
+		}
+		if !keepTemp {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if _, err := out.Write([]byte(objectMagic)); err != nil {
+		return 0, "", err
+	}
+	if _, err := out.Write(prefix); err != nil {
+		return 0, "", err
+	}
+	buf := make([]byte, chunkSize)
+	h := sha256.New()
+	var index uint64
+	var done int64
+	for {
+		if err := ctx.Err(); err != nil {
+			return done, hex.EncodeToString(h.Sum(nil)), err
+		}
+		n, readErr := src.Read(buf)
+		if n > 0 {
+			done += int64(n)
+			if done > size {
+				return done, hex.EncodeToString(h.Sum(nil)), errors.New("source grew during preservation")
+			}
+			_, _ = h.Write(buf[:n])
+			nonce := make([]byte, gcm.NonceSize())
+			copy(nonce, prefix)
+			binary.BigEndian.PutUint64(nonce[len(nonce)-8:], index)
+			sealed := gcm.Seal(nil, nonce, buf[:n], []byte(fmt.Sprintf("%s:%d", objectID, index)))
+			if err := binary.Write(out, binary.LittleEndian, uint32(len(sealed))); err != nil {
+				return done, hex.EncodeToString(h.Sum(nil)), err
+			}
+			if _, err := out.Write(sealed); err != nil {
+				return done, hex.EncodeToString(h.Sum(nil)), err
+			}
+			index++
+			if progress != nil {
+				progress(ImportProgress{Path: sourcePath, Name: name, Stage: "Preserving immutable original", Current: done, Total: size})
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return done, hex.EncodeToString(h.Sum(nil)), readErr
+		}
+	}
+	if done != size {
+		return done, hex.EncodeToString(h.Sum(nil)), errors.New("source ended before the preservation write was complete")
+	}
+	if err := out.Sync(); err != nil {
+		return done, hex.EncodeToString(h.Sum(nil)), err
+	}
+	if err := out.Close(); err != nil {
+		return done, hex.EncodeToString(h.Sum(nil)), err
+	}
+	closed = true
+	keepTemp = true
+	if _, err := os.Lstat(dstPath); err == nil {
+		return done, hex.EncodeToString(h.Sum(nil)), errors.New("preserved object was unexpectedly created or replaced")
+	} else if !os.IsNotExist(err) {
+		return done, hex.EncodeToString(h.Sum(nil)), err
+	}
+	if err := os.Rename(tmp, dstPath); err != nil {
+		return done, hex.EncodeToString(h.Sum(nil)), err
+	}
+	keepTemp = false
+	if err := os.Chmod(dstPath, 0400); err != nil {
+		return done, hex.EncodeToString(h.Sum(nil)), fmt.Errorf("make preserved object immutable: %w", err)
+	}
+	return done, hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func (v *Vault) ReadEvidence(id string, maxBytes int64) ([]byte, error) {
+	data, _, err := v.ReadEvidenceSource(id, maxBytes)
+	return data, err
+}
+
+// ReadEvidenceSource returns bytes only after a fresh authentication, size and
+// SHA-256 check of the immutable preserved object. The receipt is the binding
+// downstream preview and OCR work must carry forward.
+func (v *Vault) ReadEvidenceSource(id string, maxBytes int64) ([]byte, SourceReceipt, error) {
 	v.opMu.RLock()
 	defer v.opMu.RUnlock()
 	v.mu.Lock()
@@ -550,17 +586,54 @@ func (v *Vault) ReadEvidence(id string, maxBytes int64) ([]byte, error) {
 		item = &itemCopy
 	}
 	if item == nil {
-		return nil, os.ErrNotExist
+		return nil, SourceReceipt{}, os.ErrNotExist
+	}
+	if !preservationUsable(*item) {
+		return nil, SourceReceipt{}, errors.New("evidence source verification has not succeeded; preview, OCR and retrieval are blocked")
 	}
 	if maxBytes > 0 && item.Size > maxBytes {
-		return nil, fmt.Errorf("evidence is %s; preview limit is %s", HumanBytes(item.Size), HumanBytes(maxBytes))
+		return nil, SourceReceipt{}, fmt.Errorf("evidence is %s; preview limit is %s", HumanBytes(item.Size), HumanBytes(maxBytes))
 	}
-	f, err := os.Open(filepath.Join(v.Objects, item.ObjectFile))
+	objectPath, err := v.objectPath(item.ID, item.ObjectFile)
 	if err != nil {
-		return nil, err
+		v.markEvidenceVerificationFailure(item.ID, err)
+		return nil, SourceReceipt{}, err
+	}
+	f, err := os.Open(objectPath)
+	if err != nil {
+		v.markEvidenceVerificationFailure(item.ID, err)
+		return nil, SourceReceipt{}, err
 	}
 	defer f.Close()
-	return decryptObject(v.key, id, f, maxBytes)
+	before, err := f.Stat()
+	if err != nil || !before.Mode().IsRegular() {
+		err = errors.New("preserved object is not a regular immutable file")
+		v.markEvidenceVerificationFailure(item.ID, err)
+		return nil, SourceReceipt{}, err
+	}
+	data, err := decryptObject(v.key, id, f, maxBytes)
+	if err == nil {
+		after, statErr := f.Stat()
+		current, pathErr := os.Stat(objectPath)
+		if statErr != nil || pathErr != nil || !sameStableFile(before, after) || !sameStableFile(after, current) {
+			err = errors.New("preserved object was replaced or mutated while it was being read")
+		}
+	}
+	if err == nil && int64(len(data)) != item.Size {
+		err = errors.New("preserved object size does not match its verified receipt")
+	}
+	if err == nil {
+		h := sha256.Sum256(data)
+		if hex.EncodeToString(h[:]) != item.SHA256 {
+			err = errors.New("preserved object SHA-256 does not match its verified receipt")
+		}
+	}
+	if err != nil {
+		v.markEvidenceVerificationFailure(item.ID, err)
+		return nil, SourceReceipt{}, err
+	}
+	receipt := SourceReceipt{EvidenceID: item.ID, ObjectFile: item.ObjectFile, SHA256: item.SHA256, Size: item.Size, VerifiedAt: time.Now().UTC()}
+	return data, receipt, nil
 }
 
 func decryptObject(key []byte, objectID string, src io.Reader, maxBytes int64) ([]byte, error) {
@@ -615,6 +688,66 @@ func decryptObject(key []byte, objectID string, src io.Reader, maxBytes int64) (
 		index++
 	}
 	return out.Bytes(), nil
+}
+
+func decryptObjectToWriter(key []byte, objectID string, src io.Reader, expectedSize int64, dst io.Writer) error {
+	header := make([]byte, len(objectMagic))
+	if _, err := io.ReadFull(src, header); err != nil {
+		return err
+	}
+	if string(header) != objectMagic {
+		return errors.New("bad object header")
+	}
+	prefix := make([]byte, 4)
+	if _, err := io.ReadFull(src, prefix); err != nil {
+		return err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return err
+	}
+	var index uint64
+	var written int64
+	for {
+		var n uint32
+		err := binary.Read(src, binary.LittleEndian, &n)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		if n == 0 || n > chunkSize+uint32(gcm.Overhead()) {
+			return errors.New("unsafe encrypted chunk length")
+		}
+		sealed := make([]byte, n)
+		if _, err := io.ReadFull(src, sealed); err != nil {
+			return err
+		}
+		nonce := make([]byte, gcm.NonceSize())
+		copy(nonce, prefix)
+		binary.BigEndian.PutUint64(nonce[len(nonce)-8:], index)
+		plain, err := gcm.Open(nil, nonce, sealed, []byte(fmt.Sprintf("%s:%d", objectID, index)))
+		if err != nil {
+			return errors.New("object authentication failed")
+		}
+		written += int64(len(plain))
+		if expectedSize >= 0 && written > expectedSize {
+			return errors.New("decrypted object exceeds its preserved size receipt")
+		}
+		if _, err := dst.Write(plain); err != nil {
+			return err
+		}
+		index++
+	}
+	if expectedSize >= 0 && written != expectedSize {
+		return errors.New("decrypted object is incomplete")
+	}
+	return nil
 }
 
 func (v *Vault) AddChange(actor, typ, summary string, details map[string]any) {
@@ -692,32 +825,18 @@ func (v *Vault) VerifyAll(progress func(current, total int, name string)) []stri
 		if progress != nil {
 			progress(i, total, e.SafeName)
 		}
-		f, err := os.Open(filepath.Join(v.Objects, e.ObjectFile))
+		receipt, err := v.verifyPreservedObject(e.ID, e.ObjectFile, e.SHA256, e.Size)
 		if err != nil {
-			alerts = append(alerts, e.SafeName+": encrypted object missing")
+			alerts = append(alerts, e.SafeName+": "+err.Error())
+			v.markEvidenceVerificationFailure(e.ID, err)
 			continue
 		}
-		data, err := decryptObject(v.key, e.ID, f, 0)
-		f.Close()
-		if err != nil {
-			alerts = append(alerts, e.SafeName+": authentication failed")
-			continue
-		}
-		h := sha256.Sum256(data)
-		if hex.EncodeToString(h[:]) != e.SHA256 {
-			alerts = append(alerts, e.SafeName+": SHA-256 mismatch")
-		}
+		v.markEvidenceVerificationSuccess(e.ID, receipt)
 	}
 	v.AddChange("system", "integrity-check", "Verified encrypted evidence objects", map[string]any{"alerts": len(alerts), "items": total})
 	return alerts
 }
 
-func stringsTrim(s string) string {
-	for len(s) > 0 && (s[0] == ' ' || s[0] == '\n' || s[0] == '\r' || s[0] == '\t') {
-		s = s[1:]
-	}
-	return s
-}
 func isImageType(t string) bool {
 	switch t {
 	case "jpeg", "png", "gif", "bmp", "tiff", "webp":

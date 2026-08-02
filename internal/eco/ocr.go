@@ -27,7 +27,7 @@ var sha256TextPattern = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
 // ParseOCRTSV converts coordinate-bearing Tesseract-compatible TSV output
 // into source segments and a reviewable OCR receipt. It does not claim that
 // OCR is correct: every line retains confidence and its exact image region.
-func ParseOCRTSV(tsv, engine, engineVersion, language, sourceSHA256 string, imageWidth, imageHeight int) (OCRReceipt, []SourceSegment, error) {
+func ParseOCRTSV(tsv, engine, engineVersion, language string, source SourceReceipt, imageWidth, imageHeight int) (OCRReceipt, []SourceSegment, error) {
 	if imageWidth <= 0 || imageHeight <= 0 {
 		return OCRReceipt{}, nil, errors.New("OCR image dimensions must be positive")
 	}
@@ -37,8 +37,8 @@ func ParseOCRTSV(tsv, engine, engineVersion, language, sourceSHA256 string, imag
 	if len([]rune(engineVersion)) > maxOCRIdentityText || len([]rune(language)) > maxOCRLanguageText {
 		return OCRReceipt{}, nil, errors.New("OCR engine version or language is unbounded")
 	}
-	if !sha256TextPattern.MatchString(sourceSHA256) {
-		return OCRReceipt{}, nil, errors.New("OCR source SHA-256 is required")
+	if strings.TrimSpace(source.ObjectFile) == "" || !sha256TextPattern.MatchString(source.SHA256) || source.VerifiedAt.IsZero() {
+		return OCRReceipt{}, nil, errors.New("OCR requires a verified preserved-object source receipt")
 	}
 	type lineKey struct {
 		page, block, paragraph, line int
@@ -131,14 +131,14 @@ func ParseOCRTSV(tsv, engine, engineVersion, language, sourceSHA256 string, imag
 		return OCRReceipt{}, nil, err
 	}
 	if wordCount == 0 {
-		receipt := OCRReceipt{Engine: engine, EngineVersion: engineVersion, Language: language, Status: "no-text", SourceSHA256: sourceSHA256, CreatedAt: time.Now().UTC()}
+		receipt := OCRReceipt{Engine: engine, EngineVersion: engineVersion, Language: language, Status: "no-text", SourceObject: source.ObjectFile, SourceSHA256: source.SHA256, CreatedAt: time.Now().UTC()}
 		if err := ValidateOCRReceipt(receipt); err != nil {
 			return OCRReceipt{}, nil, err
 		}
 		return receipt, nil, nil
 	}
 
-	receipt := OCRReceipt{Engine: engine, EngineVersion: engineVersion, Language: language, Status: "ready", SourceSHA256: sourceSHA256, CreatedAt: time.Now().UTC()}
+	receipt := OCRReceipt{Engine: engine, EngineVersion: engineVersion, Language: language, Status: "ready", SourceObject: source.ObjectFile, SourceSHA256: source.SHA256, CreatedAt: time.Now().UTC()}
 	segments := make([]SourceSegment, 0, len(order))
 	var allConf float64
 	var allN int
@@ -167,7 +167,7 @@ func ParseOCRTSV(tsv, engine, engineVersion, language, sourceSHA256 string, imag
 		line := OCRLine{Text: lineText, Confidence: conf, Region: region, Page: key.page, Words: append([]OCRWord(nil), lb.words...)}
 		receipt.Lines = append(receipt.Lines, line)
 		regionCopy := region
-		segments = append(segments, SourceSegment{ID: fmt.Sprintf("OCR-%d-%d", key.page, i+1), Ordinal: i + 1, Text: lineText, PageHint: fmt.Sprintf("Image page %d", key.page), Page: key.page, Region: &regionCopy, Origin: "ocr", Confidence: conf})
+		segments = append(segments, SourceSegment{ID: fmt.Sprintf("OCR-%d-%d", key.page, i+1), Ordinal: i + 1, Text: lineText, PageHint: fmt.Sprintf("Image page %d", key.page), Page: key.page, Region: &regionCopy, Origin: "ocr", Confidence: conf, SourceObject: source.ObjectFile, SourceSHA256: source.SHA256})
 	}
 	if allN > 0 {
 		receipt.AverageConfidence = allConf / float64(allN)
@@ -193,6 +193,9 @@ func ValidateOCRReceipt(r OCRReceipt) error {
 	}
 	if !sha256TextPattern.MatchString(r.SourceSHA256) {
 		return errors.New("OCR source SHA-256 is missing or invalid")
+	}
+	if strings.TrimSpace(r.SourceObject) == "" || len([]rune(r.SourceObject)) > maxOCRIdentityText || strings.ContainsAny(r.SourceObject, `/\\`) {
+		return errors.New("OCR preserved source object is missing or invalid")
 	}
 	if r.Status != "ready" && r.Status != "no-text" && r.Status != "failed" {
 		return errors.New("unsupported OCR status")
@@ -282,6 +285,9 @@ func validateOCRSegments(receipt OCRReceipt, segments []SourceSegment) error {
 		seen[seg.ID] = struct{}{}
 		if seg.Ordinal < 1 || seg.Page < 1 || seg.Origin != "ocr" {
 			return errors.New("OCR source segment metadata is invalid")
+		}
+		if seg.SourceObject != receipt.SourceObject || seg.SourceSHA256 != receipt.SourceSHA256 {
+			return errors.New("OCR source segment is not bound to its preserved object receipt")
 		}
 		if seg.Region == nil || !seg.Region.Valid() || strings.TrimSpace(seg.Text) == "" || len([]rune(seg.Text)) > maxOCRLineText {
 			return errors.New("OCR source segment is missing bounded text coordinates")

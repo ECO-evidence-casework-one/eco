@@ -117,7 +117,8 @@ func TestParseOCRTSVCoordinates(t *testing.T) {
 		"5\t1\t1\t1\t1\t2\t190\t200\t60\t30\t88.0\tdate",
 		"5\t1\t1\t1\t2\t1\t100\t250\t75\t30\t61.0\tcarefully",
 	}, "\n")
-	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", strings.Repeat("a", 64), 1000, 800)
+	source := SourceReceipt{ObjectFile: "synthetic.ecoobj", SHA256: strings.Repeat("a", 64), VerifiedAt: time.Now().UTC()}
+	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", source, 1000, 800)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +158,11 @@ func TestApplyOCRResultPreservesSourceAndAddsRegions(t *testing.T) {
 		t.Fatal(err)
 	}
 	tsv := "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n5\t1\t1\t1\t1\t1\t20\t30\t90\t20\t91\tDeadline"
-	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", item.SHA256, 300, 200)
+	_, source, err := v.ReadEvidenceSource(item.ID, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", source, 300, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +190,8 @@ func TestBoundedPreviewImage(t *testing.T) {
 
 func TestLowConfidenceOCRIsExcludedFromRetrieval(t *testing.T) {
 	region := NormalizedRegion{X: 0.1, Y: 0.1, Width: 0.4, Height: 0.1}
-	evidence := []EvidenceItem{{ID: "E1", SafeName: "unclear scan.png", Segments: []SourceSegment{{ID: "OCR-1", Ordinal: 1, Text: "The deadline is 31 August 2026", Origin: "ocr", Confidence: 0.22, Region: &region}}}}
+	hash := strings.Repeat("d", 64)
+	evidence := []EvidenceItem{{ID: "E1", SafeName: "unclear scan.png", ObjectFile: "E1.ecoobj", SHA256: hash, Preservation: preservationCommitted, SourceVerified: true, Segments: []SourceSegment{{ID: "OCR-1", Ordinal: 1, Text: "The deadline is 31 August 2026", Origin: "ocr", Confidence: 0.22, Region: &region, SourceObject: "E1.ecoobj", SourceSHA256: hash}}}}
 	ranked, suspicious, low := rankSegments("when is the deadline", evidence, nil)
 	if len(ranked) != 0 || suspicious != 0 || low != 1 {
 		t.Fatalf("low-confidence OCR was not excluded safely: ranked=%d suspicious=%d low=%d", len(ranked), suspicious, low)
@@ -212,8 +218,8 @@ func TestOCRSourceHashMismatchIsRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 	region := NormalizedRegion{X: 0.1, Y: 0.1, Width: 0.5, Height: 0.2}
-	receipt := OCRReceipt{Engine: "Synthetic", Status: "ready", SourceSHA256: strings.Repeat("0", 64), CreatedAt: time.Now().UTC(), Words: []OCRWord{{Text: "test", Confidence: 0.9, Region: region, Page: 1}}}
-	segments := []SourceSegment{{ID: "OCR-1", Ordinal: 1, Text: "test", Origin: "ocr", Confidence: 0.9, Region: &region}}
+	receipt := OCRReceipt{Engine: "Synthetic", Status: "ready", SourceObject: item.ObjectFile, SourceSHA256: strings.Repeat("0", 64), CreatedAt: time.Now().UTC(), Words: []OCRWord{{Text: "test", Confidence: 0.9, Region: region, Page: 1}}}
+	segments := []SourceSegment{{ID: "OCR-1", Ordinal: 1, Text: "test", Origin: "ocr", Confidence: 0.9, Region: &region, SourceObject: item.ObjectFile, SourceSHA256: strings.Repeat("0", 64)}}
 	if err := v.ApplyOCRResult(item.ID, receipt, segments); err == nil {
 		t.Fatal("mismatched OCR source hash was accepted")
 	}
@@ -224,7 +230,8 @@ func TestOCRSourceHashMismatchIsRejected(t *testing.T) {
 
 func TestOCRSegmentDivergenceIsRejected(t *testing.T) {
 	tsv := "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n5\t1\t1\t1\t1\t1\t20\t30\t90\t20\t91\tDeadline"
-	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", strings.Repeat("b", 64), 300, 200)
+	source := SourceReceipt{ObjectFile: "synthetic.ecoobj", SHA256: strings.Repeat("b", 64), VerifiedAt: time.Now().UTC()}
+	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", source, 300, 200)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,6 +246,7 @@ func TestOCRReceiptRejectsInvalidNestedWord(t *testing.T) {
 	receipt := OCRReceipt{
 		Engine:       "Synthetic",
 		Status:       "ready",
+		SourceObject: "synthetic.ecoobj",
 		SourceSHA256: strings.Repeat("c", 64),
 		CreatedAt:    time.Now().UTC(),
 		Words:        []OCRWord{{Text: "valid", Confidence: 0.9, Region: region, Page: 1}},
@@ -275,7 +283,11 @@ func TestApplyOCRResultRollsBackIfMetadataSaveFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	tsv := "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n5\t1\t1\t1\t1\t1\t10\t10\t40\t15\t90\tReview"
-	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", item.SHA256, 100, 80)
+	_, source, err := v.ReadEvidenceSource(item.ID, 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	receipt, segments, err := ParseOCRTSV(tsv, "Tesseract", "5.x", "eng", source, 100, 80)
 	if err != nil {
 		t.Fatal(err)
 	}
