@@ -23,10 +23,21 @@ type rankedSegment struct {
 func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
 	question = strings.TrimSpace(question)
 	intent := classifyIntent(question)
+	verificationFailures := v.verifyEvidenceForUse(scopeIDs)
 	ws := v.Snapshot()
 	ranked, excluded, lowConfidenceExcluded := rankSegments(question, ws.Evidence, scopeIDs)
-	answer, citations, support := composeAnswer(intent, question, ranked, ws)
-	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: scopeIDs, ReceiptID: NewID("AIR"), EvidenceConsidered: len(ws.Evidence), RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded}
+	answer, citations, support := composeAnswer(intent, question, ranked, ws, scopeIDs)
+	allowed := make(map[string]bool, len(scopeIDs))
+	for _, id := range scopeIDs {
+		allowed[id] = true
+	}
+	verifiedConsidered := 0
+	for _, item := range ws.Evidence {
+		if (len(allowed) == 0 || allowed[item.ID]) && preservationUsable(item) {
+			verifiedConsidered++
+		}
+	}
+	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: scopeIDs, ReceiptID: NewID("AIR"), EvidenceConsidered: verifiedConsidered, RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded, SourceVerificationFailures: verificationFailures}
 	v.mu.Lock()
 	v.Workspace.Questions = append([]QuestionRecord{rec}, v.Workspace.Questions...)
 	v.addChangeUnlocked("user", "question-asked", "Asked ECO a source-backed local question", map[string]any{"question": truncate(question, 300), "intent": intent, "sources": len(citations)})
@@ -104,7 +115,13 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 		if useScope && !allowed[e.ID] {
 			continue
 		}
+		if !preservationUsable(e) {
+			continue
+		}
 		for _, s := range e.Segments {
+			if !segmentBoundToPreservedSource(e, s) {
+				continue
+			}
 			if s.Origin == "ocr" && s.Confidence > 0 && s.Confidence < 0.35 {
 				lowConfidenceExcluded++
 				continue
@@ -160,7 +177,7 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 	return out, excluded, lowConfidenceExcluded
 }
 
-func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (string, []Citation, string) {
+func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace, scope ...[]string) (string, []Citation, string) {
 	if intent == "status" {
 		return statusAnswer(ws), nil, "Workspace-derived"
 	}
@@ -168,7 +185,11 @@ func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (stri
 		return integrityAnswer(ws), nil, "Workspace-derived"
 	}
 	if intent == "image" {
-		if a, c := imageAnswer(ws, ranked); a != "" {
+		var scopeIDs []string
+		if len(scope) > 0 {
+			scopeIDs = scope[0]
+		}
+		if a, c := imageAnswer(ws, ranked, scopeIDs); a != "" {
 			return a, c, "Directly supported by local image assessment"
 		}
 	}
@@ -179,6 +200,9 @@ func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (stri
 	cites := make([]Citation, 0, len(selected))
 	sentences := []string{}
 	for _, r := range selected {
+		if !segmentBoundToPreservedSource(r.Evidence, r.Segment) {
+			continue
+		}
 		candidate := bestSentence(r.Segment.Text, q, intent)
 		if candidate == "" {
 			continue
@@ -192,7 +216,7 @@ func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace) (stri
 			copyRegion := *r.Segment.Region
 			region = &copyRegion
 		}
-		cites = append(cites, Citation{EvidenceID: r.Evidence.ID, SegmentID: r.Segment.ID, Label: label, Quote: truncate(candidate, 500), Score: r.Score, Page: r.Segment.Page, Region: region, Origin: r.Segment.Origin, Confidence: r.Segment.Confidence})
+		cites = append(cites, Citation{EvidenceID: r.Evidence.ID, SegmentID: r.Segment.ID, Label: label, Quote: truncate(candidate, 500), Score: r.Score, Page: r.Segment.Page, Region: region, Origin: r.Segment.Origin, Confidence: r.Segment.Confidence, SourceObject: r.Evidence.ObjectFile, SourceSHA256: r.Evidence.SHA256})
 		sentences = append(sentences, candidate+" ["+label+"]")
 	}
 	if len(sentences) == 0 {
@@ -314,6 +338,10 @@ var stopwords = map[string]bool{"the": true, "and": true, "for": true, "that": t
 func statusAnswer(ws Workspace) string {
 	readable, images, attention := 0, 0, 0
 	for _, e := range ws.Evidence {
+		if !preservationUsable(e) {
+			attention++
+			continue
+		}
 		if e.Readable {
 			readable++
 		}
@@ -335,9 +363,16 @@ func statusAnswer(ws Workspace) string {
 func integrityAnswer(ws Workspace) string {
 	return fmt.Sprintf("ECO has %d encrypted evidence objects recorded. Use Trust & settings → Verify encrypted evidence to recalculate each decrypted SHA-256 and authentication tag.", len(ws.Evidence))
 }
-func imageAnswer(ws Workspace, ranked []rankedSegment) (string, []Citation) {
+func imageAnswer(ws Workspace, ranked []rankedSegment, scopeIDs []string) (string, []Citation) {
+	allowed := make(map[string]bool, len(scopeIDs))
+	for _, id := range scopeIDs {
+		allowed[id] = true
+	}
 	for _, e := range ws.Evidence {
-		if e.Image != nil {
+		if len(allowed) > 0 && !allowed[e.ID] {
+			continue
+		}
+		if preservationUsable(e) && e.Image != nil && e.Image.SourceObject == e.ObjectFile && e.Image.SourceSHA256 == e.SHA256 {
 			a := e.Image
 			return fmt.Sprintf("%s is %d × %d pixels (%.1f MP), %s. Local assessment: brightness %.0f/255, contrast %.0f and blur variance %.0f. %s", e.SafeName, a.Width, a.Height, a.Megapixels, a.Orientation, a.Brightness, a.Contrast, a.BlurVariance, a.QualityLabel), nil
 		}
