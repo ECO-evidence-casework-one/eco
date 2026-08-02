@@ -40,6 +40,16 @@ func (v *Vault) ImportFileContext(ctx context.Context, path string, progress fun
 			v.markEvidenceVerificationFailure(existing.ID, verifyErr)
 			continue
 		}
+		if progress != nil {
+			progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Revalidating duplicate source", Total: info.Size()})
+		}
+		duplicateHash, _, _, sourceErr := fingerprintSource(ctx, path, sourceInfo, nil)
+		if sourceErr != nil {
+			return EvidenceItem{}, false, sourceErr
+		}
+		if duplicateHash != intakeHash {
+			return EvidenceItem{}, false, errSourceChanged
+		}
 		return existing, true, nil
 	}
 
@@ -77,20 +87,24 @@ func (v *Vault) ImportFileContext(ctx context.Context, path string, progress fun
 	if err != nil {
 		return EvidenceItem{}, false, v.failPreservation(record, fmt.Errorf("preserved-byte verification failed: %w", err))
 	}
+	record.State = preservationRecoverable
 	record.PreservedSHA256 = receipt.SHA256
 	record.BytesPreserved = receipt.Size
 	record.VerifiedAt = receipt.VerifiedAt
-	if err = v.updatePreservation(record); err != nil {
+	if err = v.persistRecoverablePreservation(record, nil); err != nil {
 		return EvidenceItem{}, false, fmt.Errorf("verified object awaits restart recovery because its receipt could not be saved: %w", err)
 	}
 	if progress != nil {
 		progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Preserved object verified", Current: receipt.Size, Total: receipt.Size})
 	}
 	if err = ctx.Err(); err != nil {
-		return EvidenceItem{}, false, v.failPreservation(record, fmt.Errorf("%w: %v", errPreservationStopped, err))
+		return EvidenceItem{}, false, v.stopPreservationForRecovery(record, fmt.Errorf("%w: %v", errPreservationStopped, err))
 	}
 	analysis, err := v.analyzePreserved(ctx, record, receipt.SHA256, progress)
 	if err != nil {
+		if errors.Is(err, errPreservationStopped) || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return EvidenceItem{}, false, v.stopPreservationForRecovery(record, err)
+		}
 		return EvidenceItem{}, false, v.failPreservation(record, fmt.Errorf("verified preserved object could not be processed safely: %w", err))
 	}
 	item := evidenceItemFromPreservation(record, analysis)

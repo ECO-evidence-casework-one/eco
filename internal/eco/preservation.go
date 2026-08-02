@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	preservationIntake     = "intake"
-	preservationPreserving = "preserving"
-	preservationVerifying  = "verifying"
-	preservationCommitted  = "committed"
-	preservationFailed     = "failed"
+	preservationIntake      = "intake"
+	preservationPreserving  = "preserving"
+	preservationVerifying   = "verifying"
+	preservationRecoverable = "verified-awaiting-recovery"
+	preservationCommitted   = "committed"
+	preservationFailed      = "failed"
 )
 
 var (
@@ -119,6 +120,55 @@ func (v *Vault) failPreservation(record PreservationRecord, cause error) error {
 			return fmt.Errorf("%w (failure state could not be persisted: %v)", cause, err)
 		}
 		return cause
+	}
+	return cause
+}
+
+func (v *Vault) persistRecoverablePreservation(record PreservationRecord, cause error) error {
+	if record.PreservedSHA256 == "" || record.PreservedSHA256 != record.IntakeSHA256 || record.BytesPreserved != record.ExpectedSize || record.VerifiedAt.IsZero() {
+		return errors.New("preservation cannot enter recovery state without a complete verified object receipt")
+	}
+	record.State = preservationRecoverable
+	record.Error = ""
+	if cause != nil {
+		record.Error = cause.Error()
+	}
+	record.UpdatedAt = time.Now().UTC()
+
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	for i := range v.Workspace.Preservations {
+		if v.Workspace.Preservations[i].ID != record.ID {
+			continue
+		}
+		oldRecord := v.Workspace.Preservations[i]
+		oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
+		oldUpdatedAt := v.Workspace.UpdatedAt
+		oldBuildID := v.Workspace.BuildID
+		v.Workspace.Preservations[i] = record
+		if cause == nil {
+			v.addChangeUnlocked("system", "evidence-preservation-verified", "Verified preserved object before evidence commit for "+record.SafeName, map[string]any{"preservation_id": record.ID, "evidence_id": record.EvidenceID, "object_file": record.ObjectFile, "source_sha256": record.PreservedSHA256, "size": record.BytesPreserved, "state": record.State})
+		} else {
+			v.addChangeUnlocked("system", "evidence-preservation-recovery-pending", "Retained complete verified object for safe restart recovery of "+record.SafeName, map[string]any{"preservation_id": record.ID, "evidence_id": record.EvidenceID, "object_file": record.ObjectFile, "source_sha256": record.PreservedSHA256, "state": record.State, "reason": truncate(cause.Error(), 500)})
+		}
+		if err := v.saveUnlocked(); err != nil {
+			v.Workspace.Preservations[i] = oldRecord
+			v.Workspace.Changes = oldChanges
+			v.Workspace.UpdatedAt = oldUpdatedAt
+			v.Workspace.BuildID = oldBuildID
+			return err
+		}
+		return nil
+	}
+	return os.ErrNotExist
+}
+
+func (v *Vault) stopPreservationForRecovery(record PreservationRecord, cause error) error {
+	if cause == nil {
+		cause = errPreservationStopped
+	}
+	if err := v.persistRecoverablePreservation(record, cause); err != nil {
+		return fmt.Errorf("%w (recoverable preservation state could not be persisted: %v)", cause, err)
 	}
 	return cause
 }
@@ -528,6 +578,10 @@ func (v *Vault) recoverPreservations() error {
 		}
 		if record.IntakeSHA256 == "" || record.ExpectedSize < 0 {
 			_ = v.failPreservation(record, errors.New("preservation was interrupted before a complete source fingerprint was recorded; no usable evidence was created"))
+			continue
+		}
+		if record.State == preservationRecoverable && (record.PreservedSHA256 != record.IntakeSHA256 || record.BytesPreserved != record.ExpectedSize || record.VerifiedAt.IsZero()) {
+			_ = v.failPreservation(record, errors.New("recoverable preservation receipt is incomplete or inconsistent; no usable evidence was created"))
 			continue
 		}
 		objectPath, err := v.objectPath(record.EvidenceID, record.ObjectFile)

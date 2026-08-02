@@ -54,6 +54,63 @@ func TestMutationDuringIntakeCannotCreateEvidence(t *testing.T) {
 	}
 }
 
+func TestChangedSourceCannotReturnExistingDuplicate(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "vault")
+	originalPath := filepath.Join(dir, "original.bin")
+	duplicatePath := filepath.Join(dir, "duplicate.bin")
+	original := bytes.Repeat([]byte("D"), 4096)
+	changed := bytes.Repeat([]byte("E"), len(original))
+	if err := os.WriteFile(originalPath, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(duplicatePath, original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	vault, err := OpenVault(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing, duplicate, err := vault.ImportFile(originalPath, nil)
+	if err != nil || duplicate {
+		t.Fatalf("initial synthetic import failed: duplicate=%v err=%v", duplicate, err)
+	}
+	duplicateInfo, err := os.Stat(duplicatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutated := false
+	returned, duplicate, err := vault.ImportFile(duplicatePath, func(progress ImportProgress) {
+		if progress.Stage != "Revalidating duplicate source" || mutated {
+			return
+		}
+		mutated = true
+		if writeErr := os.WriteFile(duplicatePath, changed, 0600); writeErr != nil {
+			t.Fatalf("mutate duplicate candidate: %v", writeErr)
+		}
+		if timeErr := os.Chtimes(duplicatePath, duplicateInfo.ModTime(), duplicateInfo.ModTime()); timeErr != nil {
+			t.Fatalf("restore duplicate timestamps: %v", timeErr)
+		}
+	})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "source changed") {
+		t.Fatalf("changed duplicate candidate was not rejected clearly: item=%+v duplicate=%v err=%v", returned, duplicate, err)
+	}
+	if !mutated || duplicate || returned.ID != "" {
+		t.Fatalf("changed duplicate candidate returned an old usable item: mutated=%v item=%+v duplicate=%v", mutated, returned, duplicate)
+	}
+	changedInfo, statErr := os.Stat(duplicatePath)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if changedInfo.Size() != duplicateInfo.Size() || !changedInfo.ModTime().Equal(duplicateInfo.ModTime()) {
+		t.Fatalf("regression mutation did not preserve comparison metadata: before=%+v after=%+v", duplicateInfo, changedInfo)
+	}
+	state := vault.Snapshot()
+	if len(state.Evidence) != 1 || state.Evidence[0].ID != existing.ID || len(state.Preservations) != 1 {
+		t.Fatalf("changed duplicate candidate altered usable evidence state: %+v", state)
+	}
+}
+
 func TestInterruptedPreservationLeavesFailedNonUsableState(t *testing.T) {
 	dir := t.TempDir()
 	sourcePath := filepath.Join(dir, "cancelled.bin")
@@ -129,13 +186,15 @@ func TestMutationDuringPreservationCannotCreateEvidence(t *testing.T) {
 	}
 }
 
-func TestCancellationAfterPreservationDoesNotCreateUsableEvidence(t *testing.T) {
+func TestCancellationAfterVerificationRecoversOnRestart(t *testing.T) {
 	dir := t.TempDir()
+	root := filepath.Join(dir, "vault")
 	sourcePath := filepath.Join(dir, "cancel-after-preserve.txt")
-	if err := os.WriteFile(sourcePath, []byte("synthetic verified bytes"), 0600); err != nil {
+	content := []byte("synthetic verified bytes")
+	if err := os.WriteFile(sourcePath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := OpenVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,12 +208,82 @@ func TestCancellationAfterPreservationDoesNotCreateUsableEvidence(t *testing.T) 
 		t.Fatalf("post-preservation cancellation was not stopped clearly: %v", err)
 	}
 	state := vault.Snapshot()
-	if len(state.Evidence) != 0 || len(state.Preservations) != 1 || state.Preservations[0].State != preservationFailed {
+	if len(state.Evidence) != 0 || len(state.Preservations) != 1 || state.Preservations[0].State != preservationRecoverable || state.Preservations[0].Error == "" {
 		t.Fatalf("post-preservation cancellation created usable evidence: %+v", state)
 	}
 	objectPath := filepath.Join(vault.Objects, state.Preservations[0].ObjectFile)
 	if _, err := os.Stat(objectPath); err != nil {
-		t.Fatalf("verified original was not retained in recoverable failed state: %v", err)
+		t.Fatalf("verified original was not retained in explicit recoverable state: %v", err)
+	}
+
+	reopened, err := OpenVault(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovered := reopened.Snapshot()
+	if len(recovered.Evidence) != 1 || len(recovered.Preservations) != 1 || recovered.Preservations[0].State != preservationCommitted || !recovered.Evidence[0].SourceVerified {
+		t.Fatalf("verified cancelled preservation was not safely recovered: %+v", recovered)
+	}
+	preserved, receipt, err := reopened.ReadEvidenceSource(recovered.Evidence[0].ID, 1<<20)
+	if err != nil || !bytes.Equal(preserved, content) || receipt.SHA256 != recovered.Evidence[0].SHA256 {
+		t.Fatalf("recovered evidence did not reverify exact preserved bytes: receipt=%+v err=%v", receipt, err)
+	}
+	pendingAudit := false
+	for _, change := range recovered.Changes {
+		if change.Type == "evidence-preservation-recovery-pending" {
+			pendingAudit = true
+			break
+		}
+	}
+	if !pendingAudit {
+		t.Fatal("recovered preservation lost its interruption audit record")
+	}
+}
+
+func TestCancelledVerifiedPreservationMismatchRemainsBlockedOnRestart(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "vault")
+	sourcePath := filepath.Join(dir, "cancelled-corrupt.txt")
+	if err := os.WriteFile(sourcePath, []byte("synthetic bytes that will be corrupted after verification"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	vault, err := OpenVault(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	_, _, err = vault.ImportFileContext(ctx, sourcePath, func(progress ImportProgress) {
+		if progress.Stage == "Preserved object verified" {
+			cancel()
+		}
+	})
+	if err == nil {
+		t.Fatal("post-verification cancellation was accepted")
+	}
+	state := vault.Snapshot()
+	if len(state.Evidence) != 0 || len(state.Preservations) != 1 || state.Preservations[0].State != preservationRecoverable {
+		t.Fatalf("cancelled verified object did not enter recoverable state: %+v", state)
+	}
+	objectPath := filepath.Join(vault.Objects, state.Preservations[0].ObjectFile)
+	if err := os.Chmod(objectPath, 0600); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(objectPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[len(raw)-1] ^= 0x5a
+	if err := os.WriteFile(objectPath, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := OpenVault(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blocked := reopened.Snapshot()
+	if len(blocked.Evidence) != 0 || len(blocked.Preservations) != 1 || blocked.Preservations[0].State != preservationFailed || blocked.Preservations[0].Error == "" {
+		t.Fatalf("mismatched recoverable object was exposed or not truthfully blocked: %+v", blocked)
 	}
 }
 
