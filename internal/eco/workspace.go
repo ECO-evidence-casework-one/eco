@@ -252,6 +252,10 @@ func createVault(root, name string, runtime RuntimeIdentity) (*Vault, error) {
 			return nil, errors.New("a new workspace needs an empty folder; no existing files were changed")
 		}
 	}
+	absolute, err = canonicalNormalDirectory(absolute, "the new workspace folder")
+	if err != nil {
+		return nil, fmt.Errorf("retain the new workspace folder safely: %w", err)
+	}
 
 	cleanup := func() {
 		_ = os.Remove(filepath.Join(absolute, "workspace.ecodb.tmp"))
@@ -288,12 +292,13 @@ func createVault(root, name string, runtime RuntimeIdentity) (*Vault, error) {
 		CreatedByCandidate: runtime.CandidateID,
 	}
 	v := &Vault{
-		Root:      absolute,
-		Objects:   objects,
-		Identity:  identity,
-		key:       key,
-		runtime:   runtime,
-		Workspace: newWorkspaceForRuntime(runtime, id, name),
+		Root:         absolute,
+		Objects:      objects,
+		Identity:     identity,
+		key:          key,
+		runtime:      runtime,
+		initialising: true,
+		Workspace:    newWorkspaceForRuntime(runtime, id, name),
 	}
 	v.Workspace.CreatedAt = identity.CreatedAt
 	v.addChangeUnlocked("system", "workspace-created", "Created a new empty ECO development workspace", map[string]any{
@@ -310,6 +315,22 @@ func createVault(root, name string, runtime RuntimeIdentity) (*Vault, error) {
 		zeroBytes(key)
 		cleanup()
 		return nil, err
+	}
+	v.initialising = false
+	if err = attachWorkspaceGuards(v); err != nil {
+		zeroBytes(key)
+		cleanup()
+		return nil, fmt.Errorf("retain the new workspace lifecycle safely: %w", err)
+	}
+	if err = v.binding.Verify(); err != nil {
+		v.Close()
+		cleanup()
+		return nil, fmt.Errorf("verify the new workspace lifecycle: %w", err)
+	}
+	_ = v.releaseWorkspaceBinding()
+	if v.lifecycle != nil {
+		_ = v.lifecycle.Close()
+		v.lifecycle = nil
 	}
 	return v, nil
 }
@@ -331,31 +352,75 @@ func openVaultIgnoringRecovery(root string, runtime RuntimeIdentity) (*Vault, er
 }
 
 func openInspectedVault(inspected inspectedWorkspace, runtime RuntimeIdentity) (*Vault, error) {
+	return openInspectedVaultWithHook(inspected, runtime, nil)
+}
+
+type WorkspaceOpenPhase string
+
+const workspaceOpenBeforeFirstWrite WorkspaceOpenPhase = "before-first-write"
+
+func openInspectedVaultWithHook(inspected inspectedWorkspace, runtime RuntimeIdentity, hook func(WorkspaceOpenPhase) error) (*Vault, error) {
+	var err error
 	if !inspected.Compatibility.CanOpen {
-		zeroBytes(inspected.key)
+		inspected.Close()
 		return nil, &CompatibilityError{Report: inspected.Compatibility}
 	}
-	objects := filepath.Join(inspected.Path, "objects")
-	objectsCanonical, err := validateObjectsDirectory(inspected.Path, objects)
-	if err != nil {
-		zeroBytes(inspected.key)
-		return nil, fmt.Errorf("workspace object folder is unavailable or unsafe: %w", err)
+	if hook != nil {
+		if err := hook(workspaceOpenBeforeFirstWrite); err != nil {
+			inspected.Close()
+			return nil, err
+		}
+	}
+	if inspected.binding == nil || inspected.lifecycle == nil {
+		inspected.Close()
+		return nil, errors.New("the authenticated workspace transaction was not retained")
+	}
+	if err := inspected.binding.Verify(); err != nil {
+		inspected.Close()
+		return nil, fmt.Errorf("the workspace changed after authentication and before opening; neither copy was modified: %w", err)
 	}
 	v := &Vault{
 		Root:      inspected.Path,
-		Objects:   objectsCanonical,
+		Objects:   filepath.Join(inspected.Path, "objects"),
 		Identity:  inspected.Identity,
 		key:       inspected.key,
 		runtime:   runtime,
+		lifecycle: inspected.lifecycle,
+		binding:   inspected.binding,
 		Workspace: inspected.Workspace,
 	}
+	inspected.key = nil
+	inspected.lifecycle = nil
+	inspected.binding = nil
 	if err = cleanupInterruptedReadingCopies(v.Root); err != nil {
-		zeroBytes(v.key)
+		v.Close()
 		return nil, fmt.Errorf("clean interrupted derived reading state: %w", err)
 	}
 	if err = v.recoverPreservations(); err != nil {
-		zeroBytes(v.key)
+		v.Close()
 		return nil, fmt.Errorf("recover preservation state: %w", err)
+	}
+	v.mu.Lock()
+	v.addChangeUnlocked("system", "workspace-open-verified", "Verified the workspace folder, key, records, identity and encrypted objects before opening", map[string]any{
+		"workspace_id": v.Identity.ID,
+		"build":        runtime.BuildID,
+	})
+	err = v.saveUnlocked()
+	v.mu.Unlock()
+	if err != nil {
+		v.Close()
+		return nil, fmt.Errorf("complete the authenticated workspace-open transaction: %w", err)
+	}
+	if err = v.releaseWorkspaceBinding(); err != nil {
+		v.Close()
+		return nil, fmt.Errorf("release the authenticated workspace handles: %w", err)
+	}
+	if v.lifecycle != nil {
+		if err = v.lifecycle.Close(); err != nil {
+			v.lifecycle = nil
+			return nil, fmt.Errorf("release the workspace lifecycle lock: %w", err)
+		}
+		v.lifecycle = nil
 	}
 	return v, nil
 }
@@ -366,6 +431,24 @@ type inspectedWorkspace struct {
 	Workspace     Workspace
 	Compatibility WorkspaceCompatibility
 	key           []byte
+	lifecycle     *workspaceLifecycleLease
+	binding       boundWorkspaceObjects
+}
+
+func (inspected *inspectedWorkspace) Close() {
+	if inspected == nil {
+		return
+	}
+	zeroBytes(inspected.key)
+	inspected.key = nil
+	if inspected.binding != nil {
+		_ = inspected.binding.Close()
+		inspected.binding = nil
+	}
+	if inspected.lifecycle != nil {
+		_ = inspected.lifecycle.Close()
+		inspected.lifecycle = nil
+	}
 }
 
 func InspectWorkspace(root string, runtime RuntimeIdentity) (WorkspaceIdentity, WorkspaceCompatibility, error) {
@@ -373,7 +456,7 @@ func InspectWorkspace(root string, runtime RuntimeIdentity) (WorkspaceIdentity, 
 	if err != nil {
 		return WorkspaceIdentity{}, WorkspaceCompatibility{}, err
 	}
-	zeroBytes(inspected.key)
+	inspected.Close()
 	return inspected.Identity, inspected.Compatibility, nil
 }
 
@@ -407,27 +490,57 @@ func inspectWorkspaceAt(root string, runtime RuntimeIdentity, checkRecovery bool
 	if err != nil {
 		return inspectedWorkspace{}, fmt.Errorf("resolve the selected ECO workspace safely: %w", err)
 	}
-	if checkRecovery {
-		if _, err = os.Lstat(migrationStatePath(absolute)); err == nil {
-			return inspectedWorkspace{}, &RecoveryRequiredError{Path: absolute}
-		} else if !os.IsNotExist(err) {
-			return inspectedWorkspace{}, fmt.Errorf("check workspace recovery state: %w", err)
-		}
-	}
-	key, err := loadExistingMasterKey(filepath.Join(absolute, "vault.key"))
+	lifecycle, err := acquireWorkspaceLifecycleLease(absolute)
 	if err != nil {
-		return inspectedWorkspace{}, fmt.Errorf("this folder is not a readable ECO workspace: %w", err)
-	}
-	ws, err := readEncryptedWorkspace(absolute, key)
-	if err != nil {
-		zeroBytes(key)
 		return inspectedWorkspace{}, err
 	}
-	identity, identityErr := readWorkspaceIdentity(absolute)
+	bound, err := openBoundWorkspaceObjects(absolute)
+	if err != nil {
+		_ = lifecycle.Close()
+		return inspectedWorkspace{}, fmt.Errorf("retain the selected ECO workspace safely: %w", err)
+	}
+	result := inspectedWorkspace{Path: absolute, lifecycle: lifecycle, binding: bound}
+	fail := func(cause error) (inspectedWorkspace, error) {
+		result.Close()
+		return inspectedWorkspace{}, cause
+	}
+	if checkRecovery {
+		if _, err = os.Lstat(migrationStatePath(absolute)); err == nil {
+			return fail(&RecoveryRequiredError{Path: absolute})
+		} else if !os.IsNotExist(err) {
+			return fail(fmt.Errorf("check workspace recovery state: %w", err))
+		}
+		if _, err = os.Lstat(restoreStatePath(absolute)); err == nil {
+			return fail(&RestoreRecoveryRequiredError{Path: absolute})
+		} else if !os.IsNotExist(err) {
+			return fail(fmt.Errorf("check portable restore recovery state: %w", err))
+		}
+	}
+	keyData, err := bound.ReadFile("vault.key")
+	if err != nil {
+		return fail(fmt.Errorf("this folder is not a readable ECO workspace: %w", err))
+	}
+	key, err := loadExistingMasterKeyData(keyData)
+	if err != nil {
+		return fail(fmt.Errorf("this folder is not a readable ECO workspace: %w", err))
+	}
+	result.key = key
+	workspaceData, err := bound.ReadFile("workspace.ecodb")
+	if err != nil {
+		return fail(errors.New("the encrypted workspace record is missing"))
+	}
+	ws, err := readEncryptedWorkspaceData(workspaceData, key)
+	if err != nil {
+		return fail(err)
+	}
+	identityData, identityReadErr := bound.ReadFile(workspaceIdentityFile)
+	identity, identityErr := readWorkspaceIdentityData(identityData)
+	if identityReadErr != nil {
+		identityErr = identityReadErr
+	}
 	if identityErr != nil {
 		if !(os.IsNotExist(identityErr) && ws.Schema == 1) {
-			zeroBytes(key)
-			return inspectedWorkspace{}, identityErr
+			return fail(identityErr)
 		}
 		identity = WorkspaceIdentity{
 			Format:             workspaceIdentityFormat,
@@ -438,20 +551,19 @@ func inspectWorkspaceAt(root string, runtime RuntimeIdentity, checkRecovery bool
 		}
 	}
 	if err = validateWorkspaceIdentity(identity, ws); err != nil {
-		zeroBytes(key)
-		return inspectedWorkspace{}, err
+		return fail(err)
+	}
+	if err = bound.Verify(); err != nil {
+		return fail(fmt.Errorf("the workspace changed while it was being authenticated: %w", err))
 	}
 	identity.Name = ws.WorkspaceName
 	identity.CreatedAt = ws.CreatedAt
 	identity.CreatedByBuild = ws.CreatedByBuild
 	report := compatibilityFor(ws, runtime)
-	return inspectedWorkspace{
-		Path:          absolute,
-		Identity:      identity,
-		Workspace:     ws,
-		Compatibility: report,
-		key:           key,
-	}, nil
+	result.Identity = identity
+	result.Workspace = ws
+	result.Compatibility = report
+	return result, nil
 }
 
 func compatibilityFor(ws Workspace, runtime RuntimeIdentity) WorkspaceCompatibility {
@@ -501,6 +613,10 @@ func loadExistingMasterKey(path string) ([]byte, error) {
 		}
 		return nil, err
 	}
+	return loadExistingMasterKeyData(data)
+}
+
+func loadExistingMasterKeyData(data []byte) ([]byte, error) {
 	key, err := unprotectLocalKey(data)
 	if err != nil {
 		return nil, errors.New("the workspace key could not be unlocked for this user")
@@ -520,6 +636,10 @@ func readEncryptedWorkspace(root string, key []byte) (Workspace, error) {
 		}
 		return Workspace{}, err
 	}
+	return readEncryptedWorkspaceData(data, key)
+}
+
+func readEncryptedWorkspaceData(data, key []byte) (Workspace, error) {
 	plain, err := decryptBlob(key, metaMagic, data)
 	if err != nil {
 		return Workspace{}, errors.New("the workspace record could not be authenticated; no data was opened")
@@ -574,8 +694,12 @@ func readWorkspaceIdentity(root string) (WorkspaceIdentity, error) {
 	if err != nil {
 		return WorkspaceIdentity{}, err
 	}
+	return readWorkspaceIdentityData(data)
+}
+
+func readWorkspaceIdentityData(data []byte) (WorkspaceIdentity, error) {
 	var identity WorkspaceIdentity
-	if err = json.Unmarshal(data, &identity); err != nil {
+	if err := json.Unmarshal(data, &identity); err != nil {
 		return WorkspaceIdentity{}, errors.New("the workspace identity file is damaged; opening was blocked")
 	}
 	return identity, nil
@@ -596,6 +720,23 @@ func writeWorkspaceIdentity(root string, identity WorkspaceIdentity) error {
 		return fmt.Errorf("activate workspace identity: %w", err)
 	}
 	return nil
+}
+
+func writeWorkspaceIdentityForVault(v *Vault, identity WorkspaceIdentity) error {
+	data, err := json.MarshalIndent(identity, "", "  ")
+	if err != nil {
+		return err
+	}
+	if v != nil && v.binding != nil {
+		if err = v.binding.WriteFileAtomic(workspaceIdentityFile, data, 0600); err != nil {
+			return fmt.Errorf("activate workspace identity through the retained workspace: %w", err)
+		}
+		return nil
+	}
+	if v == nil {
+		return errors.New("no workspace is available for the identity update")
+	}
+	return writeWorkspaceIdentity(v.Root, identity)
 }
 
 func (v *Vault) recordLifecycle(actor, typ, summary string, details map[string]any) error {
@@ -819,4 +960,9 @@ func (v *Vault) Close() {
 	defer v.mu.Unlock()
 	zeroBytes(v.key)
 	v.key = nil
+	_ = v.releaseWorkspaceBinding()
+	if v.lifecycle != nil {
+		_ = v.lifecycle.Close()
+		v.lifecycle = nil
+	}
 }

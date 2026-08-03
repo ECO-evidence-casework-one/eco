@@ -80,7 +80,7 @@ func migrateWorkspace(root string, runtime RuntimeIdentity, hook func(MigrationP
 	if err != nil {
 		return WorkspaceSession{}, MigrationReceipt{}, err
 	}
-	defer zeroBytes(inspected.key)
+	defer inspected.Close()
 	if !inspected.Compatibility.CanMigrate {
 		if inspected.Compatibility.CanOpen {
 			return WorkspaceSession{}, MigrationReceipt{}, errors.New("this workspace is already compatible and does not need migration")
@@ -142,6 +142,12 @@ func migrateWorkspace(root string, runtime RuntimeIdentity, hook func(MigrationP
 			return WorkspaceSession{}, MigrationReceipt{}, fmt.Errorf("%v. The original workspace was restored and no old data was presented as migrated", cause)
 		}
 		return WorkspaceSession{}, MigrationReceipt{}, cause
+	}
+	if inspected.binding != nil {
+		if err = inspected.binding.Close(); err != nil {
+			return WorkspaceSession{}, MigrationReceipt{}, fmt.Errorf("release the authenticated workspace handles before migration: %w", err)
+		}
+		inspected.binding = nil
 	}
 
 	if err = secureMigrationRename(state, state.Root, state.Checkpoint, false, "checkpoint", operatingFilesystem); err != nil {
@@ -299,12 +305,13 @@ func migrateStagedWorkspace(state migrationState, runtime RuntimeIdentity, hook 
 		CreatedByBuild:     createdBy,
 	}
 	v := &Vault{
-		Root:      state.Stage,
-		Objects:   filepath.Join(state.Stage, "objects"),
-		Identity:  identity,
-		key:       key,
-		runtime:   runtime,
-		Workspace: ws,
+		Root:         state.Stage,
+		Objects:      filepath.Join(state.Stage, "objects"),
+		Identity:     identity,
+		key:          key,
+		runtime:      runtime,
+		initialising: true,
+		Workspace:    ws,
 	}
 	v.addChangeUnlocked("system", "workspace-migrated", "Migrated an older ECO workspace through a recoverable checkpoint", map[string]any{
 		"from_schema":  state.FromSchema,
@@ -319,6 +326,7 @@ func migrateStagedWorkspace(state migrationState, runtime RuntimeIdentity, hook 
 	if err = writeWorkspaceIdentity(state.Stage, identity); err != nil {
 		return err
 	}
+	v.initialising = false
 	if err = runMigrationHook(hook, migrationStageUnverified); err != nil {
 		return err
 	}
@@ -420,7 +428,7 @@ func RecoverWorkspace(root string, runtime RuntimeIdentity) (WorkspaceSession, R
 		return WorkspaceSession{}, receipt, inspectErr
 	}
 	receipt.Compatibility = inspected.Compatibility
-	zeroBytes(inspected.key)
+	inspected.Close()
 	if !inspected.Compatibility.CanOpen {
 		return WorkspaceSession{}, receipt, &CompatibilityError{Report: inspected.Compatibility}
 	}

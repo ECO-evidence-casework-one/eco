@@ -222,7 +222,7 @@ func (a *application) deleteFonts() {
 	a.fontBody, a.fontSmall, a.fontLabel, a.fontHeading, a.fontHero, a.fontNav, a.fontBrand, a.controlBrush = 0, 0, 0, 0, 0, 0, 0, 0
 }
 
-func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
+func mainWndProc(hwnd uintptr, msg uint32, wparam uintptr, lparam unsafe.Pointer) uintptr {
 	switch msg {
 	case WM_CREATE:
 		app.hwnd = hwnd
@@ -232,7 +232,7 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		procDragAcceptFiles.Call(hwnd, 1)
 		return 0
 	case WM_GETMINMAXINFO:
-		mmi := (*MINMAXINFO)(unsafe.Pointer(lparam))
+		mmi := (*MINMAXINFO)(lparam)
 		mmi.PtMinTrackSize = POINT{X: 1000, Y: 730}
 		return 0
 	case WM_DPICHANGED:
@@ -240,7 +240,7 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		if newDPI > 0 && newDPI != app.dpi {
 			app.dpi = newDPI
 			app.createFonts()
-			if suggested := (*RECT)(unsafe.Pointer(lparam)); suggested != nil {
+			if suggested := (*RECT)(lparam); suggested != nil {
 				procSetWindowPos.Call(hwnd, 0, uintptr(suggested.Left), uintptr(suggested.Top), uintptr(suggested.Right-suggested.Left), uintptr(suggested.Bottom-suggested.Top), SWP_NOZORDER|SWP_NOACTIVATE)
 			}
 			var dr RECT
@@ -250,7 +250,7 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		return 0
 	case WM_SIZE:
-		app.layoutControls(loword(lparam), hiword(lparam))
+		app.layoutControls(loword(uintptr(lparam)), hiword(uintptr(lparam)))
 		invalidate(hwnd)
 		return 0
 	case WM_PAINT:
@@ -266,10 +266,10 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		}
 		return 0
 	case WM_LBUTTONDOWN:
-		app.handleClick(signedLoword(lparam), signedHiword(lparam), false)
+		app.handleClick(signedLoword(uintptr(lparam)), signedHiword(uintptr(lparam)), false)
 		return 0
 	case WM_LBUTTONDBLCLK:
-		app.handleClick(signedLoword(lparam), signedHiword(lparam), true)
+		app.handleClick(signedLoword(uintptr(lparam)), signedHiword(uintptr(lparam)), true)
 		return 0
 	case WM_KEYDOWN:
 		app.handleKey(uint32(wparam))
@@ -407,7 +407,7 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		procPostQuitMessage.Call(0)
 		return 0
 	}
-	r, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wparam, lparam)
+	r, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wparam, uintptr(lparam))
 	return r
 }
 
@@ -2022,7 +2022,7 @@ func clipboardBMP() ([]byte, error) {
 		return nil, fmt.Errorf("clipboard image size is unsafe or unsupported")
 	}
 	dib := make([]byte, sz)
-	copy(dib, unsafe.Slice((*byte)(unsafe.Pointer(p)), int(sz)))
+	procRtlMoveMemory.Call(uintptr(unsafe.Pointer(&dib[0])), p, sz)
 	headerSize := int(binary.LittleEndian.Uint32(dib[:4]))
 	if headerSize < 40 || headerSize > len(dib) {
 		return nil, fmt.Errorf("clipboard DIB header is unsupported")

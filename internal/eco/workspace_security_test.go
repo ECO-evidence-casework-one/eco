@@ -32,7 +32,7 @@ func TestAutomaticRecoveryRejectsDifferentCandidateWithSameBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	after := unchanged.Workspace
-	zeroBytes(unchanged.key)
+	unchanged.Close()
 	if len(after.Evidence) != 0 || len(after.Preservations) != 1 || after.Preservations[0].ID != preservation.ID || after.Preservations[0].State != preservationRecoverable || len(after.Changes) != len(before.Changes) {
 		t.Fatalf("blocked automatic recovery changed or presented the foreign workspace: before=%+v after=%+v", before, after)
 	}
@@ -86,10 +86,12 @@ func TestWorkspaceCandidateIdentityFailsClosedWhenAbsentDamagedOrInconsistent(t 
 		{
 			name: "authenticated identity absent",
 			mutate: func(t *testing.T, vault *Vault) {
+				vault.identityTransition = true
 				vault.Workspace.CreatedByCandidate = ""
 				if err := vault.Save(); err != nil {
 					t.Fatal(err)
 				}
+				vault.identityTransition = false
 			},
 		},
 	}

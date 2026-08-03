@@ -131,13 +131,29 @@ func StartCandidate(baseStateRoot string, runtime RuntimeIdentity) (*CandidateAp
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("inspect candidate workspace recovery state: %w", err)
 	}
+	if _, err = os.Stat(restoreStatePath(defaultWorkspace)); err == nil {
+		session, receipt, recoverErr := RecoverPortableRestore(defaultWorkspace, runtime)
+		if recoverErr != nil {
+			return nil, fmt.Errorf("%s %w", receipt.Message, recoverErr)
+		}
+		session.Explicit = false
+		app.addEvent("workspace-recovered", session, "success", receipt.Message)
+		if err = saveCandidateState(statePath, app.State); err != nil {
+			session.Vault.Close()
+			return nil, err
+		}
+		app.Current = session
+		return app, nil
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect candidate portable restore recovery state: %w", err)
+	}
 
 	inspected, err := inspectWorkspace(defaultWorkspace, runtime)
 	if err != nil {
 		return nil, fmt.Errorf("this candidate's development workspace could not be reopened safely: %w", err)
 	}
 	if inspected.Workspace.CreatedByCandidate != runtime.CandidateID || inspected.Identity.CreatedByCandidate != runtime.CandidateID || inspected.Workspace.BuildID != runtime.BuildID {
-		zeroBytes(inspected.key)
+		inspected.Close()
 		return nil, errors.New("this candidate's automatic workspace belongs to another development candidate; select it deliberately instead")
 	}
 	v, err := openInspectedVault(inspected, runtime)
@@ -171,7 +187,7 @@ func startFirstCandidateWorkspace(stateRoot, defaultWorkspace string, runtime Ru
 			return WorkspaceSession{}, false, errors.New("candidate application state is incomplete and the existing development workspace could not be verified; nothing was opened")
 		}
 		if inspected.Identity.CreatedByCandidate != runtime.CandidateID || inspected.Workspace.CreatedByCandidate != runtime.CandidateID || inspected.Workspace.BuildID != runtime.BuildID {
-			zeroBytes(inspected.key)
+			inspected.Close()
 			return WorkspaceSession{}, false, errors.New("candidate application state is incomplete and the existing workspace belongs to another development candidate; nothing was opened automatically")
 		}
 		v, openErr := openInspectedVault(inspected, runtime)
@@ -264,7 +280,20 @@ func (a *CandidateApplication) MigrateWorkspace(path string) (WorkspaceSession, 
 func (a *CandidateApplication) RecoverWorkspace(path string) (WorkspaceSession, RecoveryReceipt, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	session, receipt, err := RecoverWorkspace(path, a.Runtime)
+	absolute, pathErr := normaliseWorkspaceRoot(path)
+	if pathErr != nil {
+		return WorkspaceSession{}, RecoveryReceipt{}, pathErr
+	}
+	var session WorkspaceSession
+	var receipt RecoveryReceipt
+	var err error
+	if _, restoreErr := os.Lstat(restoreStatePath(absolute)); restoreErr == nil {
+		session, receipt, err = RecoverPortableRestore(absolute, a.Runtime)
+	} else if !os.IsNotExist(restoreErr) {
+		err = fmt.Errorf("inspect portable restore recovery state: %w", restoreErr)
+	} else {
+		session, receipt, err = RecoverWorkspace(absolute, a.Runtime)
+	}
 	if err != nil {
 		a.addCandidateEvent("workspace-recovery", "", "attention", receipt.Message+" "+err.Error())
 		_ = saveCandidateState(a.statePath(), a.State)

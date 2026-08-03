@@ -184,7 +184,7 @@ type windowsIOStatusBlock struct {
 	information uintptr
 }
 
-func renameWindowsHandle(handle, parent syscall.Handle, destinationPath string) error {
+func renameWindowsHandleReplacing(handle, parent syscall.Handle, destinationPath string, replace bool) error {
 	// NtSetInformationFile resolves this simple child name from the retained
 	// parent handle, rather than traversing an independently checked pathname.
 	name, err := syscall.UTF16FromString(filepath.Base(destinationPath))
@@ -197,6 +197,9 @@ func renameWindowsHandle(handle, parent syscall.Handle, destinationPath string) 
 	information := windowsFileRenameInformation{
 		rootDirectory:  parent,
 		fileNameLength: uint32((len(name) - 1) * 2),
+	}
+	if replace {
+		information.replaceIfExists = 1
 	}
 	copy(information.fileName[:], name)
 	var ioStatus windowsIOStatusBlock
@@ -217,6 +220,10 @@ func renameWindowsHandle(handle, parent syscall.Handle, destinationPath string) 
 		return syscall.Errno(dosError)
 	}
 	return nil
+}
+
+func renameWindowsHandle(handle, parent syscall.Handle, destinationPath string) error {
+	return renameWindowsHandleReplacing(handle, parent, destinationPath, false)
 }
 
 type windowsBoundObjectDirectory struct {

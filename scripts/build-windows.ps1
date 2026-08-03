@@ -1,6 +1,7 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
+. (Join-Path $PSScriptRoot "native-command.ps1")
 
 $env:CGO_ENABLED = "0"
 $env:GOOS = "windows"
@@ -11,18 +12,18 @@ $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
 Write-Host "Testing source"
-go test ./...
-go vet ./...
-python scripts/check_source_policy.py
+Invoke-NativeChecked "go test ./..." { go test ./... }
+Invoke-NativeChecked "go vet ./..." { go vet ./... }
+Invoke-NativeChecked "source-policy check" { python scripts/check_source_policy.py }
 
 $first = Join-Path $dist "ECO.exe"
 $second = Join-Path $dist "ECO.rebuild.exe"
 $ldflags = "-s -w -H windowsgui -buildid="
 
 Write-Host "Building first deterministic Windows artifact"
-go build -trimpath -ldflags $ldflags -o $first ./cmd/eco
+Invoke-NativeChecked "first deterministic Windows build" { go build -trimpath -ldflags $ldflags -o $first ./cmd/eco }
 Write-Host "Building second deterministic Windows artifact"
-go build -trimpath -ldflags $ldflags -o $second ./cmd/eco
+Invoke-NativeChecked "second deterministic Windows build" { go build -trimpath -ldflags $ldflags -o $second ./cmd/eco }
 
 $hash1 = (Get-FileHash $first -Algorithm SHA256).Hash.ToLowerInvariant()
 $hash2 = (Get-FileHash $second -Algorithm SHA256).Hash.ToLowerInvariant()
@@ -38,12 +39,13 @@ $commit = $env:GITHUB_SHA
 if ([string]::IsNullOrWhiteSpace($commit)) {
     $commit = "local-unrecorded"
 }
+$goVersion = Invoke-NativeChecked "go version" { go version }
 $receipt = [ordered]@{
     schema = 1
     build_id = $buildId
     release_class = "unsigned provenance artifact"
     source_commit = $commit
-    go_version = (go version)
+    go_version = $goVersion
     goos = "windows"
     goarch = "amd64"
     cgo_enabled = "0"

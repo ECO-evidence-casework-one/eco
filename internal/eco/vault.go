@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/binary"
@@ -26,14 +27,18 @@ const (
 )
 
 type Vault struct {
-	Root      string
-	Objects   string
-	Identity  WorkspaceIdentity
-	key       []byte
-	runtime   RuntimeIdentity
-	opMu      sync.RWMutex
-	mu        sync.Mutex
-	Workspace Workspace
+	Root               string
+	Objects            string
+	Identity           WorkspaceIdentity
+	key                []byte
+	runtime            RuntimeIdentity
+	opMu               sync.RWMutex
+	mu                 sync.Mutex
+	lifecycle          *workspaceLifecycleLease
+	binding            boundWorkspaceObjects
+	initialising       bool
+	identityTransition bool
+	Workspace          Workspace
 }
 
 // CreateVault creates a genuinely new development workspace. The target must
@@ -106,13 +111,86 @@ func (v *Vault) saveUnlocked() error {
 	if err != nil {
 		return err
 	}
-	path := filepath.Join(v.Root, "workspace.ecodb")
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, enc, 0600); err != nil {
+	if v.initialising {
+		path := filepath.Join(v.Root, "workspace.ecodb")
+		tmp := path + ".tmp"
+		if err := os.WriteFile(tmp, enc, 0600); err != nil {
+			return err
+		}
+		return os.Rename(tmp, path)
+	}
+	binding := v.binding
+	lease := v.lifecycle
+	owned := false
+	if binding == nil {
+		lease, err = acquireWorkspaceLifecycleLease(v.Root)
+		if err != nil {
+			return err
+		}
+		binding, err = openBoundWorkspaceObjects(v.Root)
+		if err != nil {
+			_ = lease.Close()
+			return err
+		}
+		owned = true
+	}
+	if owned {
+		defer binding.Close()
+		defer lease.Close()
+	}
+	if !v.identityTransition {
+		if err = verifyBindingMatchesVault(v, binding); err != nil {
+			return fmt.Errorf("the workspace changed before metadata could be saved; no replacement workspace was modified: %w", err)
+		}
+	} else if err = binding.Verify(); err != nil {
+		return fmt.Errorf("the isolated workspace changed during its authenticated identity transition: %w", err)
+	}
+	if err := binding.WriteFileAtomic("workspace.ecodb", enc, 0600); err != nil {
 		return err
 	}
-	if err := os.Rename(tmp, path); err != nil {
+	return nil
+}
+
+func verifyBindingMatchesVault(v *Vault, binding boundWorkspaceObjects) error {
+	if err := binding.Verify(); err != nil {
 		return err
+	}
+	keyData, err := binding.ReadFile("vault.key")
+	if err != nil {
+		return err
+	}
+	key, err := loadExistingMasterKeyData(keyData)
+	if err != nil {
+		return err
+	}
+	defer zeroBytes(key)
+	if !hmac.Equal(key, v.key) {
+		return errors.New("the workspace key was replaced after authentication")
+	}
+	workspaceData, err := binding.ReadFile("workspace.ecodb")
+	if err != nil {
+		return err
+	}
+	diskWorkspace, err := readEncryptedWorkspaceData(workspaceData, key)
+	if err != nil {
+		return err
+	}
+	if diskWorkspace.WorkspaceID != v.Workspace.WorkspaceID || diskWorkspace.Schema != v.Workspace.Schema || diskWorkspace.CreatedByCandidate != v.Workspace.CreatedByCandidate {
+		return errors.New("the encrypted workspace identity was replaced after authentication")
+	}
+	identityData, err := binding.ReadFile(workspaceIdentityFile)
+	if err != nil {
+		if os.IsNotExist(err) && v.Workspace.Schema == 1 && v.Identity.ID == "" {
+			return nil
+		}
+		return err
+	}
+	identity, err := readWorkspaceIdentityData(identityData)
+	if err != nil {
+		return err
+	}
+	if identity.ID != v.Identity.ID || identity.Schema != v.Identity.Schema || identity.CreatedByCandidate != v.Identity.CreatedByCandidate {
+		return errors.New("the workspace routing identity was replaced after authentication")
 	}
 	return nil
 }

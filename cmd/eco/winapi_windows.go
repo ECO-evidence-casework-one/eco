@@ -252,6 +252,7 @@ var (
 	procGetModuleHandleW              = kernel32w.NewProc("GetModuleHandleW")
 	procGlobalLock                    = kernel32w.NewProc("GlobalLock")
 	procGlobalUnlock                  = kernel32w.NewProc("GlobalUnlock")
+	procRtlMoveMemory                 = kernel32w.NewProc("RtlMoveMemory")
 	procGlobalSize                    = kernel32w.NewProc("GlobalSize")
 	procSHBrowseForFolderW            = shell32.NewProc("SHBrowseForFolderW")
 	procSHGetPathFromIDListW          = shell32.NewProc("SHGetPathFromIDListW")

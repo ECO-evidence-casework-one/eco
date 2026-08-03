@@ -20,6 +20,9 @@
 - Development workspaces from before exact candidate binding have no trustworthy candidate identity and are blocked instead of being attributed by guesswork.
 - An unfinished migration temporarily retains an authenticated plaintext recovery record containing canonical migration paths, opaque identities, build/schema transition, nonce, phase and start time. It contains no evidence, conversation, matter, workspace name or setting content.
 - Failed migrated copies retained during compensating rollback do not yet have an in-application cleanup control.
+- Successful portable restores retain the original workspace checkpoint for rollback; restore checkpoints and failed restore copies do not yet have an in-application cleanup control.
+- An unfinished portable restore temporarily retains an authenticated plaintext recovery record containing canonical restore paths, opaque identities, build/candidate/schema, encrypted-backup SHA-256, nonce, phase and start time. It contains no casework content or workspace name.
+- Object-bound workspace opening, reset, migration and portable-restore mutation are implemented for Windows and Linux/amd64. Other platforms fail closed for these operations until equivalent primitives are implemented.
 - Windows application version-resource metadata and the final installer/uninstaller are not yet complete.
 
 ## Safety position

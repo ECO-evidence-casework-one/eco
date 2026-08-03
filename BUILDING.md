@@ -22,6 +22,7 @@ go vet ./...
 
 The script:
 
+- checks every native exit code and stops immediately when tests, vet, policy checks or a build fails;
 - runs tests and `go vet`;
 - builds the Windows x86-64 GUI twice with deterministic flags;
 - rejects the build if the two SHA-256 values differ;

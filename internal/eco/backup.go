@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 const (
@@ -377,7 +376,16 @@ type RestoreReceipt struct {
 
 type RestorePhase string
 
-const restoreStageReady RestorePhase = "stage-ready"
+const (
+	restoreStageReadyHook    RestorePhase = "stage-ready"
+	restoreStagedHook        RestorePhase = "staged"
+	restoreOriginalMovedHook RestorePhase = "original-moved"
+	restoreActivatedHook     RestorePhase = "activated"
+	restoreRecoveredHook     RestorePhase = "recovered"
+)
+
+// Preserve the original internal test seam name.
+const restoreStageReady = restoreStageReadyHook
 
 // RestorePortableBackup authenticates and validates a portable backup in a
 // separate staging vault. The active vault is replaced only after every
@@ -388,6 +396,10 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 }
 
 func (v *Vault) restorePortableBackup(path, passphrase string, progress func(BackupProgress), hook func(RestorePhase, *Vault) error) (RestoreReceipt, error) {
+	return v.restorePortableBackupWithOps(path, passphrase, progress, hook, operatingFilesystem)
+}
+
+func (v *Vault) restorePortableBackupWithOps(path, passphrase string, progress func(BackupProgress), hook func(RestorePhase, *Vault) error, ops filesystemOps) (receipt RestoreReceipt, resultErr error) {
 	if len([]rune(passphrase)) < 12 {
 		return RestoreReceipt{}, errors.New("backup passphrase must be at least 12 characters")
 	}
@@ -396,6 +408,25 @@ func (v *Vault) restorePortableBackup(path, passphrase string, progress func(Bac
 	if err != nil {
 		return RestoreReceipt{}, err
 	}
+	if v.binding != nil || v.lifecycle != nil {
+		return RestoreReceipt{}, errors.New("another workspace lifecycle transaction is already active")
+	}
+	if err = attachWorkspaceGuards(v); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("begin authenticated portable restore: %w", err)
+	}
+	if err = verifyBindingMatchesVault(v, v.binding); err != nil {
+		v.releaseWorkspaceBinding()
+		v.lifecycle.Close()
+		v.lifecycle = nil
+		return RestoreReceipt{}, fmt.Errorf("begin authenticated portable restore: %w", err)
+	}
+	defer func() {
+		_ = v.releaseWorkspaceBinding()
+		if v.lifecycle != nil {
+			_ = v.lifecycle.Close()
+			v.lifecycle = nil
+		}
+	}()
 	f, err := os.Open(path)
 	if err != nil {
 		return RestoreReceipt{}, err
@@ -456,18 +487,44 @@ func (v *Vault) restorePortableBackup(path, passphrase string, progress func(Bac
 	}
 	var nonceCounter uint64
 
-	stageRoot := v.Root + ".restore-" + NewID("STAGE")
-	_ = os.RemoveAll(stageRoot)
-	stage, err := createVault(stageRoot, "Portable restore staging workspace", v.runtime)
+	state, err := newRestoreState(v, sourceHash)
 	if err != nil {
 		return RestoreReceipt{}, err
 	}
-	stageActivated := false
-	defer func() {
-		if !stageActivated {
-			_ = os.RemoveAll(stageRoot)
+	restoreKey := append([]byte(nil), v.key...)
+	defer zeroBytes(restoreKey)
+	if err = writeRestoreState(&state, restoreKey); err != nil {
+		return RestoreReceipt{}, err
+	}
+	stateStarted := true
+	for _, role := range []string{"checkpoint", "stage", "failed"} {
+		if err = writeRestoreRole(state, role, restoreKey); err != nil {
+			return RestoreReceipt{}, fmt.Errorf("create authenticated portable restore folder identity: %w", err)
 		}
+	}
+	var stage *Vault
+	transactionComplete := false
+	interrupted := false
+	defer func() {
+		if !stateStarted || transactionComplete || interrupted {
+			return
+		}
+		if stage != nil {
+			stage.Close()
+		}
+		_ = v.releaseWorkspaceBinding()
+		_, cleanupErr := rollbackRestoreState(state, ops)
+		rebindErr := v.rebindWorkspaceObjects()
+		resultErr = errors.Join(resultErr, cleanupErr, rebindErr)
 	}()
+
+	stage, err = createVault(state.Stage, "Portable restore staging workspace", v.runtime)
+	if err != nil {
+		return RestoreReceipt{}, err
+	}
+	if err = writeRestoreStageIdentity(state, restoreKey); err != nil {
+		return RestoreReceipt{}, err
+	}
 
 	var ws Workspace
 	var requiredObjects []preservedObjectSpec
@@ -632,6 +689,7 @@ func (v *Vault) restorePortableBackup(path, passphrase string, progress func(Bac
 	}
 
 	stage.mu.Lock()
+	stage.identityTransition = true
 	stage.Workspace = ws
 	stage.Workspace.BuildID = v.runtime.BuildID
 	stage.Workspace.CreatedByCandidate = v.runtime.CandidateID
@@ -646,51 +704,171 @@ func (v *Vault) restorePortableBackup(path, passphrase string, progress func(Bac
 	if err != nil {
 		return RestoreReceipt{}, err
 	}
-	if err = writeWorkspaceIdentity(stage.Root, stage.Identity); err != nil {
+	if err = writeWorkspaceIdentityForVault(stage, stage.Identity); err != nil {
 		return RestoreReceipt{}, err
 	}
+	stage.identityTransition = false
 	if hook != nil {
-		if err = hook(restoreStageReady, stage); err != nil {
+		if err = hook(restoreStageReadyHook, stage); err != nil {
+			if errors.Is(err, errRestoreInterrupted) {
+				interrupted = true
+			}
 			return RestoreReceipt{}, err
 		}
 	}
 	if err = verifyStagedVault(stage); err != nil {
 		return RestoreReceipt{}, err
 	}
+	nextState := state
+	nextState.RestoredWorkspaceID = stage.Identity.ID
+	nextState.Phase = restoreStaged
+	if err = writeRestoreState(&nextState, restoreKey); err != nil {
+		return RestoreReceipt{}, err
+	}
+	state = nextState
+	if hook != nil {
+		if err = hook(restoreStagedHook, stage); err != nil {
+			if errors.Is(err, errRestoreInterrupted) {
+				interrupted = true
+			}
+			return RestoreReceipt{}, err
+		}
+	}
 
 	// Activation is the only exclusive phase. Read/import/verify/backup file
 	// operations finish first, and metadata writers are blocked by v.mu.
 	v.opMu.Lock()
-	defer v.opMu.Unlock()
+	opLocked := true
+	defer func() {
+		if opLocked {
+			v.opMu.Unlock()
+		}
+	}()
 	v.mu.Lock()
-	defer v.mu.Unlock()
+	metadataLocked := true
+	defer func() {
+		if metadataLocked {
+			v.mu.Unlock()
+		}
+	}()
 
-	parent := filepath.Dir(v.Root)
-	base := filepath.Base(v.Root)
-	preRestore := filepath.Join(parent, base+".pre-restore-"+time.Now().UTC().Format("20060102T150405Z"))
-	if err = os.Rename(v.Root, preRestore); err != nil {
+	if err = v.releaseWorkspaceBinding(); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("release the authenticated workspace handles before portable restore: %w", err)
+	}
+	if err = stage.releaseWorkspaceBinding(); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("release the authenticated staged-workspace handles before portable restore: %w", err)
+	}
+	if stage.lifecycle != nil {
+		if err = stage.lifecycle.Close(); err != nil {
+			return RestoreReceipt{}, err
+		}
+		stage.lifecycle = nil
+	}
+	if err = secureRestoreRename(state, state.Root, state.Checkpoint, "root-original", "checkpoint", ops); err != nil {
 		return RestoreReceipt{}, fmt.Errorf("could not create pre-restore checkpoint: %w", err)
 	}
-	if err = os.Rename(stageRoot, v.Root); err != nil {
-		_ = os.Rename(preRestore, v.Root)
-		return RestoreReceipt{}, fmt.Errorf("could not activate restored vault; original was rolled back: %w", err)
+	nextState = state
+	nextState.Phase = restoreOriginalMoved
+	if err = writeRestoreState(&nextState, restoreKey); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("could not record the original workspace checkpoint: %w", err)
 	}
-	stageActivated = true
-
-	newVault, err := openVault(v.Root, v.runtime)
+	state = nextState
+	if hook != nil {
+		if err = hook(restoreOriginalMovedHook, stage); err != nil {
+			if errors.Is(err, errRestoreInterrupted) {
+				interrupted = true
+			}
+			return RestoreReceipt{}, err
+		}
+	}
+	if err = secureRestoreRename(state, state.Stage, state.Root, "stage", "root", ops); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("could not activate the authenticated restored workspace: %w", err)
+	}
+	nextState = state
+	nextState.Phase = restoreActivated
+	if err = writeRestoreState(&nextState, restoreKey); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("could not record restored-workspace activation: %w", err)
+	}
+	state = nextState
+	if hook != nil {
+		if err = hook(restoreActivatedHook, stage); err != nil {
+			if errors.Is(err, errRestoreInterrupted) {
+				interrupted = true
+			}
+			return RestoreReceipt{}, err
+		}
+	}
+	if err = v.rebindWorkspaceObjects(); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("the restored workspace could not be rebound safely: %w", err)
+	}
+	if err = v.binding.Verify(); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("the restored workspace changed during activation: %w", err)
+	}
+	keyData, err := v.binding.ReadFile("vault.key")
 	if err != nil {
-		failedPath := stageRoot + ".failed"
-		_ = os.Rename(v.Root, failedPath)
-		_ = os.Rename(preRestore, v.Root)
-		return RestoreReceipt{}, fmt.Errorf("restored vault could not reopen; original was rolled back: %w", err)
+		return RestoreReceipt{}, err
+	}
+	newKey, err := loadExistingMasterKeyData(keyData)
+	if err != nil {
+		return RestoreReceipt{}, err
+	}
+	workspaceData, err := v.binding.ReadFile("workspace.ecodb")
+	if err != nil {
+		zeroBytes(newKey)
+		return RestoreReceipt{}, err
+	}
+	activeWorkspace, err := readEncryptedWorkspaceData(workspaceData, newKey)
+	if err != nil {
+		zeroBytes(newKey)
+		return RestoreReceipt{}, err
+	}
+	identityData, err := v.binding.ReadFile(workspaceIdentityFile)
+	if err != nil {
+		zeroBytes(newKey)
+		return RestoreReceipt{}, err
+	}
+	activeIdentity, err := readWorkspaceIdentityData(identityData)
+	if err != nil || validateWorkspaceIdentity(activeIdentity, activeWorkspace) != nil || activeWorkspace.WorkspaceID != state.RestoredWorkspaceID {
+		zeroBytes(newKey)
+		return RestoreReceipt{}, errors.New("the activated workspace identity did not match the authenticated staged workspace")
+	}
+	zeroBytes(v.key)
+	v.key = newKey
+	v.Objects = filepath.Join(v.Root, "objects")
+	v.Identity = activeIdentity
+	v.Workspace = activeWorkspace
+	zeroBytes(stage.key)
+	stage.key = nil
+	stage = nil
+	v.mu.Unlock()
+	metadataLocked = false
+	v.opMu.Unlock()
+	opLocked = false
+	if err = v.recoverPreservations(); err != nil {
+		return RestoreReceipt{}, fmt.Errorf("the activated workspace could not recover verified preservation state: %w", err)
 	}
 
-	v.Objects = newVault.Objects
-	v.Identity = newVault.Identity
-	zeroBytes(v.key)
-	v.key = newVault.key
-	v.runtime = newVault.runtime
-	v.Workspace = newVault.Workspace
+	nextState = state
+	nextState.Phase = restoreRecovered
+	if err = writeRestoreState(&nextState, restoreKey); err != nil {
+		return RestoreReceipt{}, err
+	}
+	state = nextState
+	if hook != nil {
+		if err = hook(restoreRecoveredHook, v); err != nil {
+			if errors.Is(err, errRestoreInterrupted) {
+				interrupted = true
+			}
+			return RestoreReceipt{}, err
+		}
+	}
+	if err = removeRestoreStageIdentity(state, state.Root, restoreKey, ops); err != nil {
+		return RestoreReceipt{}, err
+	}
+	if err = cleanupRestoreControls(state, restoreKey, ops); err != nil {
+		return RestoreReceipt{}, err
+	}
+	transactionComplete = true
 
 	return RestoreReceipt{
 		Format:          "ECOBKP1",
@@ -698,7 +876,7 @@ func (v *Vault) restorePortableBackup(path, passphrase string, progress func(Bac
 		SourceBuildID:   sourceBuild,
 		EvidenceItems:   len(restored),
 		RestoredBytes:   totalBytes,
-		PreRestoreVault: preRestore,
+		PreRestoreVault: state.Checkpoint,
 		SourceSHA256:    sourceHash,
 	}, nil
 }
