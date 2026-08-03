@@ -10,6 +10,8 @@
 
 This root `CURRENT_STATUS.md` file is the single current public status authority.
 
+The operational control board in issue #22 tracks exact active pull-request heads, independent inspection decisions, owners and next actions. It does not replace this canonical public status record.
+
 Files under `docs/status/` with dates are historical daily records. The former `docs/status/CURRENT_STATUS.md` path is retained only as a pointer to this canonical record.
 
 ## What `main` represents
@@ -30,7 +32,9 @@ Issue #3 has been reopened. Its implementation is materially improved, but indep
 
 ### Workspace identity, migration and reset
 
-PR #11 remains a draft. It proposes clean candidate-specific workspace state, migration, recovery and reset controls, but independent review identified unresolved P0 boundaries. It must not be treated as approved or merged until those findings are corrected and re-reviewed.
+PR #11 remains a draft. It proposes clean candidate-specific workspace state, migration, recovery and reset controls, but independent review identified unresolved P0 ownership, concurrency and filesystem-object boundaries. It must not be treated as approved or merged until those findings are corrected and re-reviewed.
+
+The current independently inspected PR head is `73689717bb08bb8cec0fc1233b92f843b449484a`. The exact operational blockers and acceptance evidence are recorded in issue #22 and on PR #11. Issue #4 remains open.
 
 ### Intended-purpose and health-input conformance
 
@@ -65,6 +69,21 @@ The following remain blocked:
 - all public-sector or private-institutional deployment;
 - all healthcare or clinical deployment;
 - all EU availability, including download, supply or deployment.
+
+## Current public-document assurance note
+
+A 3 August 2026 independent documentation audit found that the canonical status and release stop rules remain protective, but several supporting documents need reconciliation before any release decision:
+
+- `docs/control/CURRENT_RELEASE_GATE.md` still describes older PR #11 findings rather than the current exact-head ownership/concurrency blockers;
+- `RELEASE_POLICY.md` still names only issues #3–#8 in its dated current-gate section and omits later release-blocking issues #12, #14–#17 and #20;
+- `KNOWN_LIMITATIONS.md` remains narrowly scoped to the recorded V25 N2 P1 milestone and does not summarise the later active workspace, Ask, diagnostic, governance and health-input gates;
+- `THREAT_MODEL.md` uses “staged transactional restore” as a current core-control phrase even though `main` still uses pathname-based activation and best-effort rollback and PR #11 remains blocked;
+- `BUILDING.md` describes the Windows script as running tests and vet as a controlled gate, but the fail-fast native-command correction is not yet on `main`;
+- `ROADMAP.md` needs to distinguish existing bounded Office/email text extraction from the richer structured and receipt-bearing extraction still required;
+- maintainer and signing-role documents need an explicit statement that repository roles do not appoint the named individual as legal publisher, supplier, support operator, complaints handler, data controller or liability owner;
+- the root V25 SBOM and notices are historical/source-level records, not actual packaged-binary provenance under issue #15.
+
+These documentation findings do not open any gate. They must be reconciled through a controlled documentation change without weakening the current stop rules or restoring stale milestone wording.
 
 ## Release prerequisites
 
