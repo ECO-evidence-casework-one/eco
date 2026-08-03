@@ -47,6 +47,7 @@ Later public source-development work is tracked through narrow issues and pull r
 - Draft PR #18 proposes intended-purpose and public-claims controls; issue #20 records the unresolved health-related generated-processing implementation gate.
 - Issues #5–#8 continue to track offline-AI behaviour, responsiveness, accessibility and document navigation.
 - Issues #14–#17 track diagnostic privacy and offline claims, actual-build SBOM/licensing/provenance, intended purpose and excluded uses, and accountable publisher/continuity arrangements.
+- P0 issue #24 stops public GitHub Actions from carrying unsigned executables while every binary-release gate remains closed.
 
 See the [canonical current project status](CURRENT_STATUS.md), the [current release gate](docs/control/CURRENT_RELEASE_GATE.md) and the operational [control board](https://github.com/ECO-evidence-casework-one/eco/issues/22).
 
@@ -54,9 +55,15 @@ See the [canonical current project status](CURRENT_STATUS.md), the [current rele
 
 There is currently **no approved signed end-user release**. New unsigned Windows executables may be blocked by Windows Smart App Control. Do not weaken Windows security controls to run an ECO development build.
 
-Official releases will appear only on this repository's **Releases** page and will include checksums, source provenance, known limitations and signature-verification instructions.
+Official releases will appear only on this repository's **Releases** page after all release gates pass and will include checksums, source provenance, known limitations and signature-verification instructions.
 
-The current `main` Windows build script is not itself an approved release gate. A fail-fast native-command correction exists only in blocked draft PR #11 and has not yet been merged. Do not treat a green Windows artifact job on `main` as independent proof that every native test command was enforced.
+A GitHub Actions artifact is also a distribution surface. Public Actions must not upload ECO executables, DLLs, installers, model/runtime payloads or runnable archives while issue #24 and the public-binary gate remain open.
+
+Earlier workflow runs produced unapproved unsigned executable artifacts, including from documentation-only pull requests. Historical artifacts may remain until deletion or expiry. Do not download, run, redistribute or treat them as an approved ECO test candidate or release.
+
+The current `main` Windows build script is not itself an approved release gate. A fail-fast native-command correction exists only in blocked draft PR #11 and has not yet been merged. Do not treat a green Windows job on `main` as independent proof that every native test command was enforced.
+
+Controlled unsigned Acer or user testing requires a separate private handoff with an exact hash, build identity, warnings, intended recipient and expiry or withdrawal record. A private handoff is not an official release and must use synthetic and non-sensitive information only.
 
 ## Documentation
 
