@@ -2,7 +2,7 @@
 
 **Status date:** 3 August 2026  
 **Canonical public status record:** this file  
-**Baseline `main` commit reviewed before this consistency update:** `4acad97bae9e8fd1f751404c044bf19951ffcb54`  
+**Baseline `main` commit reviewed before this intended-purpose update:** `aac8f6f3d5d9314d765cc14546d66ec7fc376aec`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Release position:** development only; no approved public binary
 
@@ -36,11 +36,29 @@ PR #11 remains a draft. It proposes clean candidate-specific workspace state, mi
 
 The current independently inspected PR head is `73689717bb08bb8cec0fc1233b92f843b449484a`. The exact operational blockers and acceptance evidence are recorded in issue #22 and on PR #11. Issue #4 remains open.
 
-### Intended-purpose and health-input conformance
+### Intended purpose and health-input conformance
 
-PR #18 proposes a controlling intended-purpose and public-claims boundary. Source review found that the current Ask ECO path can rank, truncate, reorder and compose passages without first applying the proposed restriction for health-related source material or health-related or clinical content within mixed-purpose material.
+The [ECO intended purpose and public-claims control](docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md) is the controlling project-governance boundary when present on the canonical branch.
 
-P0 issue #20 records the implementation gate. Until it is independently closed, the current source must not be described as enforcing that boundary, and health-related material must not enter Ask ECO or another generated-answer route except in synthetic tests designed to prove safe rejection.
+That governance boundary is distinct from:
+
+1. implementation conformance by an exact application build;
+2. medical-device or other legal and regulatory classification;
+3. approval of real-evidence use, release or deployment.
+
+Adoption of the governance boundary does not establish any of those matters and does not close issue #16 or P0 issue #20.
+
+The current Ask implementation observation is tied to application source at commit `001e4fc2d55f8c29a9eaa20a0f741162433aadad`. At that baseline, `Vault.Ask` can rank, truncate, reorder and compose passages without first applying the adopted restriction for health-related source material or health-related or clinical content within mixed-purpose material. Later documentation commits are not evidence that this application behaviour changed.
+
+P0 issue #20 records the implementation-conformance gate. Until it is independently closed:
+
+- the current source must not be described as enforcing the health-input boundary;
+- where a vault contains any health-related material, Ask ECO, local-model and other semantic or generated-answer routes must remain unavailable for the entire vault unless independently verified isolation proves that restricted material cannot enter ranking, prompts, context, memory, citations or output;
+- scoping a question to an unrelated file or topic is not sufficient isolation;
+- deterministic preservation, display, extraction or labelled OCR, exact-text search, source navigation, explicit metadata sorting and user-authored notes remain the permitted non-semantic functions;
+- synthetic tests may exercise generated routes only to prove rejection and non-disclosure.
+
+Issue #16 remains open for cross-surface claims consistency, prohibited-claim checks, UI and export wording, and its other acceptance evidence. Governance adoption alone is not implementation or release approval.
 
 ### Other active grouped work
 
@@ -96,7 +114,7 @@ The following underlying technical and organisational limits remain controlling 
 - issue #12 still blocks safe Ask verification cost and Ask/restore serialisation;
 - issue #14 still blocks privacy-safe diagnostics and final bundled-runtime network claims;
 - the root V25 SBOM and notices remain historical/source-level records rather than the actual packaged-artifact provenance required by issue #15;
-- PR #18, issues #16 and #20 remain unresolved;
+- issues #16 and #20 remain unresolved despite the governance boundary;
 - no accountable established publisher, support operator, complaints handler or continuity owner has accepted the issue #17 duties;
 - accessibility, responsiveness and page-aware search qualification remains incomplete.
 
@@ -114,7 +132,7 @@ Before the release position can be reconsidered, ECO requires objective evidence
 - privacy-safe diagnostics and accurate public network claims;
 - keyboard, assistive-technology, DPI and cognitive-accessibility evidence;
 - trusted Authenticode signing with no post-signing file mutation;
-- an authoritative intended-purpose and excluded-use boundary;
+- continued consistency with the adopted intended-purpose and excluded-use boundary;
 - technical enforcement of the health-related generated-processing boundary recorded in issue #20;
 - an accountable publisher or steward for security, privacy, complaints, support and continuity;
 - independent closure of every P0 and P1 finding.
