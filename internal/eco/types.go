@@ -5,22 +5,25 @@ import "time"
 const (
 	BuildID   = "ECO-V25-20260731-N2-P1"
 	BuildName = "Evidence & Casework One Version 25 N2 — Native Document Vision Foundation Preview 1"
-	Schema    = 1
+	Schema    = 2
 )
 
 type Workspace struct {
-	Schema        int                  `json:"schema"`
-	BuildID       string               `json:"build_id"`
-	CreatedAt     time.Time            `json:"created_at"`
-	UpdatedAt     time.Time            `json:"updated_at"`
-	Evidence      []EvidenceItem       `json:"evidence"`
-	Preservations []PreservationRecord `json:"preservations,omitempty"`
-	Matters       []Matter             `json:"matters"`
-	Changes       []ChangeRecord       `json:"changes"`
-	Questions     []QuestionRecord     `json:"questions"`
-	SelectedID    string               `json:"selected_id,omitempty"`
-	SelectedPage  string               `json:"selected_page,omitempty"`
-	Settings      Settings             `json:"settings"`
+	Schema         int                  `json:"schema"`
+	BuildID        string               `json:"build_id"`
+	WorkspaceID    string               `json:"workspace_id"`
+	WorkspaceName  string               `json:"workspace_name"`
+	CreatedByBuild string               `json:"created_by_build"`
+	CreatedAt      time.Time            `json:"created_at"`
+	UpdatedAt      time.Time            `json:"updated_at"`
+	Evidence       []EvidenceItem       `json:"evidence"`
+	Preservations  []PreservationRecord `json:"preservations,omitempty"`
+	Matters        []Matter             `json:"matters"`
+	Changes        []ChangeRecord       `json:"changes"`
+	Questions      []QuestionRecord     `json:"questions"`
+	SelectedID     string               `json:"selected_id,omitempty"`
+	SelectedPage   string               `json:"selected_page,omitempty"`
+	Settings       Settings             `json:"settings"`
 }
 
 type Settings struct {

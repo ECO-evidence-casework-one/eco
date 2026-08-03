@@ -60,6 +60,7 @@ const (
 	MB_OK                = 0x00000000
 	MB_ICONINFORMATION   = 0x00000040
 	MB_ICONERROR         = 0x00000010
+	MB_ICONWARNING       = 0x00000030
 	MB_YESNO             = 0x00000004
 	MB_ICONQUESTION      = 0x00000020
 	IDYES                = 6

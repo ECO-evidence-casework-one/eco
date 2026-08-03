@@ -88,6 +88,19 @@ func TestCoordinateCitationHighlightingPresent(t *testing.T) {
 	}
 }
 
+func TestWorkspaceIdentityAndExplicitLifecycleControlsPresent(t *testing.T) {
+	src := windowsSource(t)
+	for _, required := range []string{"StartCandidate", "Identity:", "Path:", "Opened as:", "Compatibility:", "Create new workspace", "Open / migrate", "Workspace recovered", "Reset selected", "Reset only this selected workspace"} {
+		if !strings.Contains(src, required) {
+			t.Fatalf("missing explicit workspace lifecycle wording or control %q", required)
+		}
+	}
+	startup := functionBody(t, src, "func main()", "func registerClasses")
+	if strings.Contains(startup, "OpenVault(") || strings.Contains(startup, `"V25N2"`) {
+		t.Fatal("startup must use candidate-specific application state instead of silently reopening the previous fixed vault")
+	}
+}
+
 func TestNativeSourceContainsNoBrowserOrLocalhostRuntime(t *testing.T) {
 	src := windowsSource(t)
 	for _, forbidden := range []string{"\"net/http\"", "ListenAndServe", "brave.exe", "msedge.exe", "chrome.exe"} {

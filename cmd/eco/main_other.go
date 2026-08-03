@@ -10,13 +10,19 @@ import (
 )
 
 func main() {
-	root := filepath.Join(os.TempDir(), "eco-v25-n1-dev-vault")
-	v, err := eco.OpenVault(root)
+	root, err := os.UserConfigDir()
+	if err != nil || root == "" {
+		panic("ECO could not find a private application-state folder")
+	}
+	candidate, err := eco.StartCandidate(filepath.Join(root, "EvidenceCaseworkOne"), eco.CurrentRuntime())
 	if err != nil {
 		panic(err)
 	}
+	session := candidate.Current
+	v := session.Vault
 	fmt.Println(eco.BuildName)
-	fmt.Printf("Development core opened: %d evidence items at %s\n", len(v.Workspace.Evidence), root)
+	fmt.Printf("Workspace: %s\nIdentity: %s\nPath: %s\nStatus: %s\n", session.Identity.Name, session.Identity.ID, session.Path, session.StatusText())
+	fmt.Printf("Development core opened: %d evidence items\n", len(v.Workspace.Evidence))
 	if len(os.Args) > 1 {
 		for _, p := range os.Args[1:] {
 			item, dup, err := v.ImportFile(p, nil)

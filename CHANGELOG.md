@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased development workspace controls
+
+- separated first launch, new workspace, deliberate reopen, migration, recovery and selected-workspace reset flows;
+- isolated automatic application state by exact development-candidate identity;
+- added visible workspace identity, path, open status and build/schema compatibility wording;
+- added recoverable format 1 to format 2 migration with preserved checkpoints and interruption recovery;
+- limited reset to the selected ECO development workspace and its referenced encrypted objects;
+- added synthetic lifecycle, contamination, compatibility, rollback and reset-isolation tests.
+
 ## ECO-V25-20260731-N2-P1 — Document Vision Foundation Preview 1
 
 - added conservative page-boundary detection and auto-crop preview;

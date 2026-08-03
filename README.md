@@ -11,6 +11,7 @@
 - Original evidence preserved separately from derived readings
 - Streaming local hashing, encrypted storage and integrity checks
 - Source-backed outputs that distinguish documents, OCR suggestions, ECO suggestions, user confirmations and notes
+- Candidate-specific application state with explicit create, reopen, migrate, recover and selected-workspace reset flows
 - Calm, accessible and plain-language operation
 - Free and open-source components only
 
@@ -60,6 +61,7 @@ Official releases will appear only on this repository's **Releases** page and wi
 - [Code signing policy](CODE_SIGNING_POLICY.md)
 - [Maintainers and signing roles](MAINTAINERS.md)
 - [Building from source](BUILDING.md)
+- [Development workspace lifecycle](docs/architecture/WORKSPACE_LIFECYCLE.md)
 - [Release policy](RELEASE_POLICY.md)
 - [Roadmap](ROADMAP.md)
 - [Threat model](THREAT_MODEL.md)

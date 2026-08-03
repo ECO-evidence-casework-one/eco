@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"image"
 	"math"
@@ -48,6 +49,8 @@ type hitRegion struct {
 type application struct {
 	hInstance                                                                 uintptr
 	hwnd                                                                      uintptr
+	candidate                                                                 *eco.CandidateApplication
+	workspace                                                                 eco.WorkspaceSession
 	vault                                                                     *eco.Vault
 	view                                                                      eco.Workspace
 	page                                                                      string
@@ -119,22 +122,27 @@ func main() {
 	procOleInitialize.Call(0)
 	defer procOleUninitialize.Call()
 	hInst, _, _ := procGetModuleHandleW.Call(0)
-	root := os.Getenv("LOCALAPPDATA")
-	if root == "" {
-		root, _ = os.UserConfigDir()
+	baseRoot := os.Getenv("LOCALAPPDATA")
+	if baseRoot == "" {
+		baseRoot, _ = os.UserConfigDir()
 	}
-	root = filepath.Join(root, "EvidenceCaseworkOne", "V25N2")
-	v, err := eco.OpenVault(root)
-	if err != nil {
-		messageBox(0, "ECO vault could not open", err.Error(), MB_OK|MB_ICONERROR)
+	if baseRoot == "" {
+		messageBox(0, "ECO could not start safely", "Windows did not provide a private application-state folder. ECO did not open or create any workspace.", MB_OK|MB_ICONERROR)
 		return
 	}
+	candidate, err := eco.StartCandidate(filepath.Join(baseRoot, "EvidenceCaseworkOne"), eco.CurrentRuntime())
+	if err != nil {
+		messageBox(0, "ECO workspace could not open safely", err.Error()+"\r\n\r\nNo older records were opened as though they belonged to this build.", MB_OK|MB_ICONERROR)
+		return
+	}
+	session := candidate.Current
+	v := session.Vault
 	initialView := v.Snapshot()
 	page := initialView.SelectedPage
 	if page == "" {
 		page = "home"
 	}
-	app = &application{hInstance: hInst, vault: v, view: initialView, page: page, selected: 0, dpi: 96, buttons: map[string]RECT{}}
+	app = &application{hInstance: hInst, candidate: candidate, workspace: session, vault: v, view: initialView, page: page, selected: 0, dpi: 96, buttons: map[string]RECT{}}
 	registerClasses()
 	app.hwnd = createWindowEx(0, className, eco.BuildName, WS_OVERLAPPEDWINDOW|WS_CLIPCHILDREN, CW_USEDEFAULT, CW_USEDEFAULT, 1260, 820, 0, 0, hInst, nil)
 	if app.hwnd == 0 {
@@ -150,7 +158,8 @@ func main() {
 	app.layoutControls(initial.Right, initial.Bottom)
 	showWindow(app.hwnd, SW_SHOW)
 	procUpdateWindow.Call(app.hwnd)
-	whatsMarker := filepath.Join(root, "whats-seen-N2-P1")
+	app.showWorkspaceStatus("Workspace opened")
+	whatsMarker := filepath.Join(candidate.State.StateRoot, "whats-seen-N2-P1")
 	if _, err := os.Stat(whatsMarker); os.IsNotExist(err) {
 		messageBox(app.hwnd, "What’s new — Evidence & Casework One Version 25 N2", "DOCUMENT VISION FOUNDATION PREVIEW 1\r\n\r\n• Added conservative photographed-page boundary detection and non-destructive auto-crop preview.\r\n• Added bounded skew estimation and non-destructive deskew preview.\r\n• Added adaptive black-and-white reading enhancement.\r\n• Added glare, uneven-lighting, edge-cutoff and probable double-page assessment.\r\n• Added perspective-correction foundations for a later four-corner correction studio.\r\n• Added coordinate-bearing OCR receipt and exact image-region source models.\r\n• Added a vault integration gate that refuses OCR results whose source hash or coordinates do not match the preserved original.\r\n• Preserved the standalone native window, encrypted live vault, streaming intake, signature checks, duplicate detection, Matters, source-backed search and transactional backups.\r\n\r\nA bundled OCR engine and generative local language model are not yet included in N2 P1. This source milestone builds and tests the native document-vision and OCR provenance foundation before those components are approved and bundled.", MB_OK|MB_ICONINFORMATION)
 		_ = os.WriteFile(whatsMarker, []byte(eco.BuildID), 0600)
@@ -374,6 +383,14 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		app.mu.Unlock()
 		app.refreshView()
 		app.selected = 0
+		if session, sessionErr := app.candidate.RefreshCurrentAfterRestore(); sessionErr == nil {
+			app.workspace = session
+		} else if session.Vault != nil {
+			app.workspace = session
+			messageBox(hwnd, "Restore completed with an application-state warning", sessionErr.Error(), MB_OK|MB_ICONWARNING)
+		} else {
+			messageBox(hwnd, "Restored workspace needs attention", "The encrypted restore completed, but ECO could not update its candidate-specific selection record.\r\n\r\n"+sessionErr.Error(), MB_OK|MB_ICONWARNING)
+		}
 		messageBox(hwnd, "Encrypted backup restored safely", fmt.Sprintf("Restored items: %d\r\nRestored bytes: %s\r\nSource build: %s\r\nSource SHA-256: %s\r\n\r\nYour previous vault was retained at:\r\n%s", r.EvidenceItems, eco.HumanBytes(r.RestoredBytes), r.SourceBuildID, r.SourceSHA256, r.PreRestoreVault), MB_OK|MB_ICONINFORMATION)
 		invalidate(hwnd)
 		return 0
@@ -513,7 +530,11 @@ func navIcon(i int) string {
 func (a *application) drawTopbar(hdc uintptr, rc RECT) {
 	top := RECT{275, 0, rc.Right, 70}
 	fillRect(hdc, top, rgb(255, 255, 255))
-	drawTextFont(hdc, "●  LOCAL • NATIVE • OFFLINE", RECT{298, 0, rc.Right - 345, 70}, a.fontLabel, rgb(24, 107, 56), DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS)
+	workspace := "No workspace"
+	if a.workspace.Identity.Name != "" {
+		workspace = a.workspace.Identity.Name + " • " + string(a.workspace.Disposition)
+	}
+	drawTextFont(hdc, "●  LOCAL • OFFLINE • "+workspace, RECT{298, 0, rc.Right - 345, 70}, a.fontLabel, rgb(24, 107, 56), DT_LEFT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS)
 	drawTextFont(hdc, eco.BuildID, RECT{rc.Right - 335, 0, rc.Right - 24, 70}, a.fontSmall, rgb(80, 101, 104), DT_RIGHT|DT_VCENTER|DT_SINGLELINE|DT_END_ELLIPSIS)
 }
 
@@ -562,7 +583,12 @@ func (a *application) drawHome(hdc uintptr, rc RECT) {
 
 	sectionTop := heroBottom + 26
 	drawTextFont(hdc, "CURRENT WORKSPACE", RECT{x, sectionTop, right, sectionTop + 22}, a.fontLabel, rgb(46, 104, 101), DT_LEFT|DT_SINGLELINE)
-	drawTextFont(hdc, "What needs attention", RECT{x, sectionTop + 27, right, sectionTop + 62}, a.fontHeading, rgb(20, 61, 59), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, a.workspace.Identity.Name, RECT{x, sectionTop + 27, right, sectionTop + 58}, a.fontHeading, rgb(20, 61, 59), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	statusCard := RECT{x, sectionTop + 65, right, sectionTop + 144}
+	roundRect(hdc, statusCard, 13, rgb(255, 255, 255), rgb(185, 213, 205))
+	drawTextFont(hdc, string(a.workspace.Disposition)+" • "+a.workspace.Compatibility.Message, RECT{statusCard.Left + 15, statusCard.Top + 8, statusCard.Right - 15, statusCard.Top + 29}, a.fontLabel, rgb(17, 91, 86), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, "Identity: "+a.workspace.Identity.ID+" • Format: "+fmt.Sprint(a.workspace.Compatibility.WorkspaceSchema)+" • Created by: "+a.workspace.Identity.CreatedByBuild, RECT{statusCard.Left + 15, statusCard.Top + 31, statusCard.Right - 15, statusCard.Top + 51}, a.fontSmall, rgb(65, 86, 88), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, "Path: "+a.workspace.Path, RECT{statusCard.Left + 15, statusCard.Top + 53, statusCard.Right - 15, statusCard.Bottom - 7}, a.fontSmall, rgb(65, 86, 88), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 
 	metrics := a.metrics()
 	gap := int32(12)
@@ -571,7 +597,7 @@ func (a *application) drawHome(hdc uintptr, rc RECT) {
 		cols = 3
 	}
 	rows := (len(metrics) + cols - 1) / cols
-	cardTop := sectionTop + 75
+	cardTop := sectionTop + 157
 	cardH := int32(85)
 	cw := (contentW - gap*int32(cols-1)) / int32(cols)
 	for i, m := range metrics {
@@ -833,15 +859,20 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 	right := rc.Right - 25
 	drawTextFont(hdc, "TRUST & SETTINGS", RECT{x, 94, right, 120}, a.fontLabel, rgb(44, 104, 101), DT_LEFT|DT_SINGLELINE)
 	drawTextFont(hdc, "Verifiable local protection", RECT{x, 122, right, 158}, a.fontHeading, rgb(20, 61, 59), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	workspaceCard := RECT{x, 164, right, 226}
+	roundRect(hdc, workspaceCard, 14, rgb(232, 247, 243), rgb(145, 205, 194))
+	drawTextFont(hdc, a.workspace.Identity.Name+" • "+string(a.workspace.Disposition), RECT{x + 16, 173, right - 16, 195}, a.fontLabel, rgb(17, 91, 86), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, "Identity: "+a.workspace.Identity.ID+" • Workspace format "+fmt.Sprint(a.workspace.Compatibility.WorkspaceSchema)+" • "+a.workspace.Compatibility.Message, RECT{x + 16, 195, right - 16, 213}, a.fontSmall, rgb(49, 82, 83), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	drawTextFont(hdc, "Path: "+a.workspace.Path, RECT{x + 16, 211, right - 16, 224}, a.fontSmall, rgb(49, 82, 83), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	facts := []struct {
 		title, body string
 		good        bool
 	}{{"Native desktop window", "No Brave, Chromium, WebView, localhost or Python runtime.", true}, {"Active vault encryption", "AES-256-GCM encrypted evidence objects and workspace metadata.", true}, {"Local key protection", "Windows DPAPI protects the random vault master key for this Windows account.", true}, {"Network design", "This executable imports no HTTP package and exposes no listening socket.", true}, {"Local evidence intelligence", "Local retrieval and intent classification return extractive source-backed passages.", true}, {"Transactional restore", "Backups are authenticated and restored into a separate encrypted staging vault before activation.", true}, {"Automatic OCR", "Not bundled in N1 P3. Images are preserved and assessed, but image wording is not claimed as read.", false}, {"Generative local model", "Not bundled in N1 P3. ECO does not present deterministic retrieval as a language model.", false}}
-	y := int32(190)
+	y := int32(236)
 	gap := int32(14)
 	cardW := (right - x - gap) / 2
-	cardH := int32(84)
-	rowStep := cardH + 10
+	cardH := int32(72)
+	rowStep := cardH + 8
 	for i, f := range facts {
 		col := i % 2
 		row := i / 2
@@ -854,21 +885,25 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 		}
 		roundRect(hdc, r, 14, bg, border)
 		drawTextFont(hdc, f.title, RECT{r.Left + 15, r.Top + 10, r.Right - 15, r.Top + 31}, a.fontLabel, rgb(25, 67, 65), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
-		drawTextFont(hdc, f.body, RECT{r.Left + 15, r.Top + 34, r.Right - 15, r.Bottom - 7}, a.fontSmall, rgb(66, 90, 92), DT_LEFT|DT_WORDBREAK)
+		drawTextFont(hdc, f.body, RECT{r.Left + 15, r.Top + 31, r.Right - 15, r.Bottom - 5}, a.fontSmall, rgb(66, 90, 92), DT_LEFT|DT_WORDBREAK)
 	}
 
 	buttonTop := rc.Bottom - 108
 	if buttonTop < y+4*rowStep+8 {
 		buttonTop = y + 4*rowStep + 8
 	}
-	gapB := int32(12)
-	w3 := (right - x - gapB*2) / 3
-	a.drawButton(hdc, "verify", "Verify evidence", RECT{x, buttonTop, x + w3, buttonTop + 42}, true)
-	a.drawButton(hdc, "openVault", "Open vault location", RECT{x + w3 + gapB, buttonTop, x + 2*w3 + gapB, buttonTop + 42}, false)
-	a.drawButton(hdc, "lowSensory", toggleLabel("Low Sensory", a.view.Settings.LowSensory), RECT{x + 2*(w3+gapB), buttonTop, right, buttonTop + 42}, false)
-	w2 := (right - x - gapB) / 2
-	a.drawButton(hdc, "backup", "Create encrypted backup", RECT{x, buttonTop + 52, x + w2, buttonTop + 94}, true)
-	a.drawButton(hdc, "restore", "Restore encrypted backup", RECT{x + w2 + gapB, buttonTop + 52, right, buttonTop + 94}, false)
+	gapB := int32(10)
+	w4 := (right - x - gapB*3) / 4
+	buttons := []struct {
+		name, label string
+		primary     bool
+	}{{"verify", "Verify evidence", true}, {"openVault", "Open workspace folder", false}, {"lowSensory", toggleLabel("Low Sensory", a.view.Settings.LowSensory), false}, {"newWorkspace", "Create new workspace", false}, {"backup", "Create backup", true}, {"restore", "Restore backup", false}, {"openWorkspace", "Open / migrate", false}, {"resetWorkspace", "Reset selected", false}}
+	for i, button := range buttons {
+		col := i % 4
+		row := i / 4
+		left := x + int32(col)*(w4+gapB)
+		a.drawButton(hdc, button.name, button.label, RECT{left, buttonTop + int32(row)*52, left + w4, buttonTop + int32(row)*52 + 42}, button.primary)
+	}
 	if a.processing() {
 		a.drawProgress(hdc, RECT{x, buttonTop - 68, right, buttonTop - 10})
 	}
@@ -942,6 +977,12 @@ func (a *application) handleClick(x, y int32, double bool) {
 				a.createBackup()
 			case "restore":
 				a.restoreBackup()
+			case "newWorkspace":
+				a.createWorkspace()
+			case "openWorkspace":
+				a.openWorkspace()
+			case "resetWorkspace":
+				a.resetWorkspace()
 			}
 			return
 		}
@@ -1429,6 +1470,144 @@ func (a *application) restoreBackup() {
 	}()
 }
 
+func (a *application) createWorkspace() {
+	if a.processing() {
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish before changing workspace.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	messageBox(a.hwnd, "Create a genuinely empty workspace", "Choose a new or empty folder. ECO will not reuse records from the current workspace and will not remove files from a non-empty folder.", MB_OK|MB_ICONINFORMATION)
+	path := workspaceFolderDialog(a.hwnd, "Choose a new or empty folder for the ECO workspace")
+	if path == "" {
+		return
+	}
+	name, ok := promptText(a.hwnd, "Name the workspace", "Enter a clear name that will identify this workspace in ECO.", false)
+	if !ok {
+		return
+	}
+	session, err := a.candidate.CreateWorkspace(path, name)
+	if err != nil {
+		if a.handleAppliedWorkspaceWarning(session, "Workspace created with an application-state warning", err) {
+			return
+		}
+		messageBox(a.hwnd, "New workspace was not created", err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+	a.switchWorkspace(session)
+	a.showWorkspaceStatus("New empty workspace created")
+}
+
+func (a *application) openWorkspace() {
+	if a.processing() {
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish before changing workspace.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	path := workspaceFolderDialog(a.hwnd, "Deliberately choose an existing ECO workspace")
+	if path == "" {
+		return
+	}
+	session, err := a.candidate.OpenWorkspace(path)
+	if err == nil {
+		a.switchWorkspace(session)
+		a.showWorkspaceStatus("Existing workspace reopened")
+		return
+	}
+	if a.handleAppliedWorkspaceWarning(session, "Workspace reopened with an application-state warning", err) {
+		return
+	}
+	var recoveryRequired *eco.RecoveryRequiredError
+	if errors.As(err, &recoveryRequired) {
+		choice := messageBox(a.hwnd, "Unfinished workspace upgrade", err.Error()+"\r\n\r\nRecover this workspace now? ECO will verify any activated migration or roll back to the preserved original.", MB_YESNO|MB_ICONWARNING)
+		if choice != IDYES {
+			return
+		}
+		recovered, receipt, recoverErr := a.candidate.RecoverWorkspace(path)
+		if recoverErr != nil {
+			if a.handleAppliedWorkspaceWarning(recovered, "Workspace recovered with an application-state warning", recoverErr) {
+				return
+			}
+			messageBox(a.hwnd, "Workspace recovery needs attention", receipt.Message+"\r\n\r\n"+recoverErr.Error(), MB_OK|MB_ICONWARNING)
+			return
+		}
+		a.switchWorkspace(recovered)
+		a.showWorkspaceStatus("Workspace recovered")
+		return
+	}
+	var compatibility *eco.CompatibilityError
+	if errors.As(err, &compatibility) && compatibility.Report.CanMigrate {
+		choice := messageBox(a.hwnd, "Older workspace needs an upgrade", compatibility.Report.Message+"\r\n\r\nUpgrade this selected workspace now? Its original state will be preserved in a separate checkpoint and restored automatically if the upgrade fails.", MB_YESNO|MB_ICONWARNING)
+		if choice != IDYES {
+			return
+		}
+		migrated, receipt, migrateErr := a.candidate.MigrateWorkspace(path)
+		if migrateErr != nil {
+			if a.handleAppliedWorkspaceWarning(migrated, "Workspace migrated with an application-state warning", migrateErr) {
+				return
+			}
+			messageBox(a.hwnd, "Workspace upgrade did not complete", migrateErr.Error(), MB_OK|MB_ICONERROR)
+			return
+		}
+		a.switchWorkspace(migrated)
+		messageBox(a.hwnd, "Workspace migrated safely", fmt.Sprintf("Workspace: %s\r\nIdentity: %s\r\nPath: %s\r\nOriginal checkpoint: %s\r\n\r\nThe original checkpoint was kept for rollback.", migrated.Identity.Name, migrated.Identity.ID, migrated.Path, receipt.Checkpoint), MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	messageBox(a.hwnd, "Workspace was not opened", err.Error()+"\r\n\r\nNothing in the selected folder was changed.", MB_OK|MB_ICONERROR)
+}
+
+func (a *application) resetWorkspace() {
+	if a.processing() {
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish before resetting a workspace.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	choice := messageBox(a.hwnd, "Reset only this selected workspace", fmt.Sprintf("Workspace: %s\r\nIdentity: %s\r\nPath: %s\r\n\r\nThis will clear this workspace's evidence list, conversations, matters and settings. It will not delete source evidence outside the workspace, unrelated files, another workspace or an arbitrary folder.\r\n\r\nContinue?", a.workspace.Identity.Name, a.workspace.Identity.ID, a.workspace.Path), MB_YESNO|MB_ICONWARNING)
+	if choice != IDYES {
+		return
+	}
+	session, receipt, err := a.candidate.ResetCurrentWorkspace()
+	if err != nil {
+		if a.handleAppliedWorkspaceWarning(session, "Workspace reset with an application-state warning", err) {
+			return
+		}
+		messageBox(a.hwnd, "Workspace was not reset", err.Error(), MB_OK|MB_ICONERROR)
+		return
+	}
+	a.switchWorkspace(session)
+	message := fmt.Sprintf("Reset only: %s\r\nIdentity: %s\r\nPath: %s\r\n\r\nCleared %d evidence records, %d matters and %d conversations.", session.Identity.Name, session.Identity.ID, session.Path, receipt.PreviousEvidence, receipt.PreviousMatters, receipt.PreviousQuestions)
+	if len(receipt.CleanupWarnings) > 0 {
+		message += "\r\n\r\nSome unreferenced encrypted object files could not be removed. They are not part of the reset workspace and will not be displayed."
+	}
+	messageBox(a.hwnd, "Selected workspace reset", message, MB_OK|MB_ICONINFORMATION)
+}
+
+func (a *application) switchWorkspace(session eco.WorkspaceSession) {
+	a.workspace = session
+	a.vault = session.Vault
+	a.page = "home"
+	a.selected = 0
+	a.refreshView()
+	var rc RECT
+	procGetClientRect.Call(a.hwnd, uintptr(unsafe.Pointer(&rc)))
+	a.layoutControls(rc.Right, rc.Bottom)
+	invalidate(a.hwnd)
+}
+
+func (a *application) handleAppliedWorkspaceWarning(session eco.WorkspaceSession, title string, err error) bool {
+	var warning *eco.CandidateStateWarning
+	if session.Vault == nil || !errors.As(err, &warning) {
+		return false
+	}
+	a.switchWorkspace(session)
+	message := fmt.Sprintf("Workspace: %s\r\nIdentity: %s\r\nPath: %s\r\n\r\n%s\r\n\r\nThe workspace action completed, but the candidate-specific selection audit needs attention.", session.Identity.Name, session.Identity.ID, session.Path, warning.Error())
+	if session.Checkpoint != "" {
+		message += "\r\nOriginal checkpoint: " + session.Checkpoint
+	}
+	messageBox(a.hwnd, title, message, MB_OK|MB_ICONWARNING)
+	return true
+}
+
+func (a *application) showWorkspaceStatus(title string) {
+	messageBox(a.hwnd, title, fmt.Sprintf("Workspace: %s\r\nIdentity: %s\r\nPath: %s\r\nOpened as: %s\r\nCompatibility: %s", a.workspace.Identity.Name, a.workspace.Identity.ID, a.workspace.Path, a.workspace.Disposition, a.workspace.Compatibility.Message), MB_OK|MB_ICONINFORMATION)
+}
+
 func (a *application) createQuickMatter() {
 	title := fmt.Sprintf("Matter %d", len(a.view.Matters)+1)
 	a.mu.Lock()
@@ -1798,8 +1977,16 @@ func droppedPaths(hdrop uintptr) []string {
 }
 
 func openFolderDialog(owner uintptr) string {
+	return browseFolderDialog(owner, "Add an evidence folder — symbolic links will not be followed")
+}
+
+func workspaceFolderDialog(owner uintptr, title string) string {
+	return browseFolderDialog(owner, title)
+}
+
+func browseFolderDialog(owner uintptr, title string) string {
 	display := make([]uint16, 260)
-	bi := BROWSEINFO{HwndOwner: owner, PszDisplayName: &display[0], LpszTitle: utf16Ptr("Add an evidence folder — symbolic links will not be followed"), UlFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX}
+	bi := BROWSEINFO{HwndOwner: owner, PszDisplayName: &display[0], LpszTitle: utf16Ptr(title), UlFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX}
 	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
 	if pidl == 0 {
 		return ""

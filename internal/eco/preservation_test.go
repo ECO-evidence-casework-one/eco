@@ -21,7 +21,7 @@ func TestMutationDuringIntakeCannotCreateEvidence(t *testing.T) {
 	if err := os.WriteFile(sourcePath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestChangedSourceCannotReturnExistingDuplicate(t *testing.T) {
 	if err := os.WriteFile(duplicatePath, original, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(root)
+	vault, err := CreateVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestInterruptedPreservationLeavesFailedNonUsableState(t *testing.T) {
 	if err := os.WriteFile(sourcePath, bytes.Repeat([]byte("B"), 4*chunkSize), 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestMutationDuringPreservationCannotCreateEvidence(t *testing.T) {
 	if err := os.WriteFile(sourcePath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestCancellationAfterVerificationRecoversOnRestart(t *testing.T) {
 	if err := os.WriteFile(sourcePath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(root)
+	vault, err := CreateVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestCancelledVerifiedPreservationMismatchRemainsBlockedOnRestart(t *testing
 	if err := os.WriteFile(sourcePath, []byte("synthetic bytes that will be corrupted after verification"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(root)
+	vault, err := CreateVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +290,7 @@ func TestCancelledVerifiedPreservationMismatchRemainsBlockedOnRestart(t *testing
 func TestRestartMarksIncompletePreservationFailed(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(dir, "vault")
-	vault, err := OpenVault(root)
+	vault, err := CreateVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,7 +338,7 @@ func TestRestartMarksIncompletePreservationFailed(t *testing.T) {
 func TestRestartRecoversCompleteUncommittedPreservation(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(dir, "vault")
-	vault, err := OpenVault(root)
+	vault, err := CreateVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestStoredSHA256MatchesExactPreservedBytes(t *testing.T) {
 	if err := os.WriteFile(sourcePath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -434,7 +434,7 @@ func TestExtractionUsesPreservedObjectAfterOriginalChanges(t *testing.T) {
 	if err := os.WriteFile(sourcePath, original, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +474,7 @@ func TestOCRUsesVerifiedPreservedObjectReceipt(t *testing.T) {
 	if err := os.WriteFile(sourcePath, encoded.Bytes(), 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -517,7 +517,7 @@ func TestSourceMismatchBlocksIndexingCitationAndRetrieval(t *testing.T) {
 	if err := os.WriteFile(sourcePath, []byte("The verified hearing is on 22 November 2026."), 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +560,7 @@ func TestLargeFileWithDeliberatelySlowPreservation(t *testing.T) {
 	if err := os.WriteFile(sourcePath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	vault, err := OpenVault(filepath.Join(dir, "vault"))
+	vault, err := CreateVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

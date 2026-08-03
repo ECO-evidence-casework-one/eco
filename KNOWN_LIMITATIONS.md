@@ -14,6 +14,8 @@
 - Ask ECO remains a deterministic source-backed retrieval engine.
 - Direct Windows Narrator, NVDA, high-DPI and long-duration execution evidence remains incomplete.
 - The current encrypted workspace format remains an early development format and must not hold irreplaceable evidence.
+- Only the recoverable workspace-format 1 to format 2 migration is currently approved; other older formats and downgrade attempts are blocked.
+- Successful workspace-migration checkpoints are retained for rollback and do not yet have an in-application cleanup control.
 - Windows application version-resource metadata and the final installer/uninstaller are not yet complete.
 
 ## Safety position

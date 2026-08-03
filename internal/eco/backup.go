@@ -88,7 +88,7 @@ func (v *Vault) CreatePortableBackup(path, passphrase string, progress func(Back
 	if _, err = bw.Write(prefix); err != nil {
 		return BackupReceipt{}, err
 	}
-	if err = writeShortString(bw, BuildID); err != nil {
+	if err = writeShortString(bw, v.runtime.BuildID); err != nil {
 		return BackupReceipt{}, err
 	}
 	var nonceCounter uint64
@@ -161,7 +161,7 @@ func (v *Vault) CreatePortableBackup(path, passphrase string, progress func(Back
 		return BackupReceipt{}, err
 	}
 	v.AddChange("user", "portable-backup-created", "Created encrypted portable backup", map[string]any{"file": filepath.Base(path), "items": len(ws.Evidence), "sha256": digest})
-	return BackupReceipt{Format: "ECOBKP1", BuildID: BuildID, EvidenceItems: len(ws.Evidence), PlainBytes: totalPlain, BackupBytes: info.Size(), SHA256: digest, Path: path}, nil
+	return BackupReceipt{Format: "ECOBKP1", BuildID: v.runtime.BuildID, EvidenceItems: len(ws.Evidence), PlainBytes: totalPlain, BackupBytes: info.Size(), SHA256: digest, Path: path}, nil
 }
 
 func writeBackupRecordHeader(w io.Writer, typ byte, id, name string, size int64, hash []byte) error {
@@ -443,7 +443,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 
 	stageRoot := v.Root + ".restore-" + NewID("STAGE")
 	_ = os.RemoveAll(stageRoot)
-	stage, err := OpenVault(stageRoot)
+	stage, err := createVault(stageRoot, "Portable restore staging workspace", v.runtime)
 	if err != nil {
 		return RestoreReceipt{}, err
 	}
@@ -530,7 +530,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 			if err = json.Unmarshal(data, &ws); err != nil {
 				return RestoreReceipt{}, errors.New("workspace schema is invalid")
 			}
-			if err = validateRestoredWorkspace(&ws); err != nil {
+			if err = validateRestoredWorkspace(&ws, v.runtime.Schema); err != nil {
 				return RestoreReceipt{}, err
 			}
 			workspaceSeen = true
@@ -608,7 +608,8 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 
 	stage.mu.Lock()
 	stage.Workspace = ws
-	stage.Workspace.BuildID = BuildID
+	stage.Workspace.BuildID = v.runtime.BuildID
+	stage.Identity = WorkspaceIdentity{Format: workspaceIdentityFormat, ID: ws.WorkspaceID, Name: ws.WorkspaceName, Kind: "development", Schema: ws.Schema, CreatedAt: ws.CreatedAt, CreatedByBuild: ws.CreatedByBuild}
 	stage.addChangeUnlocked("system", "portable-backup-restored", "Restored and validated encrypted portable backup", map[string]any{
 		"source_build":  sourceBuild,
 		"source_sha256": sourceHash,
@@ -617,6 +618,9 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	err = stage.saveUnlocked()
 	stage.mu.Unlock()
 	if err != nil {
+		return RestoreReceipt{}, err
+	}
+	if err = writeWorkspaceIdentity(stage.Root, stage.Identity); err != nil {
 		return RestoreReceipt{}, err
 	}
 	if err = verifyStagedVault(stage); err != nil {
@@ -642,7 +646,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}
 	stageActivated = true
 
-	newVault, err := OpenVault(v.Root)
+	newVault, err := openVault(v.Root, v.runtime)
 	if err != nil {
 		failedPath := stageRoot + ".failed"
 		_ = os.Rename(v.Root, failedPath)
@@ -651,8 +655,10 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}
 
 	v.Objects = newVault.Objects
+	v.Identity = newVault.Identity
 	zeroBytes(v.key)
 	v.key = newVault.key
+	v.runtime = newVault.runtime
 	v.Workspace = newVault.Workspace
 
 	return RestoreReceipt{
@@ -773,9 +779,12 @@ func restoreDisplayName(ws Workspace, id string) string {
 	return ""
 }
 
-func validateRestoredWorkspace(ws *Workspace) error {
-	if ws.Schema != Schema {
+func validateRestoredWorkspace(ws *Workspace, expectedSchema int) error {
+	if ws.Schema != expectedSchema {
 		return fmt.Errorf("unsupported restored workspace schema %d", ws.Schema)
+	}
+	if !safeRecordID(ws.WorkspaceID) || !validWorkspaceName(ws.WorkspaceName) || !validIdentityLabel(ws.CreatedByBuild, 128) || ws.CreatedAt.IsZero() {
+		return errors.New("restored workspace identity is invalid")
 	}
 	if len(ws.Evidence) > 100000 || len(ws.Matters) > 100000 || len(ws.Changes) > 500000 || len(ws.Questions) > 100000 {
 		return errors.New("restored workspace record counts are unsafe")

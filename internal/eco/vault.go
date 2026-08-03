@@ -28,39 +28,31 @@ const (
 type Vault struct {
 	Root      string
 	Objects   string
+	Identity  WorkspaceIdentity
 	key       []byte
+	runtime   RuntimeIdentity
 	opMu      sync.RWMutex
 	mu        sync.Mutex
 	Workspace Workspace
 }
 
+// CreateVault creates a genuinely new development workspace. The target must
+// not exist or must be an empty directory.
+func CreateVault(root string) (*Vault, error) {
+	return createVault(root, filepath.Base(filepath.Clean(root)), CurrentRuntime())
+}
+
+// OpenVault deliberately reopens an existing compatible workspace. It never
+// creates a key, metadata file, object directory or workspace implicitly.
 func OpenVault(root string) (*Vault, error) {
-	if root == "" {
-		return nil, errors.New("empty vault root")
-	}
-	objects := filepath.Join(root, "objects")
-	if err := os.MkdirAll(objects, 0700); err != nil {
-		return nil, err
-	}
-	key, err := loadOrCreateMasterKey(filepath.Join(root, "vault.key"))
-	if err != nil {
-		return nil, fmt.Errorf("vault key: %w", err)
-	}
-	v := &Vault{Root: root, Objects: objects, key: key}
-	if err := v.loadWorkspace(); err != nil {
-		return nil, err
-	}
-	if err := cleanupInterruptedReadingCopies(root); err != nil {
-		return nil, fmt.Errorf("clean interrupted derived reading state: %w", err)
-	}
-	if err := v.recoverPreservations(); err != nil {
-		return nil, fmt.Errorf("recover preservation state: %w", err)
-	}
-	return v, nil
+	return openVault(root, CurrentRuntime())
 }
 
 func loadOrCreateMasterKey(path string) ([]byte, error) {
 	if data, err := os.ReadFile(path); err == nil {
+		if len(data) == 0 {
+			return nil, errors.New("protected workspace key file is empty")
+		}
 		return unprotectLocalKey(data)
 	} else if !os.IsNotExist(err) {
 		return nil, err
@@ -77,40 +69,21 @@ func loadOrCreateMasterKey(path string) ([]byte, error) {
 	if err := os.WriteFile(tmp, protected, 0600); err != nil {
 		return nil, err
 	}
+	if info, err := os.Stat(tmp); err != nil || info.Size() != int64(len(protected)) {
+		return nil, errors.New("protected workspace key was not written completely")
+	}
 	if err := os.Rename(tmp, path); err != nil {
 		return nil, err
+	}
+	if info, err := os.Stat(path); err != nil || info.Size() != int64(len(protected)) {
+		return nil, errors.New("protected workspace key was not activated completely")
 	}
 	return key, nil
 }
 
 func newWorkspace() Workspace {
-	now := time.Now().UTC()
-	return Workspace{Schema: Schema, BuildID: BuildID, CreatedAt: now, UpdatedAt: now, Evidence: []EvidenceItem{}, Preservations: []PreservationRecord{}, Matters: []Matter{}, Changes: []ChangeRecord{}, Questions: []QuestionRecord{}, SelectedPage: "home"}
-}
-
-func (v *Vault) loadWorkspace() error {
-	path := filepath.Join(v.Root, "workspace.ecodb")
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		v.Workspace = newWorkspace()
-		return v.Save()
-	}
-	if err != nil {
-		return err
-	}
-	plain, err := decryptBlob(v.key, metaMagic, data)
-	if err != nil {
-		return fmt.Errorf("workspace authentication failed: %w", err)
-	}
-	var ws Workspace
-	if err := json.Unmarshal(plain, &ws); err != nil {
-		return fmt.Errorf("workspace format invalid: %w", err)
-	}
-	if ws.Schema != Schema {
-		return fmt.Errorf("unsupported workspace schema %d", ws.Schema)
-	}
-	v.Workspace = ws
-	return nil
+	runtime := CurrentRuntime()
+	return newWorkspaceForRuntime(runtime, NewID("WS"), "Development workspace")
 }
 
 func (v *Vault) Save() error {
@@ -121,7 +94,10 @@ func (v *Vault) Save() error {
 
 func (v *Vault) saveUnlocked() error {
 	v.Workspace.UpdatedAt = time.Now().UTC()
-	v.Workspace.BuildID = BuildID
+	if v.runtime.BuildID == "" {
+		v.runtime = CurrentRuntime()
+	}
+	v.Workspace.BuildID = v.runtime.BuildID
 	plain, err := json.MarshalIndent(v.Workspace, "", "  ")
 	if err != nil {
 		return err
@@ -762,6 +738,10 @@ func (v *Vault) addChangeUnlocked(actor, typ, summary string, details map[string
 	if len(v.Workspace.Changes) > 0 {
 		prev = v.Workspace.Changes[0].Hash
 	}
+	v.addChangeWithPreviousUnlocked(prev, actor, typ, summary, details)
+}
+
+func (v *Vault) addChangeWithPreviousUnlocked(prev, actor, typ, summary string, details map[string]any) {
 	rec := ChangeRecord{ID: NewID("CHG"), At: time.Now().UTC(), Actor: actor, Type: typ, Summary: summary, Details: details, PrevHash: prev}
 	b, _ := json.Marshal(struct {
 		ID                         string

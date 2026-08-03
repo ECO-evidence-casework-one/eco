@@ -31,13 +31,23 @@ func dpapi(in []byte, protect bool) ([]byte, error) {
 	ib := dataBlob{cbData: uint32(len(in)), pbData: &in[0]}
 	var ob dataBlob
 	var r uintptr
+	var callErr error
 	if protect {
-		r, _, _ = procCryptProtectData.Call(uintptr(unsafe.Pointer(&ib)), 0, 0, 0, 0, 0x01, uintptr(unsafe.Pointer(&ob)))
+		r, _, callErr = procCryptProtectData.Call(uintptr(unsafe.Pointer(&ib)), 0, 0, 0, 0, 0x01, uintptr(unsafe.Pointer(&ob)))
 	} else {
-		r, _, _ = procCryptUnprotectData.Call(uintptr(unsafe.Pointer(&ib)), 0, 0, 0, 0, 0x01, uintptr(unsafe.Pointer(&ob)))
+		r, _, callErr = procCryptUnprotectData.Call(uintptr(unsafe.Pointer(&ib)), 0, 0, 0, 0, 0x01, uintptr(unsafe.Pointer(&ob)))
 	}
 	if r == 0 {
-		return nil, syscall.GetLastError()
+		if callErr != nil && callErr != syscall.Errno(0) {
+			return nil, callErr
+		}
+		if protect {
+			return nil, errors.New("Windows could not protect the workspace key")
+		}
+		return nil, errors.New("Windows could not unlock the workspace key")
+	}
+	if ob.cbData == 0 || ob.pbData == nil {
+		return nil, errors.New("Windows returned empty protected key material")
 	}
 	defer procLocalFree.Call(uintptr(unsafe.Pointer(ob.pbData)))
 	out := make([]byte, ob.cbData)
