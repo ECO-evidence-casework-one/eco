@@ -60,6 +60,7 @@ func createPriorSchemaOneWorkspace(t *testing.T, root string, runtime RuntimeIde
 	vault.Workspace.WorkspaceID = ""
 	vault.Workspace.WorkspaceName = ""
 	vault.Workspace.CreatedByBuild = ""
+	vault.Workspace.CreatedByCandidate = ""
 	vault.Workspace.Changes = []ChangeRecord{}
 	err = vault.saveUnlocked()
 	vault.mu.Unlock()

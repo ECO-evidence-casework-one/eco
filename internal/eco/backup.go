@@ -47,6 +47,10 @@ func (v *Vault) CreatePortableBackup(path, passphrase string, progress func(Back
 		return BackupReceipt{}, errors.New("use a backup passphrase of at least 12 characters")
 	}
 	ws := v.Snapshot()
+	objects, err := requiredPreservedObjects(ws)
+	if err != nil {
+		return BackupReceipt{}, err
+	}
 	if filepath.Ext(path) == "" {
 		path += ".ecobackup"
 	}
@@ -99,42 +103,45 @@ func (v *Vault) CreatePortableBackup(path, passphrase string, progress func(Back
 	}
 	hws := sha256.Sum256(workspaceBytes)
 	if progress != nil {
-		progress(BackupProgress{Stage: "Encrypting workspace manifest", Name: "workspace", Item: 0, Items: len(ws.Evidence) + 1})
+		progress(BackupProgress{Stage: "Encrypting workspace manifest", Name: "workspace", Item: 0, Items: len(objects) + 1})
 	}
 	if err = writeBackupRecordHeader(bw, 1, "workspace", "workspace.json", int64(len(workspaceBytes)), hws[:]); err != nil {
 		return BackupReceipt{}, err
 	}
-	if err = writeEncryptedChunks(bw, gcm, prefix, &nonceCounter, 1, "workspace", "workspace.json", bytesReader(workspaceBytes), int64(len(workspaceBytes)), progress, 0, len(ws.Evidence)+1); err != nil {
+	if err = writeEncryptedChunks(bw, gcm, prefix, &nonceCounter, 1, "workspace", "workspace.json", bytesReader(workspaceBytes), int64(len(workspaceBytes)), progress, 0, len(objects)+1); err != nil {
 		return BackupReceipt{}, err
 	}
 	totalPlain += int64(len(workspaceBytes))
-	for i, e := range ws.Evidence {
+	for i, object := range objects {
 		if progress != nil {
-			progress(BackupProgress{Stage: "Reading encrypted original", Name: e.SafeName, Item: i + 1, Items: len(ws.Evidence) + 1, Total: e.Size})
+			progress(BackupProgress{Stage: "Reading encrypted original", Name: object.Name, Item: i + 1, Items: len(objects) + 1, Total: object.Size})
 		}
-		if err = writeBackupRecordHeader(bw, 2, e.ID, e.ID, e.Size, mustDecodeHex(e.SHA256)); err != nil {
+		if _, verifyErr := v.verifyPreservedObject(object.ID, object.ObjectFile, object.SHA256, object.Size); verifyErr != nil {
+			return BackupReceipt{}, fmt.Errorf("%s could not be freshly verified for backup: %w", object.Name, verifyErr)
+		}
+		if err = writeBackupRecordHeader(bw, 2, object.ID, object.ID, object.Size, mustDecodeHex(object.SHA256)); err != nil {
 			return BackupReceipt{}, err
 		}
-		obj, err := os.Open(filepath.Join(v.Objects, e.ObjectFile))
+		obj, err := os.Open(filepath.Join(v.Objects, object.ObjectFile))
 		if err != nil {
-			return BackupReceipt{}, fmt.Errorf("%s: %w", e.SafeName, err)
+			return BackupReceipt{}, fmt.Errorf("%s: %w", object.Name, err)
 		}
-		reader, err := newObjectPlainReader(v.key, e.ID, obj)
+		reader, err := newObjectPlainReader(v.key, object.ID, obj)
 		if err != nil {
 			obj.Close()
-			return BackupReceipt{}, fmt.Errorf("%s: %w", e.SafeName, err)
+			return BackupReceipt{}, fmt.Errorf("%s: %w", object.Name, err)
 		}
-		err = writeEncryptedChunks(bw, gcm, prefix, &nonceCounter, 2, e.ID, e.ID, reader, e.Size, func(p BackupProgress) {
+		err = writeEncryptedChunks(bw, gcm, prefix, &nonceCounter, 2, object.ID, object.ID, reader, object.Size, func(p BackupProgress) {
 			if progress != nil {
-				p.Name = e.SafeName
+				p.Name = object.Name
 				progress(p)
 			}
-		}, i+1, len(ws.Evidence)+1)
+		}, i+1, len(objects)+1)
 		obj.Close()
 		if err != nil {
-			return BackupReceipt{}, fmt.Errorf("%s: %w", e.SafeName, err)
+			return BackupReceipt{}, fmt.Errorf("%s: %w", object.Name, err)
 		}
-		totalPlain += e.Size
+		totalPlain += object.Size
 	}
 	if err = bw.WriteByte(0xff); err != nil {
 		return BackupReceipt{}, err
@@ -160,8 +167,8 @@ func (v *Vault) CreatePortableBackup(path, passphrase string, progress func(Back
 	if err != nil {
 		return BackupReceipt{}, err
 	}
-	v.AddChange("user", "portable-backup-created", "Created encrypted portable backup", map[string]any{"file": filepath.Base(path), "items": len(ws.Evidence), "sha256": digest})
-	return BackupReceipt{Format: "ECOBKP1", BuildID: v.runtime.BuildID, EvidenceItems: len(ws.Evidence), PlainBytes: totalPlain, BackupBytes: info.Size(), SHA256: digest, Path: path}, nil
+	v.AddChange("user", "portable-backup-created", "Created encrypted portable backup", map[string]any{"file": filepath.Base(path), "items": len(objects), "sha256": digest})
+	return BackupReceipt{Format: "ECOBKP1", BuildID: v.runtime.BuildID, EvidenceItems: len(objects), PlainBytes: totalPlain, BackupBytes: info.Size(), SHA256: digest, Path: path}, nil
 }
 
 func writeBackupRecordHeader(w io.Writer, typ byte, id, name string, size int64, hash []byte) error {
@@ -368,11 +375,19 @@ type RestoreReceipt struct {
 	SourceSHA256    string `json:"source_sha256"`
 }
 
+type RestorePhase string
+
+const restoreStageReady RestorePhase = "stage-ready"
+
 // RestorePortableBackup authenticates and validates a portable backup in a
 // separate staging vault. The active vault is replaced only after every
 // record, hash, relationship and staged encrypted object has passed checks.
 // If activation fails, the original vault is rolled back.
 func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(BackupProgress)) (RestoreReceipt, error) {
+	return v.restorePortableBackup(path, passphrase, progress, nil)
+}
+
+func (v *Vault) restorePortableBackup(path, passphrase string, progress func(BackupProgress), hook func(RestorePhase, *Vault) error) (RestoreReceipt, error) {
 	if len([]rune(passphrase)) < 12 {
 		return RestoreReceipt{}, errors.New("backup passphrase must be at least 12 characters")
 	}
@@ -455,6 +470,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}()
 
 	var ws Workspace
+	var requiredObjects []preservedObjectSpec
 	workspaceSeen := false
 	restored := make(map[string]bool)
 	var totalBytes int64
@@ -533,6 +549,10 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 			if err = validateRestoredWorkspace(&ws, v.runtime.Schema); err != nil {
 				return RestoreReceipt{}, err
 			}
+			requiredObjects, err = requiredPreservedObjects(ws)
+			if err != nil {
+				return RestoreReceipt{}, fmt.Errorf("backup preservation manifest is invalid: %w", err)
+			}
 			workspaceSeen = true
 
 		case 2:
@@ -542,20 +562,21 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 			if name != id || restored[id] {
 				return RestoreReceipt{}, errors.New("duplicate or non-opaque evidence record")
 			}
-			displayName := restoreDisplayName(ws, id)
-			if displayName == "" {
+			object, referenced := preservedObjectForID(requiredObjects, id)
+			if !referenced {
 				return RestoreReceipt{}, errors.New("backup contains evidence not referenced by the workspace")
 			}
+			displayName := object.Name
 			if progress != nil {
 				progress(BackupProgress{
 					Stage: "Restoring encrypted original",
 					Name:  displayName,
 					Item:  len(restored) + 1,
-					Items: len(ws.Evidence),
+					Items: len(requiredObjects),
 					Total: size,
 				})
 			}
-			objectPath := filepath.Join(stage.Objects, id+".ecoobj")
+			objectPath := filepath.Join(stage.Objects, object.ObjectFile)
 			err = encryptStream(stage.key, id, counted, objectPath, size, func(p ImportProgress) {
 				if progress != nil {
 					progress(BackupProgress{
@@ -564,7 +585,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 						Current: p.Current,
 						Total:   size,
 						Item:    len(restored) + 1,
-						Items:   len(ws.Evidence),
+						Items:   len(requiredObjects),
 					})
 				}
 			}, "", displayName)
@@ -594,22 +615,27 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	if !workspaceSeen {
 		return RestoreReceipt{}, errors.New("backup does not contain a workspace manifest")
 	}
-	if len(restored) != len(ws.Evidence) {
-		return RestoreReceipt{}, fmt.Errorf("backup has %d evidence objects but workspace requires %d", len(restored), len(ws.Evidence))
+	if len(restored) != len(requiredObjects) {
+		return RestoreReceipt{}, fmt.Errorf("backup has %d preserved objects but workspace requires %d", len(restored), len(requiredObjects))
+	}
+	for _, object := range requiredObjects {
+		if !restored[object.ID] {
+			return RestoreReceipt{}, fmt.Errorf("missing preserved object %s", object.ID)
+		}
 	}
 	for i := range ws.Evidence {
 		e := &ws.Evidence[i]
-		if !restored[e.ID] {
-			return RestoreReceipt{}, fmt.Errorf("missing evidence object %s", e.ID)
-		}
-		e.ObjectFile = e.ID + ".ecoobj"
 		e.SourcePath = ""
+	}
+	for i := range ws.Preservations {
+		ws.Preservations[i].SourcePath = ""
 	}
 
 	stage.mu.Lock()
 	stage.Workspace = ws
 	stage.Workspace.BuildID = v.runtime.BuildID
-	stage.Identity = WorkspaceIdentity{Format: workspaceIdentityFormat, ID: ws.WorkspaceID, Name: ws.WorkspaceName, Kind: "development", Schema: ws.Schema, CreatedAt: ws.CreatedAt, CreatedByBuild: ws.CreatedByBuild}
+	stage.Workspace.CreatedByCandidate = v.runtime.CandidateID
+	stage.Identity = WorkspaceIdentity{Format: workspaceIdentityFormat, ID: ws.WorkspaceID, Name: ws.WorkspaceName, Kind: "development", Schema: ws.Schema, CreatedAt: ws.CreatedAt, CreatedByBuild: ws.CreatedByBuild, CreatedByCandidate: v.runtime.CandidateID}
 	stage.addChangeUnlocked("system", "portable-backup-restored", "Restored and validated encrypted portable backup", map[string]any{
 		"source_build":  sourceBuild,
 		"source_sha256": sourceHash,
@@ -622,6 +648,11 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}
 	if err = writeWorkspaceIdentity(stage.Root, stage.Identity); err != nil {
 		return RestoreReceipt{}, err
+	}
+	if hook != nil {
+		if err = hook(restoreStageReady, stage); err != nil {
+			return RestoreReceipt{}, err
+		}
 	}
 	if err = verifyStagedVault(stage); err != nil {
 		return RestoreReceipt{}, err
@@ -770,20 +801,68 @@ func safeRecordID(s string) bool {
 	return true
 }
 
-func restoreDisplayName(ws Workspace, id string) string {
-	for _, e := range ws.Evidence {
-		if e.ID == id {
-			return e.SafeName
+type preservedObjectSpec struct {
+	ID         string
+	ObjectFile string
+	Name       string
+	Size       int64
+	SHA256     string
+}
+
+func requiredPreservedObjects(ws Workspace) ([]preservedObjectSpec, error) {
+	objects := make([]preservedObjectSpec, 0, len(ws.Evidence)+len(ws.Preservations))
+	byEvidence := map[string]preservedObjectSpec{}
+	for _, item := range ws.Evidence {
+		if !safeRecordID(item.ID) || !safeManagedObjectName(item.ObjectFile) || item.Size < 0 || len(item.SHA256) != sha256.Size*2 {
+			return nil, errors.New("workspace evidence has an invalid preserved-object receipt")
+		}
+		spec := preservedObjectSpec{ID: item.ID, ObjectFile: item.ObjectFile, Name: item.SafeName, Size: item.Size, SHA256: item.SHA256}
+		if _, exists := byEvidence[item.ID]; exists {
+			return nil, errors.New("workspace evidence has duplicate preserved-object identities")
+		}
+		byEvidence[item.ID] = spec
+		objects = append(objects, spec)
+	}
+	for _, record := range ws.Preservations {
+		switch record.State {
+		case preservationCommitted:
+			spec, exists := byEvidence[record.EvidenceID]
+			if !exists || spec.ObjectFile != record.ObjectFile || spec.Size != record.ExpectedSize || spec.SHA256 != record.PreservedSHA256 {
+				return nil, errors.New("a committed preservation receipt does not match its usable evidence record")
+			}
+		case preservationFailed:
+			continue
+		case preservationRecoverable:
+			if !safeRecordID(record.EvidenceID) || !safeManagedObjectName(record.ObjectFile) || record.ExpectedSize < 0 || record.BytesPreserved != record.ExpectedSize || record.PreservedSHA256 == "" || record.PreservedSHA256 != record.IntakeSHA256 || record.VerifiedAt.IsZero() {
+				return nil, errors.New("a pending preservation is not complete enough for a truthful backup")
+			}
+			if _, exists := byEvidence[record.EvidenceID]; exists {
+				return nil, errors.New("a pending preservation duplicates an evidence object")
+			}
+			spec := preservedObjectSpec{ID: record.EvidenceID, ObjectFile: record.ObjectFile, Name: record.SafeName, Size: record.ExpectedSize, SHA256: record.PreservedSHA256}
+			byEvidence[record.EvidenceID] = spec
+			objects = append(objects, spec)
+		default:
+			return nil, errors.New("backup was blocked because a preservation operation is incomplete")
 		}
 	}
-	return ""
+	return objects, nil
+}
+
+func preservedObjectForID(objects []preservedObjectSpec, id string) (preservedObjectSpec, bool) {
+	for _, object := range objects {
+		if object.ID == id {
+			return object, true
+		}
+	}
+	return preservedObjectSpec{}, false
 }
 
 func validateRestoredWorkspace(ws *Workspace, expectedSchema int) error {
 	if ws.Schema != expectedSchema {
 		return fmt.Errorf("unsupported restored workspace schema %d", ws.Schema)
 	}
-	if !safeRecordID(ws.WorkspaceID) || !validWorkspaceName(ws.WorkspaceName) || !validIdentityLabel(ws.CreatedByBuild, 128) || ws.CreatedAt.IsZero() {
+	if !safeRecordID(ws.WorkspaceID) || !validWorkspaceName(ws.WorkspaceName) || !validIdentityLabel(ws.CreatedByBuild, 128) || !validIdentityLabel(ws.CreatedByCandidate, 256) || ws.CreatedAt.IsZero() {
 		return errors.New("restored workspace identity is invalid")
 	}
 	if len(ws.Evidence) > 100000 || len(ws.Matters) > 100000 || len(ws.Changes) > 500000 || len(ws.Questions) > 100000 {
@@ -864,24 +943,17 @@ func validateRestoredWorkspace(ws *Workspace, expectedSchema int) error {
 
 func verifyStagedVault(v *Vault) error {
 	ws := v.Snapshot()
-	for _, e := range ws.Evidence {
-		f, err := os.Open(filepath.Join(v.Objects, e.ObjectFile))
-		if err != nil {
-			return fmt.Errorf("staged object missing for %s", e.SafeName)
+	objects, err := requiredPreservedObjects(ws)
+	if err != nil {
+		return err
+	}
+	for _, object := range objects {
+		receipt, verifyErr := v.verifyPreservedObject(object.ID, object.ObjectFile, object.SHA256, object.Size)
+		if verifyErr != nil {
+			return fmt.Errorf("staged object verification failed for %s: %w", object.Name, verifyErr)
 		}
-		plain, err := newObjectPlainReader(v.key, e.ID, f)
-		if err != nil {
-			f.Close()
-			return fmt.Errorf("staged object invalid for %s: %w", e.SafeName, err)
-		}
-		h := sha256.New()
-		n, copyErr := io.Copy(h, plain)
-		f.Close()
-		if copyErr != nil {
-			return fmt.Errorf("staged object authentication failed for %s: %w", e.SafeName, copyErr)
-		}
-		if n != e.Size || hex.EncodeToString(h.Sum(nil)) != e.SHA256 {
-			return fmt.Errorf("staged object integrity mismatch for %s", e.SafeName)
+		if receipt.ObjectFile != object.ObjectFile || receipt.SHA256 != object.SHA256 || receipt.Size != object.Size {
+			return fmt.Errorf("staged object receipt mismatch for %s", object.Name)
 		}
 	}
 	return nil

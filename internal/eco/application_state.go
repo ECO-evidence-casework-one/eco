@@ -14,14 +14,13 @@ import (
 	"unicode"
 )
 
-const candidateStateSchema = 1
+const candidateStateSchema = 2
 
 type CandidateEvent struct {
 	ID          string    `json:"id"`
 	At          time.Time `json:"at"`
 	Action      string    `json:"action"`
 	WorkspaceID string    `json:"workspace_id,omitempty"`
-	Path        string    `json:"path,omitempty"`
 	Outcome     string    `json:"outcome"`
 	Summary     string    `json:"summary"`
 	PrevHash    string    `json:"prev_hash,omitempty"`
@@ -32,9 +31,9 @@ type CandidateState struct {
 	Schema            int              `json:"schema"`
 	CandidateID       string           `json:"candidate_id"`
 	BuildID           string           `json:"build_id"`
-	StateRoot         string           `json:"state_root"`
-	DefaultWorkspace  string           `json:"default_workspace"`
-	SelectedWorkspace string           `json:"selected_workspace"`
+	StateRoot         string           `json:"-"`
+	DefaultWorkspace  string           `json:"-"`
+	SelectedWorkspace string           `json:"-"`
 	Events            []CandidateEvent `json:"events"`
 }
 
@@ -107,12 +106,14 @@ func StartCandidate(baseStateRoot string, runtime RuntimeIdentity) (*CandidateAp
 		return app, nil
 	}
 
-	if err = validateCandidateState(state, stateRoot, defaultWorkspace, runtime); err != nil {
+	if err = validateCandidateState(state, runtime); err != nil {
 		return nil, err
 	}
 	app.State = state
-	app.State.BuildID = runtime.BuildID
+	app.State.StateRoot = stateRoot
+	app.State.DefaultWorkspace = defaultWorkspace
 	app.State.SelectedWorkspace = defaultWorkspace
+	app.State.BuildID = runtime.BuildID
 
 	if _, err = os.Stat(migrationStatePath(defaultWorkspace)); err == nil {
 		session, receipt, recoverErr := RecoverWorkspace(defaultWorkspace, runtime)
@@ -131,7 +132,15 @@ func StartCandidate(baseStateRoot string, runtime RuntimeIdentity) (*CandidateAp
 		return nil, fmt.Errorf("inspect candidate workspace recovery state: %w", err)
 	}
 
-	v, err := openVault(defaultWorkspace, runtime)
+	inspected, err := inspectWorkspace(defaultWorkspace, runtime)
+	if err != nil {
+		return nil, fmt.Errorf("this candidate's development workspace could not be reopened safely: %w", err)
+	}
+	if inspected.Workspace.CreatedByCandidate != runtime.CandidateID || inspected.Identity.CreatedByCandidate != runtime.CandidateID || inspected.Workspace.BuildID != runtime.BuildID {
+		zeroBytes(inspected.key)
+		return nil, errors.New("this candidate's automatic workspace belongs to another development candidate; select it deliberately instead")
+	}
+	v, err := openInspectedVault(inspected, runtime)
 	if err != nil {
 		return nil, fmt.Errorf("this candidate's development workspace could not be reopened safely: %w", err)
 	}
@@ -157,13 +166,17 @@ func startFirstCandidateWorkspace(stateRoot, defaultWorkspace string, runtime Ru
 		if !info.IsDir() {
 			return WorkspaceSession{}, false, errors.New("candidate startup was blocked because its development workspace path is not a folder")
 		}
-		v, openErr := openVault(defaultWorkspace, runtime)
-		if openErr != nil {
+		inspected, inspectErr := inspectWorkspace(defaultWorkspace, runtime)
+		if inspectErr != nil {
 			return WorkspaceSession{}, false, errors.New("candidate application state is incomplete and the existing development workspace could not be verified; nothing was opened")
 		}
-		if v.Identity.CreatedByBuild != runtime.BuildID {
-			v.Close()
-			return WorkspaceSession{}, false, errors.New("candidate application state is incomplete and the existing workspace belongs to another build; nothing was opened")
+		if inspected.Identity.CreatedByCandidate != runtime.CandidateID || inspected.Workspace.CreatedByCandidate != runtime.CandidateID || inspected.Workspace.BuildID != runtime.BuildID {
+			zeroBytes(inspected.key)
+			return WorkspaceSession{}, false, errors.New("candidate application state is incomplete and the existing workspace belongs to another development candidate; nothing was opened automatically")
+		}
+		v, openErr := openInspectedVault(inspected, runtime)
+		if openErr != nil {
+			return WorkspaceSession{}, false, errors.New("candidate application state is incomplete and the existing development workspace could not be verified; nothing was opened")
 		}
 		if recordErr := v.recordLifecycle("system", "workspace-recovered", "Recovered candidate application state without importing another candidate's data", map[string]any{
 			"build": runtime.BuildID,
@@ -197,7 +210,7 @@ func (a *CandidateApplication) CreateWorkspace(path, name string) (WorkspaceSess
 	defer a.mu.Unlock()
 	v, err := createVault(path, name, a.Runtime)
 	if err != nil {
-		a.addPathEvent("workspace-created", path, "", "blocked", err.Error())
+		a.addCandidateEvent("workspace-created", "", "blocked", err.Error())
 		_ = saveCandidateState(a.statePath(), a.State)
 		return WorkspaceSession{}, err
 	}
@@ -213,7 +226,7 @@ func (a *CandidateApplication) OpenWorkspace(path string) (WorkspaceSession, err
 	defer a.mu.Unlock()
 	v, err := openVault(path, a.Runtime)
 	if err != nil {
-		a.addPathEvent("workspace-reopened", path, "", "blocked", err.Error())
+		a.addCandidateEvent("workspace-reopened", "", "blocked", err.Error())
 		_ = saveCandidateState(a.statePath(), a.State)
 		return WorkspaceSession{}, err
 	}
@@ -238,7 +251,7 @@ func (a *CandidateApplication) MigrateWorkspace(path string) (WorkspaceSession, 
 	defer a.mu.Unlock()
 	session, receipt, err := MigrateWorkspace(path, a.Runtime)
 	if err != nil {
-		a.addPathEvent("workspace-migration", path, "", "blocked", err.Error())
+		a.addCandidateEvent("workspace-migration", "", "blocked", err.Error())
 		_ = saveCandidateState(a.statePath(), a.State)
 		return WorkspaceSession{}, receipt, err
 	}
@@ -253,7 +266,7 @@ func (a *CandidateApplication) RecoverWorkspace(path string) (WorkspaceSession, 
 	defer a.mu.Unlock()
 	session, receipt, err := RecoverWorkspace(path, a.Runtime)
 	if err != nil {
-		a.addPathEvent("workspace-recovery", path, "", "attention", receipt.Message+" "+err.Error())
+		a.addCandidateEvent("workspace-recovery", "", "attention", receipt.Message+" "+err.Error())
 		_ = saveCandidateState(a.statePath(), a.State)
 		return WorkspaceSession{}, receipt, err
 	}
@@ -268,7 +281,11 @@ func (a *CandidateApplication) ResetCurrentWorkspace() (WorkspaceSession, ResetR
 	defer a.mu.Unlock()
 	receipt, err := resetVault(a.Current.Vault)
 	if err != nil {
-		a.addPathEvent("workspace-reset", a.Current.Path, a.Current.Identity.ID, "blocked", err.Error())
+		outcome := "blocked"
+		if receipt.WorkspaceID != "" {
+			outcome = "attention"
+		}
+		a.addCandidateEvent("workspace-reset", a.Current.Identity.ID, outcome, err.Error())
 		_ = saveCandidateState(a.statePath(), a.State)
 		return WorkspaceSession{}, receipt, err
 	}
@@ -317,10 +334,10 @@ func (a *CandidateApplication) statePath() string {
 }
 
 func (a *CandidateApplication) addEvent(action string, session WorkspaceSession, outcome, summary string) {
-	a.addPathEvent(action, session.Path, session.Identity.ID, outcome, summary)
+	a.addCandidateEvent(action, session.Identity.ID, outcome, summary)
 }
 
-func (a *CandidateApplication) addPathEvent(action, path, workspaceID, outcome, summary string) {
+func (a *CandidateApplication) addCandidateEvent(action, workspaceID, outcome, summary string) {
 	previous := ""
 	if len(a.State.Events) > 0 {
 		previous = a.State.Events[0].Hash
@@ -330,24 +347,42 @@ func (a *CandidateApplication) addPathEvent(action, path, workspaceID, outcome, 
 		At:          time.Now().UTC(),
 		Action:      action,
 		WorkspaceID: workspaceID,
-		Path:        path,
 		Outcome:     outcome,
-		Summary:     summary,
+		Summary:     candidateAuditSummary(action, outcome, summary),
 		PrevHash:    previous,
 	}
 	event.Hash = candidateEventHash(event)
 	a.State.Events = append([]CandidateEvent{event}, a.State.Events...)
 }
 
+func candidateAuditSummary(action, outcome, successSummary string) string {
+	if outcome == "success" {
+		return successSummary
+	}
+	switch action {
+	case "workspace-created":
+		return "Workspace creation was blocked; the selected workspace did not change."
+	case "workspace-reopened":
+		return "Workspace reopening was blocked; nothing was opened by guesswork."
+	case "workspace-migration":
+		return "Workspace migration was blocked; unverified state was not selected."
+	case "workspace-recovery":
+		return "Workspace recovery needs attention; unauthenticated state was not selected."
+	case "workspace-reset":
+		return "Workspace reset needs attention; unsafe object cleanup was blocked."
+	default:
+		return "The workspace action needs attention; no workspace was selected by guesswork."
+	}
+}
+
 func candidateEventHash(event CandidateEvent) string {
 	value := struct {
-		ID, Action, WorkspaceID, Path, Outcome, Summary, PrevHash string
-		At                                                        time.Time
+		ID, Action, WorkspaceID, Outcome, Summary, PrevHash string
+		At                                                  time.Time
 	}{
 		ID:          event.ID,
 		Action:      event.Action,
 		WorkspaceID: event.WorkspaceID,
-		Path:        event.Path,
 		Outcome:     event.Outcome,
 		Summary:     event.Summary,
 		PrevHash:    event.PrevHash,
@@ -401,15 +436,15 @@ func readCandidateState(path string) (CandidateState, error) {
 	return state, nil
 }
 
-func validateCandidateState(state CandidateState, stateRoot, defaultWorkspace string, runtime RuntimeIdentity) error {
+func validateCandidateState(state CandidateState, runtime RuntimeIdentity) error {
 	if state.Schema != candidateStateSchema {
 		return errors.New("this candidate's application state has an unsupported format; startup was blocked")
 	}
 	if state.CandidateID != runtime.CandidateID {
 		return errors.New("this application state belongs to another development candidate; startup was blocked")
 	}
-	if state.StateRoot != stateRoot || state.DefaultWorkspace != defaultWorkspace {
-		return errors.New("this candidate's application state contains an unexpected workspace path; startup was blocked")
+	if state.BuildID != runtime.BuildID {
+		return errors.New("this candidate's application state names another build; startup was blocked")
 	}
 	previous := ""
 	for i := len(state.Events) - 1; i >= 0; i-- {

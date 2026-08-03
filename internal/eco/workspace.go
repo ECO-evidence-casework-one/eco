@@ -87,13 +87,14 @@ func candidateIDForSource(buildID, revision string, modified bool, artifactSHA25
 }
 
 type WorkspaceIdentity struct {
-	Format         string    `json:"format"`
-	ID             string    `json:"id"`
-	Name           string    `json:"name"`
-	Kind           string    `json:"kind"`
-	Schema         int       `json:"schema"`
-	CreatedAt      time.Time `json:"created_at"`
-	CreatedByBuild string    `json:"created_by_build"`
+	Format             string    `json:"format"`
+	ID                 string    `json:"id"`
+	Kind               string    `json:"kind"`
+	Schema             int       `json:"schema"`
+	CreatedByCandidate string    `json:"created_by_candidate"`
+	Name               string    `json:"-"`
+	CreatedAt          time.Time `json:"-"`
+	CreatedByBuild     string    `json:"-"`
 }
 
 type CompatibilityStatus string
@@ -108,14 +109,16 @@ const (
 )
 
 type WorkspaceCompatibility struct {
-	Status          CompatibilityStatus `json:"status"`
-	Message         string              `json:"message"`
-	WorkspaceSchema int                 `json:"workspace_schema"`
-	BuildSchema     int                 `json:"build_schema"`
-	WorkspaceBuild  string              `json:"workspace_build"`
-	CurrentBuild    string              `json:"current_build"`
-	CanOpen         bool                `json:"can_open"`
-	CanMigrate      bool                `json:"can_migrate"`
+	Status             CompatibilityStatus `json:"status"`
+	Message            string              `json:"message"`
+	WorkspaceSchema    int                 `json:"workspace_schema"`
+	BuildSchema        int                 `json:"build_schema"`
+	WorkspaceBuild     string              `json:"workspace_build"`
+	CurrentBuild       string              `json:"current_build"`
+	WorkspaceCandidate string              `json:"workspace_candidate"`
+	CurrentCandidate   string              `json:"current_candidate"`
+	CanOpen            bool                `json:"can_open"`
+	CanMigrate         bool                `json:"can_migrate"`
 }
 
 type CompatibilityError struct {
@@ -190,19 +193,20 @@ func normaliseWorkspaceRoot(root string) (string, error) {
 func newWorkspaceForRuntime(runtime RuntimeIdentity, id, name string) Workspace {
 	now := time.Now().UTC()
 	return Workspace{
-		Schema:         runtime.Schema,
-		BuildID:        runtime.BuildID,
-		WorkspaceID:    id,
-		WorkspaceName:  name,
-		CreatedByBuild: runtime.BuildID,
-		CreatedAt:      now,
-		UpdatedAt:      now,
-		Evidence:       []EvidenceItem{},
-		Preservations:  []PreservationRecord{},
-		Matters:        []Matter{},
-		Changes:        []ChangeRecord{},
-		Questions:      []QuestionRecord{},
-		SelectedPage:   "home",
+		Schema:             runtime.Schema,
+		BuildID:            runtime.BuildID,
+		WorkspaceID:        id,
+		WorkspaceName:      name,
+		CreatedByBuild:     runtime.BuildID,
+		CreatedByCandidate: runtime.CandidateID,
+		CreatedAt:          now,
+		UpdatedAt:          now,
+		Evidence:           []EvidenceItem{},
+		Preservations:      []PreservationRecord{},
+		Matters:            []Matter{},
+		Changes:            []ChangeRecord{},
+		Questions:          []QuestionRecord{},
+		SelectedPage:       "home",
 	}
 }
 
@@ -236,8 +240,8 @@ func createVault(root, name string, runtime RuntimeIdentity) (*Vault, error) {
 		return nil, errors.New("the selected workspace path is not a folder")
 	default:
 		linkInfo, linkErr := os.Lstat(absolute)
-		if linkErr != nil || linkInfo.Mode()&os.ModeSymlink != 0 {
-			return nil, errors.New("a new workspace cannot be created through a symbolic link")
+		if linkErr != nil || linkInfo.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(linkInfo) {
+			return nil, errors.New("a new workspace cannot be created through a symbolic link, junction or reparse point")
 		}
 		entries, readErr := os.ReadDir(absolute)
 		if readErr != nil {
@@ -273,13 +277,14 @@ func createVault(root, name string, runtime RuntimeIdentity) (*Vault, error) {
 	}
 	id := NewID("WS")
 	identity := WorkspaceIdentity{
-		Format:         workspaceIdentityFormat,
-		ID:             id,
-		Name:           name,
-		Kind:           "development",
-		Schema:         runtime.Schema,
-		CreatedAt:      time.Now().UTC(),
-		CreatedByBuild: runtime.BuildID,
+		Format:             workspaceIdentityFormat,
+		ID:                 id,
+		Name:               name,
+		Kind:               "development",
+		Schema:             runtime.Schema,
+		CreatedAt:          time.Now().UTC(),
+		CreatedByBuild:     runtime.BuildID,
+		CreatedByCandidate: runtime.CandidateID,
 	}
 	v := &Vault{
 		Root:      absolute,
@@ -330,17 +335,14 @@ func openInspectedVault(inspected inspectedWorkspace, runtime RuntimeIdentity) (
 		return nil, &CompatibilityError{Report: inspected.Compatibility}
 	}
 	objects := filepath.Join(inspected.Path, "objects")
-	info, err := os.Stat(objects)
-	if err != nil || !info.IsDir() {
+	objectsCanonical, err := validateObjectsDirectory(inspected.Path, objects)
+	if err != nil {
 		zeroBytes(inspected.key)
-		if err == nil {
-			err = errors.New("encrypted object path is not a folder")
-		}
-		return nil, fmt.Errorf("workspace object folder is unavailable: %w", err)
+		return nil, fmt.Errorf("workspace object folder is unavailable or unsafe: %w", err)
 	}
 	v := &Vault{
 		Root:      inspected.Path,
-		Objects:   objects,
+		Objects:   objectsCanonical,
 		Identity:  inspected.Identity,
 		key:       inspected.key,
 		runtime:   runtime,
@@ -386,13 +388,6 @@ func inspectWorkspaceAt(root string, runtime RuntimeIdentity, checkRecovery bool
 	if err != nil {
 		return inspectedWorkspace{}, err
 	}
-	if checkRecovery {
-		if _, err = os.Stat(migrationStatePath(absolute)); err == nil {
-			return inspectedWorkspace{}, &RecoveryRequiredError{Path: absolute}
-		} else if !os.IsNotExist(err) {
-			return inspectedWorkspace{}, fmt.Errorf("check workspace recovery state: %w", err)
-		}
-	}
 	info, err := os.Stat(absolute)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -402,6 +397,21 @@ func inspectWorkspaceAt(root string, runtime RuntimeIdentity, checkRecovery bool
 	}
 	if !info.IsDir() {
 		return inspectedWorkspace{}, errors.New("the selected ECO workspace is not a folder")
+	}
+	linkInfo, linkErr := os.Lstat(absolute)
+	if linkErr != nil || linkInfo.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(linkInfo) {
+		return inspectedWorkspace{}, errors.New("the selected ECO workspace cannot be opened through a symbolic link, junction or reparse point")
+	}
+	absolute, err = canonicalNormalDirectory(absolute, "the selected ECO workspace")
+	if err != nil {
+		return inspectedWorkspace{}, fmt.Errorf("resolve the selected ECO workspace safely: %w", err)
+	}
+	if checkRecovery {
+		if _, err = os.Lstat(migrationStatePath(absolute)); err == nil {
+			return inspectedWorkspace{}, &RecoveryRequiredError{Path: absolute}
+		} else if !os.IsNotExist(err) {
+			return inspectedWorkspace{}, fmt.Errorf("check workspace recovery state: %w", err)
+		}
 	}
 	key, err := loadExistingMasterKey(filepath.Join(absolute, "vault.key"))
 	if err != nil {
@@ -419,22 +429,20 @@ func inspectWorkspaceAt(root string, runtime RuntimeIdentity, checkRecovery bool
 			return inspectedWorkspace{}, identityErr
 		}
 		identity = WorkspaceIdentity{
-			Format:         workspaceIdentityFormat,
-			ID:             ws.WorkspaceID,
-			Name:           ws.WorkspaceName,
-			Kind:           "development",
-			Schema:         ws.Schema,
-			CreatedAt:      ws.CreatedAt,
-			CreatedByBuild: ws.CreatedByBuild,
-		}
-		if identity.Name == "" {
-			identity.Name = filepath.Base(absolute) + " (older ECO workspace)"
+			Format:             workspaceIdentityFormat,
+			ID:                 ws.WorkspaceID,
+			Kind:               "development",
+			Schema:             ws.Schema,
+			CreatedByCandidate: ws.CreatedByCandidate,
 		}
 	}
 	if err = validateWorkspaceIdentity(identity, ws); err != nil {
 		zeroBytes(key)
 		return inspectedWorkspace{}, err
 	}
+	identity.Name = ws.WorkspaceName
+	identity.CreatedAt = ws.CreatedAt
+	identity.CreatedByBuild = ws.CreatedByBuild
 	report := compatibilityFor(ws, runtime)
 	return inspectedWorkspace{
 		Path:          absolute,
@@ -447,19 +455,21 @@ func inspectWorkspaceAt(root string, runtime RuntimeIdentity, checkRecovery bool
 
 func compatibilityFor(ws Workspace, runtime RuntimeIdentity) WorkspaceCompatibility {
 	report := WorkspaceCompatibility{
-		WorkspaceSchema: ws.Schema,
-		BuildSchema:     runtime.Schema,
-		WorkspaceBuild:  ws.BuildID,
-		CurrentBuild:    runtime.BuildID,
+		WorkspaceSchema:    ws.Schema,
+		BuildSchema:        runtime.Schema,
+		WorkspaceBuild:     ws.BuildID,
+		CurrentBuild:       runtime.BuildID,
+		WorkspaceCandidate: ws.CreatedByCandidate,
+		CurrentCandidate:   runtime.CandidateID,
 	}
 	switch {
-	case ws.Schema == runtime.Schema && ws.BuildID == runtime.BuildID:
+	case ws.Schema == runtime.Schema && ws.BuildID == runtime.BuildID && ws.CreatedByCandidate == runtime.CandidateID:
 		report.Status = CompatibilityCurrent
 		report.Message = fmt.Sprintf("Compatible with this build (workspace format %d).", runtime.Schema)
 		report.CanOpen = true
 	case ws.Schema == runtime.Schema:
 		report.Status = CompatibilityCompatibleBuild
-		report.Message = fmt.Sprintf("Compatible workspace from build %s. This build can reopen it without changing its format.", layBuild(ws.BuildID))
+		report.Message = fmt.Sprintf("Compatible external workspace from build %s. It was created by another development candidate and is open only because you selected it deliberately.", layBuild(ws.BuildID))
 		report.CanOpen = true
 	case ws.Schema == 1 && runtime.Schema == 2:
 		report.Status = CompatibilityMigrationNeeded
@@ -538,14 +548,11 @@ func validateWorkspaceIdentity(identity WorkspaceIdentity, ws Workspace) error {
 		if !safeRecordID(identity.ID) || !safeRecordID(ws.WorkspaceID) || identity.ID != ws.WorkspaceID {
 			return errors.New("the workspace identity does not match the encrypted record; opening was blocked")
 		}
-		if !validWorkspaceName(identity.Name) || !validWorkspaceName(ws.WorkspaceName) || identity.Name != ws.WorkspaceName {
-			return errors.New("the workspace name does not match the encrypted record; opening was blocked")
+		if !validWorkspaceName(ws.WorkspaceName) || !validIdentityLabel(ws.CreatedByBuild, 128) || ws.CreatedAt.IsZero() {
+			return errors.New("the authenticated workspace creation record is incomplete; opening was blocked")
 		}
-		if !validIdentityLabel(identity.CreatedByBuild, 128) || !validIdentityLabel(ws.CreatedByBuild, 128) || identity.CreatedByBuild != ws.CreatedByBuild {
-			return errors.New("the workspace creation identity does not match the encrypted record; opening was blocked")
-		}
-		if identity.CreatedAt.IsZero() || ws.CreatedAt.IsZero() || !identity.CreatedAt.Equal(ws.CreatedAt) {
-			return errors.New("the workspace creation time does not match the encrypted record; opening was blocked")
+		if !validIdentityLabel(identity.CreatedByCandidate, 256) || !validIdentityLabel(ws.CreatedByCandidate, 256) || identity.CreatedByCandidate != ws.CreatedByCandidate {
+			return errors.New("the workspace candidate identity is absent or does not match the authenticated record; opening was blocked")
 		}
 	}
 	return nil
@@ -619,7 +626,15 @@ type ResetReceipt struct {
 	CleanupWarnings   []string
 }
 
+type ResetPhase string
+
+const resetBeforeObjectCleanup ResetPhase = "before-object-cleanup"
+
 func resetVault(v *Vault) (ResetReceipt, error) {
+	return resetVaultWithHook(v, nil)
+}
+
+func resetVaultWithHook(v *Vault, hook func(ResetPhase) error) (ResetReceipt, error) {
 	if v == nil {
 		return ResetReceipt{}, errors.New("no ECO development workspace is selected")
 	}
@@ -630,8 +645,12 @@ func resetVault(v *Vault) (ResetReceipt, error) {
 	if absolute != v.Root {
 		return ResetReceipt{}, errors.New("the selected workspace path changed unexpectedly; reset was blocked")
 	}
-	if info, statErr := os.Lstat(v.Root); statErr != nil || info.Mode()&os.ModeSymlink != 0 {
-		return ResetReceipt{}, errors.New("reset was blocked because the selected workspace folder is unavailable or is a symbolic link")
+	if info, statErr := os.Lstat(v.Root); statErr != nil || info.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(info) {
+		return ResetReceipt{}, errors.New("reset was blocked because the selected workspace folder is unavailable or is a symbolic link, junction or reparse point")
+	}
+	objectsCanonical, err := validateObjectsDirectory(v.Root, v.Objects)
+	if err != nil {
+		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed because the encrypted object folder is unsafe: %w", err)
 	}
 	v.opMu.Lock()
 	defer v.opMu.Unlock()
@@ -650,6 +669,21 @@ func resetVault(v *Vault) (ResetReceipt, error) {
 		return ResetReceipt{}, errors.New("reset was blocked because the selected workspace identity changed")
 	}
 	old := v.Workspace
+	managed := make(map[string]bool)
+	for _, item := range old.Evidence {
+		managed[item.ObjectFile] = true
+	}
+	for _, record := range old.Preservations {
+		managed[record.ObjectFile] = true
+		managed[record.ObjectFile+".part"] = true
+		managed[record.ObjectFile+".tmp"] = true
+	}
+	for name := range managed {
+		if _, targetErr := managedObjectTarget(objectsCanonical, name); targetErr != nil {
+			v.mu.Unlock()
+			return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed: %w", targetErr)
+		}
+	}
 	receipt := ResetReceipt{
 		WorkspaceID:       identity.ID,
 		Path:              v.Root,
@@ -660,6 +694,7 @@ func resetVault(v *Vault) (ResetReceipt, error) {
 	reset := newWorkspaceForRuntime(v.runtime, identity.ID, identity.Name)
 	reset.CreatedAt = old.CreatedAt
 	reset.CreatedByBuild = old.CreatedByBuild
+	reset.CreatedByCandidate = old.CreatedByCandidate
 	previousAudit := ""
 	if len(old.Changes) > 0 {
 		previousAudit = old.Changes[0].Hash
@@ -678,21 +713,37 @@ func resetVault(v *Vault) (ResetReceipt, error) {
 	}
 	v.mu.Unlock()
 
-	managed := make(map[string]bool)
-	for _, item := range old.Evidence {
-		managed[item.ObjectFile] = true
+	if hook != nil {
+		if err = hook(resetBeforeObjectCleanup); err != nil {
+			return receipt, err
+		}
 	}
-	for _, record := range old.Preservations {
-		managed[record.ObjectFile] = true
-		managed[record.ObjectFile+".part"] = true
-		managed[record.ObjectFile+".tmp"] = true
+	objectsCanonical, err = validateObjectsDirectory(v.Root, v.Objects)
+	if err != nil {
+		return receipt, fmt.Errorf("workspace records were reset, but object cleanup was blocked because the objects folder changed: %w", err)
 	}
 	for name := range managed {
-		if !safeManagedObjectName(name) {
-			receipt.CleanupWarnings = append(receipt.CleanupWarnings, "An invalid old object name was ignored.")
-			continue
+		target, targetErr := managedObjectTarget(objectsCanonical, name)
+		if targetErr != nil {
+			return receipt, fmt.Errorf("workspace records were reset, but no objects were deleted: %w", targetErr)
 		}
-		path := filepath.Join(v.Objects, name)
+		if info, statErr := os.Lstat(target); statErr == nil {
+			if info.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(info) || !info.Mode().IsRegular() {
+				return receipt, errors.New("workspace records were reset, but no objects were deleted because a managed object target is not a normal file")
+			}
+		} else if !os.IsNotExist(statErr) {
+			return receipt, fmt.Errorf("workspace records were reset, but no objects were deleted because a managed object could not be inspected: %w", statErr)
+		}
+	}
+	for name := range managed {
+		currentObjects, containmentErr := validateObjectsDirectory(v.Root, v.Objects)
+		if containmentErr != nil || !sameFilesystemPath(currentObjects, objectsCanonical) {
+			return receipt, errors.New("workspace records were reset, but remaining object cleanup stopped because the objects folder changed")
+		}
+		path, targetErr := managedObjectTarget(currentObjects, name)
+		if targetErr != nil {
+			return receipt, targetErr
+		}
 		err = os.Remove(path)
 		if err == nil {
 			receipt.ObjectsRemoved++

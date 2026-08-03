@@ -9,21 +9,22 @@ const (
 )
 
 type Workspace struct {
-	Schema         int                  `json:"schema"`
-	BuildID        string               `json:"build_id"`
-	WorkspaceID    string               `json:"workspace_id"`
-	WorkspaceName  string               `json:"workspace_name"`
-	CreatedByBuild string               `json:"created_by_build"`
-	CreatedAt      time.Time            `json:"created_at"`
-	UpdatedAt      time.Time            `json:"updated_at"`
-	Evidence       []EvidenceItem       `json:"evidence"`
-	Preservations  []PreservationRecord `json:"preservations,omitempty"`
-	Matters        []Matter             `json:"matters"`
-	Changes        []ChangeRecord       `json:"changes"`
-	Questions      []QuestionRecord     `json:"questions"`
-	SelectedID     string               `json:"selected_id,omitempty"`
-	SelectedPage   string               `json:"selected_page,omitempty"`
-	Settings       Settings             `json:"settings"`
+	Schema             int                  `json:"schema"`
+	BuildID            string               `json:"build_id"`
+	WorkspaceID        string               `json:"workspace_id"`
+	WorkspaceName      string               `json:"workspace_name"`
+	CreatedByBuild     string               `json:"created_by_build"`
+	CreatedByCandidate string               `json:"created_by_candidate"`
+	CreatedAt          time.Time            `json:"created_at"`
+	UpdatedAt          time.Time            `json:"updated_at"`
+	Evidence           []EvidenceItem       `json:"evidence"`
+	Preservations      []PreservationRecord `json:"preservations,omitempty"`
+	Matters            []Matter             `json:"matters"`
+	Changes            []ChangeRecord       `json:"changes"`
+	Questions          []QuestionRecord     `json:"questions"`
+	SelectedID         string               `json:"selected_id,omitempty"`
+	SelectedPage       string               `json:"selected_page,omitempty"`
+	Settings           Settings             `json:"settings"`
 }
 
 type Settings struct {

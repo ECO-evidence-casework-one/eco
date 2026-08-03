@@ -14,6 +14,8 @@ Future functionality must not weaken this rule. Components requiring online oper
 
 ECO's maintainers do not receive, host, inspect or administer users' casework or evidence. A user controls the local workspace and any backup or export they create.
 
+Casework content, including evidence, conversations, settings, workspace names and creation details, is kept in the encrypted workspace. ECO retains only minimal local routing information in plaintext: workspace format, opaque workspace ID, development kind, schema and exact candidate identity; candidate app-state also contains candidate/build identity and opaque hash-chained action audit fields without workspace names or full paths. During an unfinished migration, an authenticated plaintext recovery record temporarily contains canonical migration paths, opaque identities, the build/schema transition, a random nonce, current phase and start time so recovery can fail closed.
+
 ## Development reports
 
 Never upload real personal evidence, private correspondence, credentials, vault files or identifying case records to GitHub issues, discussions, pull requests or test fixtures.
