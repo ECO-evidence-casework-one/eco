@@ -526,7 +526,7 @@ func TestResetAffectsOnlySelectedWorkspaceAndManagedObjects(t *testing.T) {
 	if len(reset.Evidence) != 0 || len(reset.Preservations) != 0 || len(reset.Matters) != 0 || len(reset.Questions) != 0 || reset.Settings != (Settings{}) {
 		t.Fatalf("selected workspace was not genuinely reset: %+v", reset)
 	}
-	if !hasChange(reset, "workspace-reset") || reset.Changes[0].PrevHash == "" {
+	if !hasChange(reset, "workspace-reset") || !hasChange(reset, "workspace-reset-complete") || reset.Changes[0].PrevHash == "" {
 		t.Fatalf("reset audit did not preserve truthful continuity: %+v", reset.Changes)
 	}
 	if _, err = os.Stat(filepath.Join(firstPath, "objects", firstItem.ObjectFile)); !os.IsNotExist(err) {

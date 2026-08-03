@@ -6,16 +6,27 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 )
 
 type filesystemOps struct {
-	rename func(string, string) error
-	remove func(string) error
+	beforeRename func(string, string) error
+	beforeRemove func(string) error
 }
 
-var operatingFilesystem = filesystemOps{rename: os.Rename, remove: os.Remove}
+var operatingFilesystem filesystemOps
+
+type boundObjectDirectory interface {
+	BindRegularChildren([]string) (boundRegularChildren, error)
+	SameFilesystem(boundObjectDirectory) bool
+	VerifyPath() error
+	Close() error
+}
+
+type boundRegularChildren interface {
+	RemoveAll(func(string) error) (int, error)
+	Close() error
+}
 
 func sameFilesystemPath(a, b string) bool {
 	a = filepath.Clean(a)
@@ -154,63 +165,6 @@ func validateDirectSibling(root, target, expectedBase string, mustExist bool) (s
 	return canonical, nil
 }
 
-func removeNormalTree(root string, remove func(string) error) error {
-	canonicalRoot, err := canonicalNormalDirectory(root, "the migration staging folder")
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	paths := []string{}
-	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		info, infoErr := entry.Info()
-		if infoErr != nil {
-			return infoErr
-		}
-		if info.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(info) {
-			return errors.New("migration cleanup found a symbolic link, junction or reparse point")
-		}
-		absolute, absErr := filepath.Abs(path)
-		if absErr != nil {
-			return absErr
-		}
-		relative, relErr := filepath.Rel(root, absolute)
-		if relErr != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return errors.New("migration cleanup found a path outside its staging folder")
-		}
-		paths = append(paths, filepath.Clean(absolute))
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	sort.Slice(paths, func(i, j int) bool { return len(paths[i]) > len(paths[j]) })
-	for _, path := range paths {
-		info, statErr := os.Lstat(path)
-		if statErr != nil {
-			if os.IsNotExist(statErr) {
-				continue
-			}
-			return statErr
-		}
-		if info.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(info) {
-			return errors.New("migration cleanup was blocked because the staging tree changed")
-		}
-		parentCanonical, evalErr := filepath.EvalSymlinks(filepath.Dir(path))
-		if evalErr != nil {
-			return evalErr
-		}
-		relative, relErr := filepath.Rel(canonicalRoot, filepath.Join(parentCanonical, filepath.Base(path)))
-		if relErr != nil || relative == ".." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
-			return errors.New("migration cleanup target escaped the authenticated staging folder")
-		}
-		if err = remove(path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-	}
-	return nil
+func removeNormalTree(root string, validate func() error, ops filesystemOps) error {
+	return objectBoundRemoveTree(root, validate, ops.beforeRemove)
 }

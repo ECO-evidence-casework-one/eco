@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -629,6 +630,7 @@ type ResetReceipt struct {
 type ResetPhase string
 
 const resetBeforeObjectCleanup ResetPhase = "before-object-cleanup"
+const resetBeforeManagedObjectRemoval ResetPhase = "before-managed-object-removal"
 
 func resetVault(v *Vault) (ResetReceipt, error) {
 	return resetVaultWithHook(v, nil)
@@ -651,6 +653,19 @@ func resetVaultWithHook(v *Vault, hook func(ResetPhase) error) (ResetReceipt, er
 	objectsCanonical, err := validateObjectsDirectory(v.Root, v.Objects)
 	if err != nil {
 		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed because the encrypted object folder is unsafe: %w", err)
+	}
+	boundWorkspace, err := openBoundObjectDirectory(v.Root, "the selected workspace folder")
+	if err != nil {
+		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed: %w", err)
+	}
+	defer boundWorkspace.Close()
+	boundObjects, err := openBoundObjectDirectory(objectsCanonical, "the encrypted object folder")
+	if err != nil {
+		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed: %w", err)
+	}
+	defer boundObjects.Close()
+	if !boundWorkspace.SameFilesystem(boundObjects) {
+		return ResetReceipt{}, errors.New("reset was blocked before records changed because the encrypted object folder is on a different filesystem volume")
 	}
 	v.opMu.Lock()
 	defer v.opMu.Unlock()
@@ -678,12 +693,29 @@ func resetVaultWithHook(v *Vault, hook func(ResetPhase) error) (ResetReceipt, er
 		managed[record.ObjectFile+".part"] = true
 		managed[record.ObjectFile+".tmp"] = true
 	}
+	managedNames := make([]string, 0, len(managed))
 	for name := range managed {
 		if _, targetErr := managedObjectTarget(objectsCanonical, name); targetErr != nil {
 			v.mu.Unlock()
 			return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed: %w", targetErr)
 		}
+		managedNames = append(managedNames, name)
 	}
+	sort.Strings(managedNames)
+	if err = boundWorkspace.VerifyPath(); err != nil {
+		v.mu.Unlock()
+		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed because the selected workspace folder changed: %w", err)
+	}
+	if err = boundObjects.VerifyPath(); err != nil {
+		v.mu.Unlock()
+		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed because the encrypted object folder changed: %w", err)
+	}
+	boundChildren, err := boundObjects.BindRegularChildren(managedNames)
+	if err != nil {
+		v.mu.Unlock()
+		return ResetReceipt{}, fmt.Errorf("reset was blocked before records changed: %w", err)
+	}
+	defer boundChildren.Close()
 	receipt := ResetReceipt{
 		WorkspaceID:       identity.ID,
 		Path:              v.Root,
@@ -700,11 +732,12 @@ func resetVaultWithHook(v *Vault, hook func(ResetPhase) error) (ResetReceipt, er
 		previousAudit = old.Changes[0].Hash
 	}
 	v.Workspace = reset
-	v.addChangeWithPreviousUnlocked(previousAudit, "user", "workspace-reset", "Reset only the selected ECO development workspace", map[string]any{
+	v.addChangeWithPreviousUnlocked(previousAudit, "user", "workspace-reset", "Reset the selected workspace records; managed encrypted-object cleanup is still pending", map[string]any{
 		"workspace_id":       identity.ID,
 		"previous_evidence":  receipt.PreviousEvidence,
 		"previous_matters":   receipt.PreviousMatters,
 		"previous_questions": receipt.PreviousQuestions,
+		"cleanup_status":     "pending",
 	})
 	if err = v.saveUnlocked(); err != nil {
 		v.Workspace = old
@@ -718,40 +751,55 @@ func resetVaultWithHook(v *Vault, hook func(ResetPhase) error) (ResetReceipt, er
 			return receipt, err
 		}
 	}
-	objectsCanonical, err = validateObjectsDirectory(v.Root, v.Objects)
-	if err != nil {
+	if err = boundWorkspace.VerifyPath(); err != nil {
+		return receipt, fmt.Errorf("workspace records were reset, but object cleanup was blocked because the selected workspace folder changed: %w", err)
+	}
+	if err = boundObjects.VerifyPath(); err != nil {
 		return receipt, fmt.Errorf("workspace records were reset, but object cleanup was blocked because the objects folder changed: %w", err)
 	}
-	for name := range managed {
-		target, targetErr := managedObjectTarget(objectsCanonical, name)
-		if targetErr != nil {
-			return receipt, fmt.Errorf("workspace records were reset, but no objects were deleted: %w", targetErr)
+	removed, removeErr := boundChildren.RemoveAll(func(string) error {
+		if hook == nil {
+			return nil
 		}
-		if info, statErr := os.Lstat(target); statErr == nil {
-			if info.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(info) || !info.Mode().IsRegular() {
-				return receipt, errors.New("workspace records were reset, but no objects were deleted because a managed object target is not a normal file")
-			}
-		} else if !os.IsNotExist(statErr) {
-			return receipt, fmt.Errorf("workspace records were reset, but no objects were deleted because a managed object could not be inspected: %w", statErr)
-		}
+		return hook(resetBeforeManagedObjectRemoval)
+	})
+	receipt.ObjectsRemoved = removed
+	if removeErr != nil {
+		resultErr := fmt.Errorf("workspace records were reset, but managed object cleanup was blocked before completion: %w", removeErr)
+		return receipt, errors.Join(resultErr, recordResetCleanupOutcomeIfBound(v, boundWorkspace, "blocked", removed))
 	}
-	for name := range managed {
-		currentObjects, containmentErr := validateObjectsDirectory(v.Root, v.Objects)
-		if containmentErr != nil || !sameFilesystemPath(currentObjects, objectsCanonical) {
-			return receipt, errors.New("workspace records were reset, but remaining object cleanup stopped because the objects folder changed")
-		}
-		path, targetErr := managedObjectTarget(currentObjects, name)
-		if targetErr != nil {
-			return receipt, targetErr
-		}
-		err = os.Remove(path)
-		if err == nil {
-			receipt.ObjectsRemoved++
-		} else if !os.IsNotExist(err) {
-			receipt.CleanupWarnings = append(receipt.CleanupWarnings, "An unreferenced encrypted object could not be removed.")
-		}
+	if closeErr := boundChildren.Close(); closeErr != nil {
+		resultErr := fmt.Errorf("workspace records were reset, but managed object cleanup could not be completed: %w", closeErr)
+		return receipt, errors.Join(resultErr, recordResetCleanupOutcomeIfBound(v, boundWorkspace, "blocked", removed))
+	}
+	if err = recordResetCleanupOutcomeIfBound(v, boundWorkspace, "complete", removed); err != nil {
+		return receipt, fmt.Errorf("managed object cleanup finished, but its audit record could not be saved: %w", err)
 	}
 	return receipt, nil
+}
+
+func recordResetCleanupOutcomeIfBound(v *Vault, workspace boundObjectDirectory, status string, removed int) error {
+	if err := workspace.VerifyPath(); err != nil {
+		return fmt.Errorf("the reset cleanup outcome was not written because the retained workspace folder changed: %w", err)
+	}
+	return recordResetCleanupOutcome(v, status, removed)
+}
+
+func recordResetCleanupOutcome(v *Vault, status string, removed int) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	typ := "workspace-reset-complete"
+	summary := "Finished the selected workspace reset and removed only its managed encrypted objects"
+	if status != "complete" {
+		typ = "workspace-reset-cleanup-blocked"
+		summary = "Stopped managed encrypted-object cleanup because the selected workspace changed or was unsafe"
+	}
+	v.addChangeUnlocked("system", typ, summary, map[string]any{
+		"workspace_id":    v.Identity.ID,
+		"objects_removed": removed,
+		"cleanup_status":  status,
+	})
+	return v.saveUnlocked()
 }
 
 func safeManagedObjectName(name string) bool {

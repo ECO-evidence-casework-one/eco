@@ -591,11 +591,12 @@ func writeMigrationState(state *migrationState, key []byte) error {
 }
 
 func removeExpectedControlFile(path string, expected []byte) {
-	current, err := readNormalControlFile(path, "migration recovery temporary file")
-	if err != nil || !bytes.Equal(current, expected) {
-		return
-	}
-	_ = os.Remove(path)
+	_ = objectBoundRemoveFile(path, "migration recovery temporary file", func(current []byte) error {
+		if !bytes.Equal(current, expected) {
+			return errors.New("the migration recovery temporary file changed; cleanup was blocked")
+		}
+		return nil
+	}, nil)
 }
 
 func validateMigrationStateTransition(current, next migrationState, key []byte) error {
@@ -676,10 +677,14 @@ func removeMigrationStageWithOps(state migrationState, ops filesystemOps) error 
 	} else if statErr != nil {
 		return statErr
 	}
-	if err = validateMigrationDirectory(state, state.Stage, true, key); err != nil {
-		return err
-	}
-	if err = removeNormalTree(state.Stage, ops.remove); err != nil {
+	if err = removeNormalTree(state.Stage, func() error {
+		currentKey, reloadErr := reloadAuthenticatedMigrationState(state)
+		if reloadErr != nil {
+			return reloadErr
+		}
+		defer zeroBytes(currentKey)
+		return validateMigrationDirectory(state, state.Stage, true, currentKey)
+	}, ops); err != nil {
 		return fmt.Errorf("remove authenticated migration staging folder: %w", err)
 	}
 	return removeMigrationRole(state, "stage", key, ops)

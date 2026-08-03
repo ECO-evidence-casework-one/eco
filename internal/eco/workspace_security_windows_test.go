@@ -4,6 +4,7 @@ package eco
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,7 +55,7 @@ func TestWorkspaceOpenAndResetRejectObjectsJunction(t *testing.T) {
 	}
 }
 
-func TestResetRevalidatesObjectsDirectoryAfterJunctionSubstitution(t *testing.T) {
+func TestResetPinsObjectsDirectoryThroughFinalManagedRemovalSeam(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "workspace")
 	runtime := runtimeFor("candidate-junction-race", "ECO-JUNCTION-RACE", Schema)
 	vault, err := createVault(root, "Junction race workspace", runtime)
@@ -69,21 +70,37 @@ func TestResetRevalidatesObjectsDirectoryAfterJunctionSubstitution(t *testing.T)
 		t.Fatal(err)
 	}
 	realObjects := filepath.Join(root, "objects-before-junction-race")
+	injected := errors.New("stop after the final managed-object substitution attempt")
+	attempted := false
 	receipt, resetErr := resetVaultWithHook(vault, func(phase ResetPhase) error {
+		if phase == resetBeforeObjectCleanup {
+			return nil
+		}
+		if phase != resetBeforeManagedObjectRemoval {
+			return errors.New("unexpected reset phase")
+		}
+		attempted = true
 		if renameErr := os.Rename(filepath.Join(root, "objects"), realObjects); renameErr != nil {
-			return renameErr
+			return injected
 		}
 		createTestJunction(t, filepath.Join(root, "objects"), external)
-		return nil
+		return errors.New("the retained objects handle allowed a junction substitution")
 	})
-	if resetErr == nil || receipt.ObjectsRemoved != 0 {
+	if !attempted || !errors.Is(resetErr, injected) || receipt.ObjectsRemoved != 0 {
 		t.Fatalf("reset cleanup followed a junction substituted after inspection: receipt=%+v err=%v", receipt, resetErr)
+	}
+	audit := vault.Snapshot()
+	if !hasChange(audit, "workspace-reset-cleanup-blocked") || hasChange(audit, "workspace-reset-complete") {
+		t.Fatalf("a partial reset was not recorded truthfully: %+v", audit.Changes)
 	}
 	got, err := os.ReadFile(externalObject)
 	if err != nil || !bytes.Equal(got, externalBytes) {
 		t.Fatalf("junction race changed an unrelated file: bytes=%q err=%v", got, err)
 	}
-	if _, err = os.Stat(filepath.Join(realObjects, item.ObjectFile)); err != nil {
+	if _, err = os.Stat(filepath.Join(root, "objects", item.ObjectFile)); err != nil {
 		t.Fatalf("junction race lost the original managed object: %v", err)
+	}
+	if _, err = os.Lstat(realObjects); !os.IsNotExist(err) {
+		t.Fatalf("the retained objects directory was renamed despite its open handle: %v", err)
 	}
 }

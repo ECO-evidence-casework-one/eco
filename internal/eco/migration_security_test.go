@@ -55,6 +55,28 @@ func assertFileExact(t *testing.T, path string, expected []byte) {
 	}
 }
 
+func assertStageReadyMigrationRemainsRecoverable(t *testing.T, state migrationState, oldRuntime, current RuntimeIdentity) {
+	t.Helper()
+	remaining, key, err := readMigrationState(state.Root)
+	if err != nil {
+		t.Fatalf("the authenticated migration record is no longer recoverable: %v", err)
+	}
+	zeroBytes(key)
+	if remaining.Phase != migrationStageReady || remaining.Root != state.Root || remaining.Stage != state.Stage || remaining.Checkpoint != state.Checkpoint {
+		t.Fatalf("the migration record no longer truthfully reports the interrupted operation: %+v", remaining)
+	}
+	stage, err := openVaultIgnoringRecovery(state.Stage, current)
+	if err != nil {
+		t.Fatalf("the authentic staged workspace is unavailable: %v", err)
+	}
+	stage.Close()
+	checkpoint, err := openVaultIgnoringRecovery(state.Checkpoint, oldRuntime)
+	if err != nil {
+		t.Fatalf("the authentic checkpoint is unavailable: %v", err)
+	}
+	checkpoint.Close()
+}
+
 func TestTamperedMigrationPathsCannotAuthoriseUnrelatedSiblingChanges(t *testing.T) {
 	for _, test := range []struct {
 		name   string
@@ -165,12 +187,12 @@ func TestRollbackCompensatesWhenCheckpointActivationFails(t *testing.T) {
 	injected := errors.New("injected checkpoint activation failure")
 	failedOnce := false
 	ops := operatingFilesystem
-	ops.rename = func(source, destination string) error {
+	ops.beforeRename = func(source, destination string) error {
 		if !failedOnce && sameFilesystemPath(source, state.Checkpoint) && sameFilesystemPath(destination, state.Root) {
 			failedOnce = true
 			return injected
 		}
-		return os.Rename(source, destination)
+		return nil
 	}
 	if restored, err := rollbackMigrationStateWithOps(state, ops); err == nil || restored || !errors.Is(err, injected) {
 		t.Fatalf("injected rollback failure was not reported truthfully: restored=%v err=%v", restored, err)

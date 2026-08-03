@@ -157,11 +157,15 @@ func writeStageDirectoryIdentity(state migrationState, key []byte) error {
 }
 
 func verifyStageDirectoryIdentityAt(state migrationState, directory string, key []byte) error {
-	expected, _, err := roleForMigration(state, "stage")
+	data, err := readNormalControlFile(filepath.Join(directory, migrationStageIdentityFile), "migration stage identity")
 	if err != nil {
 		return err
 	}
-	data, err := readNormalControlFile(filepath.Join(directory, migrationStageIdentityFile), "migration stage identity")
+	return verifyStageDirectoryIdentityData(state, key, data)
+}
+
+func verifyStageDirectoryIdentityData(state migrationState, key, data []byte) error {
+	expected, _, err := roleForMigration(state, "stage")
 	if err != nil {
 		return err
 	}
@@ -184,11 +188,19 @@ func verifyStageDirectoryIdentityAt(state migrationState, directory string, key 
 }
 
 func verifyMigrationRole(state migrationState, roleName string, key []byte) error {
-	expected, path, err := roleForMigration(state, roleName)
+	_, path, err := roleForMigration(state, roleName)
 	if err != nil {
 		return err
 	}
 	data, err := readNormalControlFile(path, "migration folder identity")
+	if err != nil {
+		return err
+	}
+	return verifyMigrationRoleData(state, roleName, key, data)
+}
+
+func verifyMigrationRoleData(state migrationState, roleName string, key, data []byte) error {
+	expected, _, err := roleForMigration(state, roleName)
 	if err != nil {
 		return err
 	}
@@ -249,11 +261,13 @@ func writeNewControlFile(path string, data []byte, description string) error {
 }
 
 func removeCreatedNormalFile(path string, created os.FileInfo) {
-	current, err := os.Lstat(path)
-	if err != nil || current.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(current) || !current.Mode().IsRegular() || !os.SameFile(created, current) {
-		return
-	}
-	_ = os.Remove(path)
+	_ = objectBoundRemoveFile(path, "partly written migration control file", func([]byte) error {
+		current, err := os.Lstat(path)
+		if err != nil || current.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(current) || !current.Mode().IsRegular() || !os.SameFile(created, current) {
+			return errors.New("the partly written migration control file was replaced; cleanup was blocked")
+		}
+		return nil
+	}, nil)
 }
 
 func readNormalControlFile(path, description string) ([]byte, error) {
@@ -346,6 +360,40 @@ func reloadAuthenticatedMigrationState(expected migrationState) ([]byte, error) 
 	return key, nil
 }
 
+func reloadAuthenticatedMigrationStateData(expected migrationState, data []byte) ([]byte, error) {
+	var actual migrationState
+	if err := json.Unmarshal(data, &actual); err != nil {
+		return nil, errors.New("the migration recovery record is damaged; automatic recovery was blocked")
+	}
+	if err := validateMigrationStateStructure(actual, expected.Root); err != nil {
+		return nil, err
+	}
+	key, err := candidateMigrationKey(actual)
+	if err != nil {
+		return nil, err
+	}
+	if err = authenticateMigrationState(actual, key); err != nil {
+		zeroBytes(key)
+		return nil, err
+	}
+	for _, path := range []string{actual.Checkpoint, actual.Stage, actual.Failed} {
+		if _, statErr := os.Lstat(path); statErr == nil {
+			if validateErr := validateMigrationDirectory(actual, path, true, key); validateErr != nil {
+				zeroBytes(key)
+				return nil, fmt.Errorf("an authenticated migration path failed containment checks: %w", validateErr)
+			}
+		} else if !os.IsNotExist(statErr) {
+			zeroBytes(key)
+			return nil, statErr
+		}
+	}
+	if !sameMigrationState(actual, expected) {
+		zeroBytes(key)
+		return nil, errors.New("the migration recovery record changed; filesystem changes were blocked")
+	}
+	return key, nil
+}
+
 func verifyMigrationWorkspace(path string, state migrationState, destination bool, key []byte) error {
 	ws, err := readEncryptedWorkspace(path, key)
 	if err != nil {
@@ -363,7 +411,7 @@ func verifyMigrationWorkspace(path string, state migrationState, destination boo
 	return nil
 }
 
-func removeAuthenticatedControlFile(path, description string, remove func(string) error) error {
+func removeAuthenticatedControlFile(path, description string, validate func([]byte) error, ops filesystemOps) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -374,7 +422,7 @@ func removeAuthenticatedControlFile(path, description string, remove func(string
 	if info.Mode()&os.ModeSymlink != 0 || fileInfoHasReparsePoint(info) || !info.Mode().IsRegular() {
 		return fmt.Errorf("%s changed into an unsafe filesystem object", description)
 	}
-	return remove(path)
+	return objectBoundRemoveFile(path, description, validate, ops.beforeRemove)
 }
 
 func migrationRoleNameForPath(state migrationState, path string) (string, bool) {
@@ -408,83 +456,82 @@ func validateMigrationDirectory(state migrationState, path string, mustExist boo
 }
 
 func removeMigrationRole(state migrationState, role string, key []byte, ops filesystemOps) error {
-	if err := verifyMigrationRole(state, role, key); err != nil {
-		return err
-	}
 	_, path, err := roleForMigration(state, role)
 	if err != nil {
 		return err
 	}
-	return removeAuthenticatedControlFile(path, "migration folder identity", ops.remove)
+	return removeAuthenticatedControlFile(path, "migration folder identity", func(data []byte) error {
+		return verifyMigrationRoleData(state, role, key, data)
+	}, ops)
 }
 
 func removeMigrationMarker(state migrationState, key []byte, ops filesystemOps) error {
-	currentKey, err := reloadAuthenticatedMigrationState(state)
-	if err != nil {
-		return err
-	}
-	zeroBytes(currentKey)
-	if err = authenticateMigrationState(state, key); err != nil {
-		return err
-	}
-	return removeAuthenticatedControlFile(migrationStatePath(state.Root), "migration recovery record", ops.remove)
+	return removeAuthenticatedControlFile(migrationStatePath(state.Root), "migration recovery record", func(data []byte) error {
+		currentKey, err := reloadAuthenticatedMigrationStateData(state, data)
+		if err != nil {
+			return err
+		}
+		zeroBytes(currentKey)
+		return authenticateMigrationState(state, key)
+	}, ops)
 }
 
 func removeActivatedStageIdentity(state migrationState, key []byte, ops filesystemOps) error {
-	if err := verifyStageDirectoryIdentityAt(state, state.Root, key); err != nil {
-		return err
-	}
-	return removeAuthenticatedControlFile(filepath.Join(state.Root, migrationStageIdentityFile), "activated migration stage identity", ops.remove)
+	return removeAuthenticatedControlFile(filepath.Join(state.Root, migrationStageIdentityFile), "activated migration stage identity", func(data []byte) error {
+		return verifyStageDirectoryIdentityData(state, key, data)
+	}, ops)
 }
 
 func secureMigrationRename(state migrationState, source, destination string, sourceIsDestinationWorkspace bool, destinationRole string, ops filesystemOps) error {
-	key, err := reloadAuthenticatedMigrationState(state)
-	if err != nil {
-		return err
-	}
-	defer zeroBytes(key)
+	return objectBoundRename(source, destination, func() error {
+		key, err := reloadAuthenticatedMigrationState(state)
+		if err != nil {
+			return err
+		}
+		defer zeroBytes(key)
 
-	if sameFilesystemPath(source, state.Root) {
-		if _, err = validateDirectSibling(state.Root, source, filepath.Base(state.Root), true); err != nil {
-			return err
+		if sameFilesystemPath(source, state.Root) {
+			if _, err = validateDirectSibling(state.Root, source, filepath.Base(state.Root), true); err != nil {
+				return err
+			}
+			if err = verifyMigrationWorkspace(source, state, sourceIsDestinationWorkspace, key); err != nil {
+				return err
+			}
+		} else {
+			if err = validateMigrationDirectory(state, source, true, key); err != nil {
+				return err
+			}
+			if err = verifyMigrationWorkspace(source, state, sourceIsDestinationWorkspace, key); err != nil {
+				return err
+			}
 		}
-		if err = verifyMigrationWorkspace(source, state, sourceIsDestinationWorkspace, key); err != nil {
-			return err
-		}
-	} else {
-		if err = validateMigrationDirectory(state, source, true, key); err != nil {
-			return err
-		}
-		if err = verifyMigrationWorkspace(source, state, sourceIsDestinationWorkspace, key); err != nil {
-			return err
-		}
-	}
 
-	if sameFilesystemPath(destination, state.Root) {
-		if _, err = validateDirectSibling(state.Root, destination, filepath.Base(state.Root), false); err != nil {
-			return err
+		if sameFilesystemPath(destination, state.Root) {
+			if _, err = validateDirectSibling(state.Root, destination, filepath.Base(state.Root), false); err != nil {
+				return err
+			}
+			if _, statErr := os.Lstat(destination); statErr == nil {
+				return errors.New("the workspace activation target already exists")
+			} else if !os.IsNotExist(statErr) {
+				return statErr
+			}
+		} else {
+			if destinationRole == "" {
+				return errors.New("the migration rename destination has no authenticated role")
+			}
+			actualRole, ok := migrationRoleNameForPath(state, destination)
+			if !ok || actualRole != destinationRole {
+				return errors.New("the migration rename destination role does not match its authenticated path")
+			}
+			if err = validateMigrationDirectory(state, destination, false, key); err != nil {
+				return err
+			}
+			if _, statErr := os.Lstat(destination); statErr == nil {
+				return errors.New("the authenticated migration destination already exists")
+			} else if !os.IsNotExist(statErr) {
+				return statErr
+			}
 		}
-		if _, statErr := os.Lstat(destination); statErr == nil {
-			return errors.New("the workspace activation target already exists")
-		} else if !os.IsNotExist(statErr) {
-			return statErr
-		}
-	} else {
-		if destinationRole == "" {
-			return errors.New("the migration rename destination has no authenticated role")
-		}
-		actualRole, ok := migrationRoleNameForPath(state, destination)
-		if !ok || actualRole != destinationRole {
-			return errors.New("the migration rename destination role does not match its authenticated path")
-		}
-		if err = validateMigrationDirectory(state, destination, false, key); err != nil {
-			return err
-		}
-		if _, statErr := os.Lstat(destination); statErr == nil {
-			return errors.New("the authenticated migration destination already exists")
-		} else if !os.IsNotExist(statErr) {
-			return statErr
-		}
-	}
-	return ops.rename(source, destination)
+		return nil
+	}, ops.beforeRename)
 }

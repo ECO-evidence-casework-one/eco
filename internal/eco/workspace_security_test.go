@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -195,7 +196,10 @@ func TestWorkspaceOpenAndResetRejectObjectsSymbolicLink(t *testing.T) {
 	}
 }
 
-func TestResetRevalidatesObjectsDirectoryAfterInspection(t *testing.T) {
+func TestResetBindsObjectsDirectoryThroughFinalManagedRemovalSeam(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("the Windows handle-and-junction variant or fail-closed platform path covers this seam")
+	}
 	root := filepath.Join(t.TempDir(), "workspace")
 	runtime := runtimeFor("candidate-object-race", "ECO-OBJECT-RACE", Schema)
 	vault, err := createVault(root, "Object race workspace", runtime)
@@ -218,7 +222,10 @@ func TestResetRevalidatesObjectsDirectoryAfterInspection(t *testing.T) {
 	}
 	realObjects := filepath.Join(root, "objects-before-race")
 	receipt, resetErr := resetVaultWithHook(vault, func(phase ResetPhase) error {
-		if phase != resetBeforeObjectCleanup {
+		if phase == resetBeforeObjectCleanup {
+			return nil
+		}
+		if phase != resetBeforeManagedObjectRemoval {
 			return errors.New("unexpected reset test phase")
 		}
 		if renameErr := os.Rename(filepath.Join(root, "objects"), realObjects); renameErr != nil {
@@ -234,6 +241,10 @@ func TestResetRevalidatesObjectsDirectoryAfterInspection(t *testing.T) {
 	}
 	if receipt.ObjectsRemoved != 0 {
 		t.Fatalf("reset deleted objects after containment changed: %+v", receipt)
+	}
+	audit := vault.Snapshot()
+	if !hasChange(audit, "workspace-reset-cleanup-blocked") || hasChange(audit, "workspace-reset-complete") {
+		t.Fatalf("a partial reset was not recorded truthfully: %+v", audit.Changes)
 	}
 	got, err := os.ReadFile(externalObject)
 	if err != nil || !bytes.Equal(got, externalBytes) {
