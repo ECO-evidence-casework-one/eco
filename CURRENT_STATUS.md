@@ -2,7 +2,7 @@
 
 **Status date:** 3 August 2026  
 **Canonical public status record:** this file  
-**Current `main` commit reviewed for this status:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
+**Baseline `main` commit reviewed before this status update:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Release position:** development only; no approved public binary
 
