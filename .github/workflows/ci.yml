@@ -49,6 +49,9 @@ jobs:
       - name: Prove native-command failures stop the Windows gate
         shell: pwsh
         run: ./scripts/test-native-command-failure.ps1
+      - name: Prove every Windows native stage stops later work
+        shell: pwsh
+        run: ./scripts/test-build-windows-failure-matrix.ps1
       - name: Deterministic Windows build and tests
         shell: pwsh
         run: ./scripts/build-windows.ps1
