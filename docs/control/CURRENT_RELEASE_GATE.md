@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-005`  
-**Updated:** 3 August 2026, 20:13 BST  
+**Gate record:** `ECO-RELEASE-GATE-20260803-006`  
+**Updated:** 3 August 2026, after final issue #27 merged-main verification  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this gate update:** `e34018592a8bab168ba516a0d61493bf0fa6d47f`  
+**Current `main` commit reviewed:** `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -27,7 +27,8 @@ The following remain blocked:
 | Gate | Current position |
 |---|---|
 | Source identity | `main` contains post-V25 development and repository-control changes; no later named source milestone is approved |
-| Evidence preservation | PR #10 merged materially improved controls, but issue #3 is reopened pending issue #12 and independent closure |
+| Windows CI truthfulness | Issue #27 technical acceptance complete on `main` after commits `176bf4a5...` and `9b7f3d60...`; final merged-main run `30852039542` passed the controlled failure self-test, six-stage failure matrix and ordinary Linux/Windows validation with zero artifacts |
+| Evidence preservation | PR #10 merged materially improved controls, but issue #3 remains open pending issue #12 and independent closure |
 | Ask verification and restore concurrency | Blocked by open issue #12 |
 | Ask health-related input boundary | Blocked by P0 issue #20; current Ask source does not yet enforce the proposed restriction |
 | Candidate workspace identity | PR #11 contains material candidate-binding improvements but remains draft and blocked by current ownership/concurrency findings |
@@ -35,7 +36,7 @@ The following remain blocked:
 | Ordinary workspace writers | Blocked by PR #11 exact-head finding: stale independently opened writers can still erase newer metadata without revision/CAS conflict detection |
 | Alias and retained-parent ownership | Blocked by PR #11 exact-head finding: lock, recovery controls and workspace participants are not all derived from one retained object identity |
 | Linux nested cleanup | Blocked by PR #11 exact-head finding: an inspected directory can be closed and reopened by name during recursive cleanup |
-| Public Actions executable distribution | New uploads stopped in `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`; issue #24 remains open pending exact-run proof and historical artifact deletion or expiry |
+| Public Actions executable distribution | New uploads stopped in `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`; corrected pull-request runs prove zero artifacts while internal builds continue; issue #24 remains open for remaining trigger, historical cleanup and stale-branch evidence |
 | Diagnostic privacy and offline claims | Blocked by issue #14 |
 | Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
@@ -46,19 +47,25 @@ The following remain blocked:
 | Security reporting, publisher and continuity | Blocked by issue #17 |
 | Public claims | Only controlled development claims are permitted |
 
-## Issue and pull-request controls
+## Issue #27 — Windows native-command failure handling
 
-### Issue #3 and issue #12
+The former Windows build gate could continue after a failed native command and still report success.
 
-Issue #3 is open. The implementation merged through PR #10 is not rejected, but it must not be described as independently closed while:
+The correction now on `main`:
 
-- issue #12 remains open;
-- the issue #3 acceptance checklist is not completed with evidence references;
-- exact-commit hostile and concurrency testing remains incomplete.
+- routes tests, vet, source policy, both deterministic builds and `go version` through one checked helper;
+- captures `$LASTEXITCODE` immediately and terminates on non-zero native exits;
+- runs a controlled exit-23 self-test;
+- runs a six-stage failure matrix proving that failure at each native stage prevents later work;
+- statically verifies that every real native stage is wrapped exactly once and legacy unwrapped command lines are absent;
+- corrects the three Windows unsafe-pointer vet findings rather than suppressing them;
+- preserves issue #24's no-runnable-artifact workflow.
 
-Issue #12 requires bounded verification cost, safe cache invalidation or source-limited verification, and safe serialisation of Ask against restore.
+Final merged-main verification used PR #32 and workflow run `30852039542`. Raw Linux, source-policy and Windows logs passed. The run artifact inventory was exactly empty. The runner-only unsigned executable was not uploaded and is not approved for use or release.
 
-### PR #11 and issue #4
+Issue #27 technical acceptance is complete. Closure follows this public-document reconciliation. This result does not open any product or release gate.
+
+## PR #11 and issue #4
 
 PR #11 remains draft and unmerged at the last independently inspected head `73689717bb08bb8cec0fc1233b92f843b449484a`.
 
@@ -69,52 +76,40 @@ The current exact-head blockers are:
 3. Linux nested cleanup reopening an inspected directory by name;
 4. unowned workspace creation, first launch and candidate-state writes.
 
-The fail-fast Windows CI correction, object-bound reset/migration operations, authenticated restore phases and issue #3 regression coverage at that head are material progress, but they do not close these four blockers.
-
 PR #11 must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
 
-### Issue #24 — public Actions executable distribution
+## Issue #24 — public Actions executable distribution
 
-Independent inspection confirmed that the public workflow uploaded unsigned runnable `ECO.exe` packages after successful implementation and documentation-only pull-request runs.
+Independent inspection confirmed that the former public workflow uploaded unsigned runnable `ECO.exe` packages after successful implementation and documentation-only pull-request runs.
 
 Emergency source containment at `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a` removed the `upload-artifact` step while retaining internal Windows compilation and testing.
 
+Corrected validation runs now prove that:
+
+- internal Windows compilation and testing still execute;
+- the controlled native-failure self-test and six-stage failure matrix pass;
+- successful pull-request runs expose no executable, DLL, installer, model/runtime payload or runnable archive.
+
 Issue #24 remains open until:
 
-- the containment commit's workflow run is independently inspected;
-- successful push, pull-request and manual-dispatch runs produce no downloadable executable, DLL, installer or runnable archive;
-- failure paths still produce no artifact;
+- successful push and manual-dispatch paths are evidenced through an independently accessible route;
+- any remaining deliberate failure-path cases required by issue #24 are evidenced;
 - the four identified historical executable artifacts are deleted by an authorised repository administrator or have expired;
+- the private controlled test-handoff process is evidenced;
 - affected branches are reconciled with the corrected workflow;
 - no later automation reintroduces public binary upload without issue #15, signing and publisher approval.
 
-The identified historical executables are unapproved and must not be tested, used or redistributed.
+The identified historical and runner-only executables are unapproved and must not be tested, used or redistributed.
 
-### Issues #14–#17 and #20
+## Issues #3, #12, #14–#17 and #20
 
+- Issue #3 remains open pending issue #12 and complete independent preservation evidence.
+- Issue #12 requires bounded verification cost, safe cache invalidation or source-limited verification, and safe serialisation of Ask against restore.
 - Issue #14 blocks unsafe diagnostic sharing and inaccurate offline/network claims.
 - Issue #15 blocks distribution without actual-build SBOM, licensing, provenance and signing evidence.
 - Issue #16 blocks unsupported intended-purpose, legal, medical, forensic, high-risk-decision and compliance claims.
 - Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
 - P0 issue #20 blocks generated processing of health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
-
-## Public-document assurance result
-
-The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record describe the blocked development position.
-
-The earlier assurance reconciliation changed documentation/control wording only. The later issue #24 emergency containment changed only the workflow upload surface; it did not approve a build, delete historical artifacts or resolve an application gate.
-
-The following underlying limits remain release-blocking:
-
-- current `main` still lacks explicit native exit-code enforcement in the Windows PowerShell build gate;
-- current `main` portable restore still uses pathname-based activation and best-effort rollback;
-- PR #11 still has the four exact-head ownership/concurrency blockers above and is currently non-mergeable pending reconciliation;
-- issue #12 still blocks Ask verification and restore concurrency;
-- issue #14 still blocks diagnostic and final network qualification;
-- issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation;
-- issue #24 still requires exact-run proof and historical artifact removal or expiry;
-- issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts;
-- accessibility, responsiveness and page-aware search qualification remains incomplete.
 
 ## Stop rules
 
