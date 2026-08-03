@@ -49,13 +49,5 @@ jobs:
       - name: Deterministic Windows build and tests
         shell: pwsh
         run: ./scripts/build-windows.ps1
-      - name: Upload unsigned provenance artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: eco-windows-unsigned-${{ github.sha }}
-          path: |
-            dist/ECO.exe
-            dist/ECO.exe.sha256
-            dist/build-receipt.json
-          if-no-files-found: error
-          retention-days: 7
+      # P0 issue #24: the executable remains only on the ephemeral runner.
+      # Public Actions artifact upload is disabled while binary release gates are closed.
