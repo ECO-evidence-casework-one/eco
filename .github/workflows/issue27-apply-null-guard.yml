@@ -1,0 +1,65 @@
+name: Apply issue 27 null-address guard once
+
+on:
+  push:
+    branches: [ control/issue-27-native-fail-fast ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-exact-null-guard:
+    if: github.actor == 'Nexlu1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: control/issue-27-native-fail-fast
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Guard the callback address before offset arithmetic
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("cmd/eco/main_windows.go")
+          text = path.read_text(encoding="utf-8")
+          old = """\tcase WM_GETMINMAXINFO:
+\t\tminTrack := POINT{X: 1000, Y: 730}
+\t\tcopyGoMemoryToWindows(
+\t\t\tlparam+unsafe.Offsetof(MINMAXINFO{}.PtMinTrackSize),
+\t\t\tunsafe.Pointer(&minTrack),
+\t\t\tunsafe.Sizeof(minTrack),
+\t\t)
+\t\treturn 0"""
+          new = """\tcase WM_GETMINMAXINFO:
+\t\tif lparam != 0 {
+\t\t\tminTrack := POINT{X: 1000, Y: 730}
+\t\t\tcopyGoMemoryToWindows(
+\t\t\t\tlparam+unsafe.Offsetof(MINMAXINFO{}.PtMinTrackSize),
+\t\t\t\tunsafe.Pointer(&minTrack),
+\t\t\t\tunsafe.Sizeof(minTrack),
+\t\t\t)
+\t\t}
+\t\treturn 0"""
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f"expected guarded source target once, found {count}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          PY
+          gofmt -w cmd/eco/main_windows.go
+          git diff --check
+      - name: Commit bounded guard and remove this workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cmd/eco/main_windows.go
+          git rm .github/workflows/issue27-apply-null-guard.yml
+          git commit -m "fix: guard missing Windows callback memory"
+          git push origin HEAD:control/issue-27-native-fail-fast
