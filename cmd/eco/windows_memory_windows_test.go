@@ -35,6 +35,27 @@ func TestWindowsMemoryCopyHelpers(t *testing.T) {
 	}
 }
 
+func TestWindowsMinMaxInfoFieldWrite(t *testing.T) {
+	if got, want := unsafe.Sizeof(MINMAXINFO{}), uintptr(40); got != want {
+		t.Fatalf("MINMAXINFO size changed: got %d want %d", got, want)
+	}
+	if got, want := unsafe.Offsetof(MINMAXINFO{}.PtMinTrackSize), uintptr(24); got != want {
+		t.Fatalf("PtMinTrackSize offset changed: got %d want %d", got, want)
+	}
+
+	var info MINMAXINFO
+	minTrack := POINT{X: 1000, Y: 730}
+	copyGoMemoryToWindows(
+		uintptr(unsafe.Pointer(&info))+unsafe.Offsetof(MINMAXINFO{}.PtMinTrackSize),
+		unsafe.Pointer(&minTrack),
+		unsafe.Sizeof(minTrack),
+	)
+	runtime.KeepAlive(&info)
+	if info.PtMinTrackSize != minTrack {
+		t.Fatalf("minimum-track write mismatch: got %+v want %+v", info.PtMinTrackSize, minTrack)
+	}
+}
+
 func TestWindowsMemoryCopyHelpersRejectEmptyArguments(t *testing.T) {
 	var target [4]byte
 	copyWindowsMemoryToGo(unsafe.Pointer(&target[0]), 0, unsafe.Sizeof(target))
