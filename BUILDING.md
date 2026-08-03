@@ -7,14 +7,13 @@
 
 The current `main` source uses the Go standard library and Windows system libraries. It has no third-party Go module dependencies.
 
-## Test
+## Direct source checks
 
 ```powershell
 go test ./...
 go vet ./...
+python scripts/check_source_policy.py
 ```
-
-Run these commands directly and inspect their exit status. The current `main` PowerShell build script does not reliably stop on every non-zero native command exit code.
 
 ## Controlled Windows build development
 
@@ -22,27 +21,44 @@ Run these commands directly and inspect their exit status. The current `main` Po
 ./scripts/build-windows.ps1
 ```
 
-The current `main` script intends to:
+The current `main` build path:
 
-- run tests, `go vet` and the source-policy check;
-- build the Windows x86-64 GUI twice with deterministic flags;
-- reject the build if the two SHA-256 values differ;
-- write `dist/ECO.exe` locally as an **unsigned development/provenance output**;
-- write a SHA-256 sidecar and JSON build receipt.
+- loads `scripts/native-command.ps1`;
+- captures `$LASTEXITCODE` immediately after every native command;
+- terminates on every non-zero native exit;
+- runs tests, `go vet` and the source-policy check;
+- builds the Windows x86-64 GUI twice with deterministic flags;
+- rejects the build if the two SHA-256 values differ;
+- writes `dist/ECO.exe` locally as an **unsigned private development/provenance output**;
+- writes a SHA-256 sidecar and JSON build receipt.
 
-However, PowerShell's `$ErrorActionPreference = "Stop"` does not by itself guarantee failure propagation from native commands. On current `main`, a failed native test, vet, policy or build command can be followed by later steps if the script does not check `$LASTEXITCODE` explicitly. Therefore:
+The CI Windows job also runs:
 
-- do not treat the script or a green Windows job on `main` as independent proof that every validation passed;
-- inspect raw logs and direct command results;
-- do not publish, use or rely on an executable produced after any failed command.
+```powershell
+./scripts/test-native-command-failure.ps1
+./scripts/test-build-windows-failure-matrix.ps1
+```
 
-Draft PR #11 contains a fail-fast native-command helper and controlled failure self-test, but that correction is not on `main` and the PR remains blocked for separate P0 reasons.
+The first test proves that a controlled non-zero native command terminates the gate. The matrix separately injects failure at test, vet, source policy, first build, second build and `go version`, proves no later stage executes, and asserts that the real native commands in `build-windows.ps1` remain wrapped by `Invoke-NativeChecked`.
+
+Issue #27 was independently closed after:
+
+- reproducing the former false-green behaviour;
+- proving a real Windows vet failure stopped before policy and build;
+- correcting the three resulting unsafe-pointer findings without suppressing vet;
+- passing the full failure matrix and ordinary Linux/Windows validation;
+- merging the controls to `main` at `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`;
+- re-running the merged tree with an empty Actions artifact inventory.
+
+This makes the covered Windows CI commands trustworthy as fail-fast checks. It does **not** approve the resulting executable for testing, distribution or release.
 
 ## Public Actions artifact rule
 
 P0 issue #24 established that GitHub Actions artifacts are a public binary-distribution surface, even when labelled unsigned, provenance, temporary or test-only.
 
 At `main` commit `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`, the workflow stopped uploading `ECO.exe`, its checksum and receipt. The Windows job still compiles and tests the executable on the ephemeral hosted runner, after which the runner workspace is discarded.
+
+Successful and failure-path pull-request runs have since been independently inspected and produced exactly zero Actions artifacts. Issue #24 nevertheless remains open because historical executable artifacts must be deleted or expire, manual-dispatch evidence remains outstanding, and affected development branches must preserve the corrected no-upload workflow when reconciled.
 
 While the public-binary release gate is closed:
 
