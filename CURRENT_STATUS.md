@@ -34,7 +34,7 @@ PR #11 remains a draft. It proposes clean candidate-specific workspace state, mi
 
 ### Intended-purpose and health-input conformance
 
-PR #18 proposes a controlling intended-purpose and public-claims boundary. Source review found that the current Ask ECO path can rank, truncate, reorder and compose passages without first applying the proposed restriction for health-related or mixed-purpose source material.
+PR #18 proposes a controlling intended-purpose and public-claims boundary. Source review found that the current Ask ECO path can rank, truncate, reorder and compose passages without first applying the proposed restriction for health-related source material or health-related or clinical content within mixed-purpose material.
 
 P0 issue #20 records the implementation gate. Until it is independently closed, the current source must not be described as enforcing that boundary, and health-related material must not enter Ask ECO or another generated-answer route except in synthetic tests designed to prove safe rejection.
 
