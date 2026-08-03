@@ -30,14 +30,14 @@ The following remain blocked:
 | Ask verification and restore concurrency | Blocked by open issue #12 |
 | Candidate workspace identity | PR #11 remains draft; exact candidate binding is not independently approved |
 | Migration, rollback and reset | PR #11 remains draft with unresolved P0 filesystem and recovery boundaries |
-| Runtime and model supply chain | Blocked until exact runtime/model provenance and every redistributed file are reconciled |
+| Diagnostic privacy and offline claims | Blocked by issue #14 |
+| Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
 | Signing order and authenticity | Blocked until the final file is assembled, hashed and Authenticode-signed with no later mutation |
-| Privacy and offline proof | Incomplete; runtime network behaviour and diagnostic-export privacy require objective evidence |
 | OCR and local AI | Not approved as reliable production functionality |
-| Accessibility | Blocked pending keyboard, screen-reader, DPI, contrast, scrolling and cognitive-accessibility evidence |
-| Security reporting and maintenance | No complete operational vulnerability-reporting, advisory, update or support-period process |
-| Publisher and stewardship | No accountable operating organisation appointed |
+| Intended purpose and public claims | Blocked by issue #16 |
+| Accessibility | Blocked pending issue #7 evidence and truthful conformance documentation |
+| Security reporting, publisher and continuity | Blocked by issue #17 |
 | Public claims | Only controlled development claims are permitted |
 
 ## Issue and pull-request controls
@@ -57,6 +57,13 @@ Issue #12 blocks issue #3 closure and real-evidence approval. It requires bounde
 ### PR #11 and issue #4
 
 PR #11 remains a draft. It must not be merged or used to close issue #4 until independent re-review confirms correction of the candidate-identity, migration-record, rollback, reparse-point/reset and preservation-interaction findings.
+
+### Issues #14–#17
+
+- Issue #14 blocks unsafe diagnostic sharing and inaccurate offline/network claims.
+- Issue #15 blocks distribution without actual-build SBOM, licensing, provenance and signing evidence.
+- Issue #16 blocks unsupported intended-purpose, legal, medical, forensic, high-risk-decision and compliance claims.
+- Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
 
 ## Stop rules
 
