@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-004`  
-**Updated:** 3 August 2026  
+**Gate record:** `ECO-RELEASE-GATE-20260803-005`  
+**Updated:** 3 August 2026, 20:13 BST  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this consistency update:** `9fc0b1156d1373e95dd0ee3ed8d6598d4382362d`  
+**Baseline `main` commit reviewed before this gate update:** `e34018592a8bab168ba516a0d61493bf0fa6d47f`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -14,7 +14,8 @@ ECO remains a source-development project only.
 The following remain blocked:
 
 - use with real, sensitive or irreplaceable evidence;
-- ordinary-user binary distribution;
+- ordinary-user binary distribution through GitHub Releases, Actions artifacts or another public channel;
+- use or redistribution of historical unsigned Actions executables;
 - public preview, release-candidate or stable-release status;
 - public-sector or institutional deployment;
 - healthcare or clinical deployment;
@@ -25,7 +26,7 @@ The following remain blocked:
 
 | Gate | Current position |
 |---|---|
-| Source identity | `main` contains post-V25 development changes; no later named source milestone is approved |
+| Source identity | `main` contains post-V25 development and repository-control changes; no later named source milestone is approved |
 | Evidence preservation | PR #10 merged materially improved controls, but issue #3 is reopened pending issue #12 and independent closure |
 | Ask verification and restore concurrency | Blocked by open issue #12 |
 | Ask health-related input boundary | Blocked by P0 issue #20; current Ask source does not yet enforce the proposed restriction |
@@ -34,6 +35,7 @@ The following remain blocked:
 | Ordinary workspace writers | Blocked by PR #11 exact-head finding: stale independently opened writers can still erase newer metadata without revision/CAS conflict detection |
 | Alias and retained-parent ownership | Blocked by PR #11 exact-head finding: lock, recovery controls and workspace participants are not all derived from one retained object identity |
 | Linux nested cleanup | Blocked by PR #11 exact-head finding: an inspected directory can be closed and reopened by name during recursive cleanup |
+| Public Actions executable distribution | New uploads stopped in `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`; issue #24 remains open pending exact-run proof and historical artifact deletion or expiry |
 | Diagnostic privacy and offline claims | Blocked by issue #14 |
 | Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
@@ -71,6 +73,23 @@ The fail-fast Windows CI correction, object-bound reset/migration operations, au
 
 PR #11 must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
 
+### Issue #24 — public Actions executable distribution
+
+Independent inspection confirmed that the public workflow uploaded unsigned runnable `ECO.exe` packages after successful implementation and documentation-only pull-request runs.
+
+Emergency source containment at `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a` removed the `upload-artifact` step while retaining internal Windows compilation and testing.
+
+Issue #24 remains open until:
+
+- the containment commit's workflow run is independently inspected;
+- successful push, pull-request and manual-dispatch runs produce no downloadable executable, DLL, installer or runnable archive;
+- failure paths still produce no artifact;
+- the four identified historical executable artifacts are deleted by an authorised repository administrator or have expired;
+- affected branches are reconciled with the corrected workflow;
+- no later automation reintroduces public binary upload without issue #15, signing and publisher approval.
+
+The identified historical executables are unapproved and must not be tested, used or redistributed.
+
 ### Issues #14–#17 and #20
 
 - Issue #14 blocks unsafe diagnostic sharing and inaccurate offline/network claims.
@@ -81,9 +100,9 @@ PR #11 must not be marked ready, merged or used to close issue #4 until one cohe
 
 ## Public-document assurance result
 
-The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record now describe the blocked development position consistently.
+The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record describe the blocked development position.
 
-That reconciliation changed documentation/control wording only and did not change source behaviour, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve a build or resolve a technical gate.
+The earlier assurance reconciliation changed documentation/control wording only. The later issue #24 emergency containment changed only the workflow upload surface; it did not approve a build, delete historical artifacts or resolve an application gate.
 
 The following underlying limits remain release-blocking:
 
@@ -93,6 +112,7 @@ The following underlying limits remain release-blocking:
 - issue #12 still blocks Ask verification and restore concurrency;
 - issue #14 still blocks diagnostic and final network qualification;
 - issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation;
+- issue #24 still requires exact-run proof and historical artifact removal or expiry;
 - issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts;
 - accessibility, responsiveness and page-aware search qualification remains incomplete.
 
@@ -114,6 +134,7 @@ Stop where any of the following remains unresolved:
 
 Stop where:
 
+- any public Actions artifact or other channel exposes an unapproved runnable payload;
 - the executable is unsigned or is not the actual one-file deliverable;
 - accessibility evidence is incomplete;
 - application help or AI can invent controls, actions or unsupported conclusions;
@@ -121,7 +142,7 @@ Stop where:
 - no accountable steward accepts security, privacy, complaints, support and continuity duties;
 - public claims cannot be supported by the exact released artefact.
 
-### Stop before GitHub Release
+### Stop before GitHub Release or public Actions upload
 
 Stop where:
 
@@ -129,10 +150,11 @@ Stop where:
 - final model/runtime provenance is incomplete;
 - Smart App Control and clean-machine testing have not passed;
 - the file was changed after signing;
+- issue #24's distribution controls have not passed;
 - any P0 or P1 finding remains unresolved.
 
-A finding must not be labelled non-release-blocking or accepted as an exception to bypass this stop rule.
+Calling a file a test, provenance or temporary artifact does not remove these stop rules. A finding must not be labelled non-release-blocking or accepted as an exception to bypass them.
 
 ## Public-record rule
 
-Public status documents may identify defect classes, acceptance tests and release decisions. They must not expose personal evidence, private diagnostics, unpublished binaries, model files, private workspaces or exploit-level instructions.
+Public status documents may identify defect classes, acceptance tests and release decisions. They must not expose personal evidence, private diagnostics, unapproved binaries, model files, private workspaces or exploit-level instructions.
