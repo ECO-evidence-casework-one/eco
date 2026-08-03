@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-005`  
-**Updated:** 3 August 2026, 20:13 BST  
+**Gate record:** `ECO-RELEASE-GATE-20260803-006`  
+**Updated:** 3 August 2026, 22:00 BST  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this gate update:** `e34018592a8bab168ba516a0d61493bf0fa6d47f`  
+**Current reviewed `main` commit before this gate reconciliation:** `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -22,12 +22,14 @@ The following remain blocked:
 - EU availability;
 - claims of legal, forensic, medical, accessibility or regulatory compliance.
 
+Issue #27 is closed and the covered Windows native-command CI gate is now independently trustworthy. That closure does not alter any block above.
+
 ## Current gate status
 
 | Gate | Current position |
 |---|---|
 | Source identity | `main` contains post-V25 development and repository-control changes; no later named source milestone is approved |
-| Evidence preservation | PR #10 merged materially improved controls, but issue #3 is reopened pending issue #12 and independent closure |
+| Evidence preservation | PR #10 merged materially improved controls, but issue #3 remains open pending issue #12 and independent closure |
 | Ask verification and restore concurrency | Blocked by open issue #12 |
 | Ask health-related input boundary | Blocked by P0 issue #20; current Ask source does not yet enforce the proposed restriction |
 | Candidate workspace identity | PR #11 contains material candidate-binding improvements but remains draft and blocked by current ownership/concurrency findings |
@@ -35,7 +37,8 @@ The following remain blocked:
 | Ordinary workspace writers | Blocked by PR #11 exact-head finding: stale independently opened writers can still erase newer metadata without revision/CAS conflict detection |
 | Alias and retained-parent ownership | Blocked by PR #11 exact-head finding: lock, recovery controls and workspace participants are not all derived from one retained object identity |
 | Linux nested cleanup | Blocked by PR #11 exact-head finding: an inspected directory can be closed and reopened by name during recursive cleanup |
-| Public Actions executable distribution | New uploads stopped in `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`; issue #24 remains open pending exact-run proof and historical artifact deletion or expiry |
+| Windows native-command CI truthfulness | Issue #27 closed; fail-fast helper, controlled failure test, six-stage matrix, static wrapper assertions and merged-tree validation passed at current `main` |
+| Public Actions executable distribution | New uploads stopped; multiple PR routes prove zero artifacts, but issue #24 remains open for historical artifacts, manual-dispatch proof and branch reconciliation |
 | Diagnostic privacy and offline claims | Blocked by issue #14 |
 | Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
@@ -69,9 +72,26 @@ The current exact-head blockers are:
 3. Linux nested cleanup reopening an inspected directory by name;
 4. unowned workspace creation, first launch and candidate-state writes.
 
-The fail-fast Windows CI correction, object-bound reset/migration operations, authenticated restore phases and issue #3 regression coverage at that head are material progress, but they do not close these four blockers.
+Object-bound reset/migration operations, authenticated restore phases and issue #3 regression coverage at that head are material progress, but they do not close these four blockers.
 
-PR #11 must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
+PR #11 must preserve the issue #24 no-upload control and the issue #27 fail-fast/matrix controls when it is eventually reconciled with current `main`. It must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
+
+### Issue #27 — Windows native-command CI truthfulness
+
+Issue #27 closed as completed on 3 August 2026.
+
+The evidence chain included:
+
+- reproduction of the original false-green Windows vet result;
+- a real vet failure stopping before policy and both builds;
+- correction of the three exposed unsafe-pointer findings without suppressing vet;
+- successful ordinary Linux and Windows validation;
+- a six-stage synthetic failure matrix covering test, vet, policy, first build, second build and `go version`;
+- static assertions that every real native stage remains wrapped by `Invoke-NativeChecked`;
+- final merge to `main` at `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`;
+- final merged-tree verification run `30852039542`, with an empty artifact inventory.
+
+This closure permits reliance on the covered CI command results. It does not approve the unsigned runner-built executable or satisfy any application, packaging, signing or release gate.
 
 ### Issue #24 — public Actions executable distribution
 
@@ -79,12 +99,12 @@ Independent inspection confirmed that the public workflow uploaded unsigned runn
 
 Emergency source containment at `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a` removed the `upload-artifact` step while retaining internal Windows compilation and testing.
 
+Successful and failed pull-request routes, including final issue #27 merged-main verification, have been inspected and exposed exactly zero Actions artifacts.
+
 Issue #24 remains open until:
 
-- the containment commit's workflow run is independently inspected;
-- successful push, pull-request and manual-dispatch runs produce no downloadable executable, DLL, installer or runnable archive;
-- failure paths still produce no artifact;
 - the four identified historical executable artifacts are deleted by an authorised repository administrator or have expired;
+- a controlled manual-dispatch run produces no downloadable executable, DLL, installer or runnable archive;
 - affected branches are reconciled with the corrected workflow;
 - no later automation reintroduces public binary upload without issue #15, signing and publisher approval.
 
@@ -98,23 +118,16 @@ The identified historical executables are unapproved and must not be tested, use
 - Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
 - P0 issue #20 blocks generated processing of health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
 
-## Public-document assurance result
+## Underlying release-blocking limits
 
-The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record describe the blocked development position.
-
-The earlier assurance reconciliation changed documentation/control wording only. The later issue #24 emergency containment changed only the workflow upload surface; it did not approve a build, delete historical artifacts or resolve an application gate.
-
-The following underlying limits remain release-blocking:
-
-- current `main` still lacks explicit native exit-code enforcement in the Windows PowerShell build gate;
-- current `main` portable restore still uses pathname-based activation and best-effort rollback;
-- PR #11 still has the four exact-head ownership/concurrency blockers above and is currently non-mergeable pending reconciliation;
-- issue #12 still blocks Ask verification and restore concurrency;
-- issue #14 still blocks diagnostic and final network qualification;
-- issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation;
-- issue #24 still requires exact-run proof and historical artifact removal or expiry;
-- issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts;
-- accessibility, responsiveness and page-aware search qualification remains incomplete.
+- Current `main` portable restore still uses pathname-based activation and best-effort rollback.
+- PR #11 retains the four exact-head ownership/concurrency blockers above.
+- Issue #12 still blocks Ask verification and restore concurrency.
+- Issue #14 still blocks diagnostic and final network qualification.
+- Issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation.
+- Issue #24 still requires historical artifact removal/expiry, manual-dispatch evidence and branch reconciliation.
+- Issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts.
+- Accessibility, responsiveness and page-aware search qualification remains incomplete.
 
 ## Stop rules
 
@@ -151,7 +164,7 @@ Stop where:
 - Smart App Control and clean-machine testing have not passed;
 - the file was changed after signing;
 - issue #24's distribution controls have not passed;
-- any P0 or P1 finding remains unresolved.
+- any release-blocking P0 or P1 finding remains unresolved.
 
 Calling a file a test, provenance or temporary artifact does not remove these stop rules. A finding must not be labelled non-release-blocking or accepted as an exception to bypass them.
 
