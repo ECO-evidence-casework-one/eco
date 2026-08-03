@@ -1,6 +1,6 @@
 # ECO publisher and stewardship gate
 
-**Control status:** draft governance control for issue #17  
+**Control effect:** project governance gate when present on the canonical branch; adoption does not appoint a publisher or approve a release  
 **Control date:** 3 August 2026  
 **Current position:** no accountable official ECO publisher or operating organisation appointed; public end-user binary, institutional, healthcare and EU gates remain closed; public source development remains permitted
 
@@ -20,7 +20,7 @@ Public source development with synthetic and non-sensitive information may conti
 
 ## Non-assignment rule
 
-No project document, repository setting, pull request, issue, release record or informal practice may assign the following responsibilities to Karl, another individual contributor or a sole GitHub account by default:
+No project document, repository setting, pull request, issue, release record or informal practice may assign the following responsibilities to the originating individual developer, another contributor or a sole GitHub account by default:
 
 - legal publisher or manufacturer;
 - supplier or contracting party;
@@ -248,7 +248,7 @@ The official publisher gate cannot pass without:
 - [ ] A synthetic incident demonstrates triage, containment, public-channel communication, correction and post-incident review.
 - [ ] An account-loss or maintainer-unavailability exercise demonstrates repository and official release continuity.
 - [ ] Institutional materials identify the contracting party, support model, data roles, liability position, insurance decision and exit arrangements.
-- [ ] Role records confirm that Karl or another contributor has not been assigned organisational duties merely by developing or contributing to ECO.
+- [ ] Role records confirm that the originating individual developer or another contributor has not been assigned organisational duties merely by developing or contributing to ECO.
 - [ ] Official public documentation identifies the accountable organisation without implying certification, regulatory approval or wider responsibility than it has accepted.
 - [ ] The document states clearly that independent GPL forks and redistributions are not controlled or endorsed by the official ECO publisher unless expressly agreed.
 
