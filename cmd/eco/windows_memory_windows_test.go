@@ -56,10 +56,24 @@ func TestWindowsMinMaxInfoFieldWrite(t *testing.T) {
 	}
 }
 
-func TestWindowsMemoryCopyHelpersRejectEmptyArguments(t *testing.T) {
+func TestWindowsMemoryCopyHelpersRejectInvalidAddresses(t *testing.T) {
+	var source = [4]byte{1, 2, 3, 4}
 	var target [4]byte
+
 	copyWindowsMemoryToGo(unsafe.Pointer(&target[0]), 0, unsafe.Sizeof(target))
-	copyGoMemoryToWindows(0, unsafe.Pointer(&target[0]), unsafe.Sizeof(target))
-	copyWindowsMemoryToGo(nil, uintptr(unsafe.Pointer(&target[0])), unsafe.Sizeof(target))
+	copyWindowsMemoryToGo(unsafe.Pointer(&target[0]), minimumWindowsUserAddress-1, unsafe.Sizeof(target))
+	copyGoMemoryToWindows(0, unsafe.Pointer(&source[0]), unsafe.Sizeof(source))
+	copyGoMemoryToWindows(minimumWindowsUserAddress-1, unsafe.Pointer(&source[0]), unsafe.Sizeof(source))
+	copyWindowsMemoryToGo(nil, uintptr(unsafe.Pointer(&source[0])), unsafe.Sizeof(source))
 	copyGoMemoryToWindows(uintptr(unsafe.Pointer(&target[0])), nil, unsafe.Sizeof(target))
+
+	if target != [4]byte{} {
+		t.Fatalf("invalid-address copy changed target: got %x", target)
+	}
+}
+
+func TestMinMaxInfoMessageRejectsNilAddress(t *testing.T) {
+	if got := mainWndProc(0, WM_GETMINMAXINFO, 0, 0); got != 0 {
+		t.Fatalf("WM_GETMINMAXINFO nil-address result = %d, want 0", got)
+	}
 }
