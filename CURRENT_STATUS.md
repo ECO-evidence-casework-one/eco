@@ -39,6 +39,10 @@ PR #11 remains a draft. It proposes clean candidate-specific workspace state, mi
 - Issue #7: keyboard, screen-reader, DPI, scrolling and working-control accessibility.
 - Issue #8: page-aware document search, visible highlights and source navigation.
 - Issue #12: bounded Ask verification cost and safe serialisation against restore.
+- Issue #14: privacy-safe diagnostics and accurate offline/network claims.
+- Issue #15: actual-build SBOM, licence notices and release provenance.
+- Issue #16: intended purpose, excluded uses and controlled public claims.
+- Issue #17: accountable publisher, response routes and project continuity.
 
 ## Current stop gates
 
@@ -63,8 +67,10 @@ Before the release position can be reconsidered, ECO requires objective evidence
 - Windows stability, low-resource and long-duration testing;
 - no external-network proof for all bundled runtime components;
 - evidence-integrity and recovery qualification;
+- privacy-safe diagnostics and accurate public network claims;
 - keyboard, assistive-technology, DPI and cognitive-accessibility evidence;
 - trusted Authenticode signing with no post-signing file mutation;
+- an authoritative intended-purpose and excluded-use boundary;
 - an accountable publisher or steward for security, privacy, complaints, support and continuity;
 - independent closure of all release-blocking P0 and P1 findings.
 
