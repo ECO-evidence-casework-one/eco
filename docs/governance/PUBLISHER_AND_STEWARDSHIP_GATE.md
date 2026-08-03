@@ -170,7 +170,7 @@ The organisation must define:
 
 Risk acceptance may document deferred remediation for continued private or synthetic development. It must not close an unresolved finding, alter its severity or waive an active release stop rule.
 
-The current release rule is non-waivable: no official GitHub Release or ordinary-user binary may be approved while a release-blocking P0 or P1 finding remains unresolved. A high or critical exception cannot be used to bypass that rule.
+The current release rule is non-waivable: no official GitHub Release or ordinary-user binary may be approved while any P0 or P1 finding remains unresolved. A finding must not be labelled non-release-blocking to bypass this rule. A high or critical exception cannot be used to bypass that rule.
 
 ### 10. Contracts, procurement, liability and insurance
 
@@ -261,7 +261,7 @@ Stop before an official ordinary-user binary distribution where:
 - release authenticity, supported versions or withdrawal arrangements are undefined;
 - privacy, accessibility and product complaint routes do not exist;
 - continuity depends on a single personal account;
-- any release-blocking P0 or P1 finding remains unresolved.
+- any P0 or P1 finding remains unresolved.
 
 Stop before official institutional supply where:
 

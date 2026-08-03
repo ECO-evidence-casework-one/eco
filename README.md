@@ -2,7 +2,7 @@
 
 **Evidence & Casework One (ECO)** is a free and open-source Windows desktop application under active development for preserving, organising, reviewing and understanding evidence and casework locally.
 
-> **Development status:** early native source preview. Do not use unsigned development builds with real, sensitive or irreplaceable evidence.
+> **Development status:** early native source development. There is no approved signed end-user release. Do not use development builds with real, sensitive or irreplaceable evidence.
 
 ## Project principles
 
@@ -12,14 +12,18 @@
 - Streaming local hashing, encrypted storage and integrity checks
 - Source-backed outputs that distinguish documents, OCR suggestions, ECO suggestions, user confirmations and notes
 - Calm, accessible and plain-language operation
-- Free and open-source components only
+- Free and open-source project source, with exact bundled-component licensing and provenance required before distribution
 
-## Current source milestone
+## Current recorded milestone
 
 `ECO-V25-20260731-N2-P1`  
 **Version 25 N2 — Native Document Vision Foundation Preview 1**
 
-The N2 P1 source adds:
+This remains the value recorded in `VERSION` and the last named source milestone approved under the earlier milestone process.
+
+The `main` branch now also contains later controlled source-development changes. Those later commits do not automatically create a new approved source milestone, release candidate or end-user release.
+
+The V25 N2 P1 foundation introduced:
 
 - conservative photographed-page boundary detection;
 - non-destructive auto-crop and deskew preview modes;
@@ -28,23 +32,22 @@ The N2 P1 source adds:
 - bounded high-resolution preview processing;
 - perspective-correction foundations;
 - coordinate-bearing OCR words, lines, receipts and source segments;
-- source-hash and coordinate validation before OCR results can enter the encrypted workspace;
+- source-hash and coordinate validation foundations;
 - exact OCR citation-region highlighting foundations;
 - exclusion of very low-confidence OCR segments from Ask ECO retrieval.
 
-A bundled OCR engine and generative local language model are **not yet included**. The OCR provenance and source-region system is implemented first so future engines cannot inject unvalidated text into the evidence index.
+A bundled production OCR engine, OCR language/model package and generative local language model are **not** part of the recorded V25 milestone. V25 provides document-vision and OCR-provenance foundations rather than approved production OCR or generative-AI operation.
 
-## Later local development and independent control
+## Current controlled development
 
-The source currently published on `main` remains `ECO-V25-20260731-N2-P1`.
+Later public source-development work is tracked through narrow issues and pull requests with explicit acceptance tests.
 
-Later native Windows candidates are developed and independently inspected before any source promotion. These private candidates do not automatically replace the public source milestone and are not releases.
+- PR #10 merged evidence-preservation and source-binding changes, but issue #3 is reopened pending independent closure and follow-up issue #12.
+- PR #11 remains a draft for candidate-specific workspace state, migration, recovery and reset. It is not approved.
+- Issues #5–#8 continue to track offline-AI behaviour, responsiveness, accessibility and document navigation.
+- Issues #14–#17 track diagnostic privacy and offline claims, actual-build SBOM/licensing/provenance, intended purpose and excluded uses, and accountable publisher/continuity arrangements.
 
-`ECO-V32-20260801-M1-P1` was independently reproducible but was held before Windows execution because runtime-provenance, final one-file packaging and current release-evidence requirements were incomplete.
-
-Version 34 is under active development and has not yet entered independent intake.
-
-See [Current project status](docs/status/CURRENT_STATUS.md) and the [current release gate](docs/control/CURRENT_RELEASE_GATE.md).
+See the [canonical current project status](CURRENT_STATUS.md) and the [current release gate](docs/control/CURRENT_RELEASE_GATE.md).
 
 ## Important release warning
 
@@ -54,6 +57,8 @@ Official releases will appear only on this repository's **Releases** page and wi
 
 ## Documentation
 
+- [Current project status](CURRENT_STATUS.md)
+- [Current release gate](docs/control/CURRENT_RELEASE_GATE.md)
 - [Known limitations](KNOWN_LIMITATIONS.md)
 - [Privacy and offline operation](PRIVACY.md)
 - [Security policy](SECURITY.md)
@@ -78,7 +83,7 @@ See the [Code signing policy](CODE_SIGNING_POLICY.md), [maintainer roles](MAINTA
 
 ## Privacy statement
 
-This program will not transfer any information to other networked systems unless specifically requested by the user or the person installing or operating it.
+This program will not transfer information to other networked systems unless specifically requested by the user or the person installing or operating it. Any local inter-process communication used by a later candidate must be accurately documented and independently tested before release claims are made.
 
 ## Licence
 
