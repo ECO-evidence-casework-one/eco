@@ -21,7 +21,7 @@
 
 This remains the value recorded in `VERSION` and the last named source milestone approved under the earlier milestone process.
 
-The `main` branch now also contains later controlled source-development changes. Those later commits do not automatically create a new approved source milestone, release candidate or end-user release.
+The `main` branch now also contains later controlled source-development and repository-control changes. Those later commits do not automatically create a new approved source milestone, release candidate or end-user release.
 
 The V25 N2 P1 foundation introduced:
 
@@ -47,6 +47,7 @@ Later public source-development work is tracked through narrow issues and pull r
 - Draft PR #18 proposes intended-purpose and public-claims controls; issue #20 records the unresolved health-related generated-processing implementation gate.
 - Issues #5–#8 continue to track offline-AI behaviour, responsiveness, accessibility and document navigation.
 - Issues #14–#17 track diagnostic privacy and offline claims, actual-build SBOM/licensing/provenance, intended purpose and excluded uses, and accountable publisher/continuity arrangements.
+- P0 issue #24 tracks public Actions distribution of unsigned executables. New uploads were stopped on `main`, but historical artifacts remain unapproved until deleted or expired and the correction is fully evidenced.
 
 See the [canonical current project status](CURRENT_STATUS.md), the [current release gate](docs/control/CURRENT_RELEASE_GATE.md) and the operational [control board](https://github.com/ECO-evidence-casework-one/eco/issues/22).
 
@@ -56,7 +57,9 @@ There is currently **no approved signed end-user release**. New unsigned Windows
 
 Official releases will appear only on this repository's **Releases** page and will include checksums, source provenance, known limitations and signature-verification instructions.
 
-The current `main` Windows build script is not itself an approved release gate. A fail-fast native-command correction exists only in blocked draft PR #11 and has not yet been merged. Do not treat a green Windows artifact job on `main` as independent proof that every native test command was enforced.
+GitHub Actions artifacts are also a binary-distribution surface. They are not an alternative release channel. At `main` commit `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`, ECO stopped uploading `ECO.exe` from the public workflow while retaining internal Windows compilation and testing. Four earlier unsigned Actions executable packages identified by issue #24 are not approved test candidates or releases and must not be used or redistributed.
+
+The current `main` Windows build script is not itself an approved release gate. A fail-fast native-command correction exists only in blocked draft PR #11 and has not yet been merged. Do not treat a green Windows job on `main` as independent proof that every native test command was enforced.
 
 ## Documentation
 
