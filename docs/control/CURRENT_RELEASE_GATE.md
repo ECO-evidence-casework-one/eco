@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-003`  
+**Gate record:** `ECO-RELEASE-GATE-20260803-004`  
 **Updated:** 3 August 2026  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this gate update:** `71c225df4e967b192abf43797d0587ba36e68763`  
+**Baseline `main` commit reviewed before this consistency update:** `9fc0b1156d1373e95dd0ee3ed8d6598d4382362d`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -79,19 +79,22 @@ PR #11 must not be marked ready, merged or used to close issue #4 until one cohe
 - Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
 - P0 issue #20 blocks generated processing of health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
 
-## Current public-document assurance findings
+## Public-document assurance result
 
-The canonical status and stop rules remain protective. Supporting documents still require controlled reconciliation:
+The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record now describe the blocked development position consistently.
 
-- `RELEASE_POLICY.md` has a dated current-gate section that names only issues #3–#8 and omits later blocking issues;
-- `KNOWN_LIMITATIONS.md` is narrowly scoped to V25 N2 P1 and omits later workspace, Ask, diagnostic, governance and health-input gates;
-- `THREAT_MODEL.md` uses “staged transactional restore” as though fully qualified on `main`, although current activation is still pathname-based and best-effort;
-- `BUILDING.md` says the Windows script runs tests and vet as a controlled gate, but the fail-fast native-command correction is not yet on `main`;
-- `ROADMAP.md` does not distinguish current bounded Office/email extraction from richer structured and receipt-bearing extraction still required;
-- maintainer/signing documents need to state that repository roles do not appoint the named individual as legal publisher, supplier, support operator, complaints handler, data controller or liability owner;
-- the root V25 SBOM and third-party notices are historical/source-level records, not the actual packaged-artifact provenance required by issue #15.
+That reconciliation changed documentation/control wording only and did not change source behaviour, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve a build or resolve a technical gate.
 
-These are documentation-control findings. They do not weaken or replace any technical blocker.
+The following underlying limits remain release-blocking:
+
+- current `main` still lacks explicit native exit-code enforcement in the Windows PowerShell build gate;
+- current `main` portable restore still uses pathname-based activation and best-effort rollback;
+- PR #11 still has the four exact-head ownership/concurrency blockers above and is currently non-mergeable pending reconciliation;
+- issue #12 still blocks Ask verification and restore concurrency;
+- issue #14 still blocks diagnostic and final network qualification;
+- issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation;
+- issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts;
+- accessibility, responsiveness and page-aware search qualification remains incomplete.
 
 ## Stop rules
 
