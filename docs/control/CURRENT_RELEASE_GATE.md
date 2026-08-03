@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-004`  
+**Gate record:** `ECO-RELEASE-GATE-20260803-005`  
 **Updated:** 3 August 2026  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this consistency update:** `9fc0b1156d1373e95dd0ee3ed8d6598d4382362d`  
+**Baseline `main` commit reviewed before this intended-purpose update:** `aac8f6f3d5d9314d765cc14546d66ec7fc376aec`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -28,7 +28,7 @@ The following remain blocked:
 | Source identity | `main` contains post-V25 development changes; no later named source milestone is approved |
 | Evidence preservation | PR #10 merged materially improved controls, but issue #3 is reopened pending issue #12 and independent closure |
 | Ask verification and restore concurrency | Blocked by open issue #12 |
-| Ask health-related input boundary | Blocked by P0 issue #20; current Ask source does not yet enforce the proposed restriction |
+| Ask health-related input boundary | Governance boundary defined; technical implementation conformance remains blocked by P0 issue #20 |
 | Candidate workspace identity | PR #11 contains material candidate-binding improvements but remains draft and blocked by current ownership/concurrency findings |
 | Workspace creation and first launch | Blocked by PR #11 exact-head finding: creation and candidate state are not yet protected by one alias-safe cross-process ownership transaction |
 | Ordinary workspace writers | Blocked by PR #11 exact-head finding: stale independently opened writers can still erase newer metadata without revision/CAS conflict detection |
@@ -39,10 +39,10 @@ The following remain blocked:
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
 | Signing order and authenticity | Blocked until the final file is assembled, hashed and Authenticode-signed with no later mutation |
 | OCR and local AI | Not approved as reliable production functionality |
-| Intended purpose and public claims | Blocked by draft PR #18, issue #16 and the issue #20 implementation dependency |
+| Intended purpose and public claims | Governance boundary defined; issue #16 remains open for cross-surface evidence and issue #20 remains the P0 implementation dependency |
 | Accessibility | Blocked pending issue #7 evidence and truthful conformance documentation |
 | Security reporting, publisher and continuity | Blocked by issue #17 |
-| Public claims | Only controlled development claims are permitted |
+| Public claims | Only controlled development claims consistent with the intended-purpose boundary are permitted |
 
 ## Issue and pull-request controls
 
@@ -71,19 +71,37 @@ The fail-fast Windows CI correction, object-bound reset/migration operations, au
 
 PR #11 must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
 
-### Issues #14–#17 and #20
+### Intended-purpose control, issue #16 and issue #20
+
+The [ECO intended purpose and public-claims control](../governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md) is the project-governance boundary when present on the canonical branch.
+
+It operates separately from:
+
+- implementation conformance by an exact application build;
+- medical-device or other legal and regulatory classification;
+- release or deployment approval.
+
+Adoption of that document does not establish those matters or close issue #16 or P0 issue #20.
+
+The implementation observation is tied to application source at commit `001e4fc2d55f8c29a9eaa20a0f741162433aadad`. Later documentation commits do not establish that the Ask implementation changed.
+
+P0 issue #20 blocks Ask ECO, a local model or another semantic/generated-answer route from operating on a vault containing health-related or mixed-purpose clinical material unless independently verified isolation proves that restricted material cannot enter ranking, prompts, context, memory, citations or output. Question scope to an unrelated file or topic is not sufficient isolation.
+
+Issue #16 remains open until README, application UI, model or system cards, exports, release material, screenshots, partner material and prohibited-claim controls are reconciled and independently evidenced.
+
+Before any official EU availability, the accountable organisation must perform a feature-level and role-specific assessment under Regulation (EU) 2024/1689 as amended by Regulation (EU) 2026/1744 and the European Commission's final Article 50 guidelines of 20 July 2026. No EU AI Act compliance claim is approved.
+
+### Issues #14, #15 and #17
 
 - Issue #14 blocks unsafe diagnostic sharing and inaccurate offline/network claims.
 - Issue #15 blocks distribution without actual-build SBOM, licensing, provenance and signing evidence.
-- Issue #16 blocks unsupported intended-purpose, legal, medical, forensic, high-risk-decision and compliance claims.
 - Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
-- P0 issue #20 blocks generated processing of health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
 
 ## Public-document assurance result
 
 The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record now describe the blocked development position consistently.
 
-That reconciliation changed documentation/control wording only and did not change source behaviour, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve a build or resolve a technical gate.
+That reconciliation changed documentation and control wording only and did not change source behaviour, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve a build or resolve a technical gate.
 
 The following underlying limits remain release-blocking:
 
@@ -93,7 +111,7 @@ The following underlying limits remain release-blocking:
 - issue #12 still blocks Ask verification and restore concurrency;
 - issue #14 still blocks diagnostic and final network qualification;
 - issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation;
-- issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts;
+- issues #16, #17 and #20 remain open;
 - accessibility, responsiveness and page-aware search qualification remains incomplete.
 
 ## Stop rules
@@ -121,7 +139,7 @@ Stop where:
 - no accountable steward accepts security, privacy, complaints, support and continuity duties;
 - public claims cannot be supported by the exact released artefact.
 
-### Stop before GitHub Release
+### Stop before GitHub Release, official binary or institutional supply
 
 Stop where:
 
@@ -129,9 +147,10 @@ Stop where:
 - final model/runtime provenance is incomplete;
 - Smart App Control and clean-machine testing have not passed;
 - the file was changed after signing;
+- contracting, data-role, support, liability or exit arrangements required for institutional supply are unresolved;
 - any P0 or P1 finding remains unresolved.
 
-A finding must not be labelled non-release-blocking or accepted as an exception to bypass this stop rule.
+A finding must not be labelled non-release-blocking or accepted as an exception to bypass this stop rule. The unresolved-P0/P1 stop applies to every official ECO distribution and project-endorsed institutional supply, not only a public GitHub Release.
 
 ## Public-record rule
 
