@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 	"unicode"
@@ -23,7 +24,38 @@ type RuntimeIdentity struct {
 }
 
 func CurrentRuntime() RuntimeIdentity {
-	return RuntimeIdentity{CandidateID: BuildID, BuildID: BuildID, Schema: Schema}
+	revision, modified := currentSourceRevision()
+	return RuntimeIdentity{CandidateID: candidateIDForSource(BuildID, revision, modified), BuildID: BuildID, Schema: Schema}
+}
+
+func currentSourceRevision() (string, bool) {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "", false
+	}
+	revision := ""
+	modified := false
+	for _, setting := range info.Settings {
+		switch setting.Key {
+		case "vcs.revision":
+			revision = setting.Value
+		case "vcs.modified":
+			modified = setting.Value == "true"
+		}
+	}
+	return revision, modified
+}
+
+func candidateIDForSource(buildID, revision string, modified bool) string {
+	revision = strings.TrimSpace(revision)
+	if revision == "" {
+		revision = "unrecorded"
+	}
+	id := buildID + "-source-" + revision
+	if modified {
+		id += "-modified"
+	}
+	return id
 }
 
 type WorkspaceIdentity struct {

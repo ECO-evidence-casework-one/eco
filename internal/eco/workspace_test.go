@@ -34,6 +34,18 @@ func hasChange(workspace Workspace, changeType string) bool {
 	return false
 }
 
+func TestCandidateIdentityIncludesSourceRevision(t *testing.T) {
+	first := candidateIDForSource("ECO-TEST", "aaaaaaaa", false)
+	second := candidateIDForSource("ECO-TEST", "bbbbbbbb", false)
+	modified := candidateIDForSource("ECO-TEST", "aaaaaaaa", true)
+	if first == second || first == modified || !strings.Contains(modified, "modified") {
+		t.Fatalf("source-distinct candidates did not receive distinct identities: %q %q %q", first, second, modified)
+	}
+	if unrecorded := candidateIDForSource("ECO-TEST", "", false); !strings.Contains(unrecorded, "source-unrecorded") {
+		t.Fatalf("unrecorded source identity is ambiguous: %q", unrecorded)
+	}
+}
+
 func createPriorSchemaOneWorkspace(t *testing.T, root string, runtime RuntimeIdentity) *Vault {
 	t.Helper()
 	vault, err := createVault(root, "Temporary legacy fixture", runtime)
