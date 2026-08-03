@@ -49,13 +49,15 @@ jobs:
       - name: Deterministic Windows build and tests
         shell: pwsh
         run: ./scripts/build-windows.ps1
-      - name: Upload unsigned provenance artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: eco-windows-unsigned-${{ github.sha }}
-          path: |
-            dist/ECO.exe
-            dist/ECO.exe.sha256
-            dist/build-receipt.json
-          if-no-files-found: error
-          retention-days: 7
+      - name: Discard unsigned development build outputs
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path -LiteralPath 'dist') {
+            Remove-Item -LiteralPath 'dist' -Recurse -Force
+          }
+
+# Public GitHub Actions must not upload ECO executables, DLLs, installers,
+# model/runtime payloads or runnable archives while the public-binary gate is
+# closed. Controlled unsigned testing uses a separate private handoff with an
+# exact hash, build identity, warning and withdrawal/expiry record.
