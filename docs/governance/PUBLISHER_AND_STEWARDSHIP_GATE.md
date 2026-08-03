@@ -2,19 +2,21 @@
 
 **Control status:** draft governance control for issue #17  
 **Control date:** 3 August 2026  
-**Current position:** no accountable publisher or operating organisation appointed; all public, institutional, healthcare and EU gates remain closed
+**Current position:** no accountable official ECO publisher or operating organisation appointed; public end-user binary, institutional, healthcare and EU gates remain closed; public source development remains permitted
 
 ## Purpose
 
-This document defines the organisational responsibilities that must be accepted before Evidence & Casework One (ECO) can be distributed to ordinary users or supplied for institutional use.
+This document defines the organisational responsibilities that must be accepted before the ECO project makes or endorses an official distribution for ordinary users or supplies ECO for institutional use.
 
 It is a release and governance gate. It does not appoint a publisher, create a company, transfer liability, approve a release or require any individual developer to accept organisational duties.
 
+This control does not restrict the GPL rights of third parties to copy, modify or convey ECO source or object code. A third-party fork or redistribution is not an official ECO distribution merely because it uses ECO source, name or code. A downstream distributor is responsible for its own claims, legal roles, security, support and distribution decisions and must not imply ECO-project endorsement without authority.
+
 ## Current control decision
 
-ECO currently has no settled legal organisation responsible for publishing, support, security response, privacy complaints, accessibility complaints, contracts, insurance, continuity or withdrawal of releases.
+ECO currently has no settled legal organisation responsible for official binary publishing, support, security response, privacy complaints, accessibility complaints, contracts, insurance, continuity or withdrawal of official releases.
 
-Development with synthetic and non-sensitive information may continue. Public binary distribution, institutional procurement, healthcare use and EU availability remain blocked.
+Public source development with synthetic and non-sensitive information may continue. Official public end-user binary distribution, institutional procurement, healthcare use and EU availability remain blocked.
 
 ## Non-assignment rule
 
@@ -35,7 +37,7 @@ An individual may accept a defined role only through a separate, explicit and in
 
 ## Required accountable organisation
 
-Before ordinary-user or institutional distribution, an established legal organisation must formally accept the ECO publisher and stewardship role.
+Before the ECO project makes or endorses an official ordinary-user binary distribution or institutional supply, an established legal organisation must formally accept the ECO publisher and stewardship role.
 
 The organisation must be capable of:
 
@@ -47,7 +49,7 @@ The organisation must be capable of:
 - obtaining legal, accessibility, security, privacy and insurance advice where required;
 - maintaining continuity when an individual maintainer is unavailable.
 
-The organisation's name, legal status, jurisdiction, address or formal service route, responsible governing body and relevant contacts must be recorded before release.
+The organisation's name, legal status, jurisdiction, address or formal service route, responsible governing body and relevant contacts must be recorded before an official release.
 
 ## Responsibility matrix
 
@@ -55,22 +57,24 @@ The organisation's name, legal status, jurisdiction, address or formal service r
 
 The accountable organisation must:
 
-- decide whether a candidate may be published;
+- decide whether a candidate may become an official ECO release;
 - confirm that source, binary, manifest, SBOM, licence notices, hashes and signatures identify the same artefact;
-- maintain the authoritative release page and approved download route;
-- prohibit unofficial or post-signing modification of release files;
-- withdraw, revoke or warn against a release when material risk is discovered;
+- maintain the authoritative official release page and approved download route;
+- prohibit post-signing modification of official release files;
+- withdraw, revoke or publish warnings against an official release when material risk is discovered;
 - preserve release and withdrawal decisions in an auditable record.
+
+This authority applies only to official ECO releases. It does not control independent GPL forks or third-party redistributions.
 
 ### 2. Security vulnerability response
 
 The accountable organisation must:
 
-- operate a monitored private vulnerability-reporting route;
+- operate a monitored private vulnerability-reporting route for official ECO releases and project-controlled source;
 - publish supported versions and realistic response expectations;
 - triage reports using a documented severity process;
 - preserve confidential evidence and avoid requiring public disclosure of exploit detail;
-- coordinate fixes, mitigations, advisories and release withdrawal;
+- coordinate fixes, mitigations, advisories and official release withdrawal;
 - communicate clearly whether an update is a temporary mitigation or a complete fix;
 - perform post-incident review and maintain a vulnerability record.
 
@@ -80,18 +84,20 @@ A public repository issue must not be the only route for reporting a sensitive v
 
 The accountable organisation must:
 
-- define the support period for each release;
+- define the support period for each official release;
 - identify which versions receive security fixes;
 - provide a safe manual update and rollback process suitable for an offline application;
-- notify users of material security updates and end-of-support dates;
+- publish timely security, update and end-of-support notices through declared release, security and support channels;
 - define what happens when a bundled model, runtime, parser or dependency becomes unsupported or vulnerable;
 - maintain an exit path allowing users to export or retain their own records without dependence on the publisher.
+
+ECO has no accounts, telemetry or mandatory registration. The publisher is not required to identify or contact every person who obtained a copy. Its duty under this control is to maintain clear, stable and timely public notice channels for official releases.
 
 Support commitments must be deliverable and must not depend solely on spare personal capacity.
 
 ### 4. Privacy and data-role control
 
-For each distribution or deployment model, the accountable organisation must determine and document:
+For each official distribution or deployment model, the accountable organisation must determine and document:
 
 - whether it is a controller, joint controller, processor or neither for each data flow;
 - whether support, diagnostics, crash reports or complaint handling may receive personal data;
@@ -123,7 +129,7 @@ The accountable organisation must operate a process for:
 - loss, corruption or unintended disclosure of local records;
 - repeated usability or accessibility failures affecting vulnerable users.
 
-The process must distinguish urgent security or safeguarding concerns from ordinary support requests and must define escalation, reproduction, containment, correction and user communication.
+The process must distinguish urgent security or safeguarding concerns from ordinary support requests and must define escalation, reproduction, containment, correction and publication through the appropriate official channels.
 
 ### 7. Code signing and release authenticity
 
@@ -147,7 +153,7 @@ The accountable organisation must:
 - review repository, organisation, release and signing permissions periodically;
 - preserve recovery instructions outside one person's device or account;
 - test recovery from account loss, maintainer incapacity and unauthorised access;
-- define who can freeze, archive or transfer the repository during an incident.
+- define who can freeze, archive or transfer the official repository during an incident.
 
 ### 9. Independent review and risk acceptance
 
@@ -156,13 +162,15 @@ High-risk changes must not be approved solely by their author.
 The organisation must define:
 
 - which changes require independent technical, legal, privacy, accessibility or regulatory review;
-- who may approve a release;
-- who may accept residual risk;
-- when risk acceptance expires;
-- which risks may never be accepted without external specialist advice;
+- who may approve an official release;
+- who may record residual risk for continued development;
+- when a recorded risk decision expires;
+- which risks require external specialist advice;
 - how dissenting review findings are preserved.
 
-A high or critical exception must be written, evidence-based, time-limited and approved by someone other than the change author where practical.
+Risk acceptance may document deferred remediation for continued private or synthetic development. It must not close an unresolved finding, alter its severity or waive an active release stop rule.
+
+The current release rule is non-waivable: no official GitHub Release or ordinary-user binary may be approved while a release-blocking P0 or P1 finding remains unresolved. A high or critical exception cannot be used to bypass that rule.
 
 ### 10. Contracts, procurement, liability and insurance
 
@@ -184,7 +192,7 @@ The repository owner or individual developer must not make warranties or indemni
 
 ### 11. Regulatory ownership
 
-Before any regulated or geographically expanded use, the accountable organisation must own the decision and supporting assessment for:
+Before any official regulated or geographically expanded use, the accountable organisation must own the decision and supporting assessment for:
 
 - UK medical-device or digital mental-health boundaries;
 - forensic or criminal-justice use;
@@ -194,11 +202,11 @@ Before any regulated or geographically expanded use, the accountable organisatio
 - product-liability and consumer-protection exposure;
 - any required registration, conformity, reporting or market-surveillance contact.
 
-EU availability remains blocked until a responsible legal person and operational reporting route have been established where required.
+Official ECO availability in the EU remains blocked until a responsible legal person and operational reporting route have been established where required.
 
 ## Required public routes
 
-Before release, the following routes must exist and be tested:
+Before an official release, the following routes must exist and be tested:
 
 | Route | Minimum purpose |
 |---|---|
@@ -213,7 +221,7 @@ The routes may be operated by the same organisation, but their responsibilities 
 
 ## Minimum evidence pack
 
-The publisher gate cannot pass without:
+The official publisher gate cannot pass without:
 
 - formal organisational acceptance of the publisher/stewardship role;
 - legal identity and governing authority record;
@@ -231,39 +239,43 @@ The publisher gate cannot pass without:
 
 ## Acceptance tests
 
-- [ ] A named legal organisation has formally accepted the publisher and stewardship role.
+- [ ] A named legal organisation has formally accepted the official ECO publisher and stewardship role.
 - [ ] The acceptance record identifies its governing authority and authorised decision-makers.
-- [ ] No release, repository, signing or emergency-recovery function depends on one unrecoverable personal account.
+- [ ] No official release, repository, signing or emergency-recovery function depends on one unrecoverable personal account.
 - [ ] A synthetic private vulnerability report reaches the monitored route and follows the documented process.
 - [ ] Supported-version, update, rollback, withdrawal and end-of-support procedures pass a tabletop exercise.
 - [ ] Privacy, accessibility, product-complaint and general-support routes are live and correctly separated.
-- [ ] A synthetic incident demonstrates triage, containment, communication, correction and post-incident review.
-- [ ] An account-loss or maintainer-unavailability exercise demonstrates repository and release continuity.
+- [ ] A synthetic incident demonstrates triage, containment, public-channel communication, correction and post-incident review.
+- [ ] An account-loss or maintainer-unavailability exercise demonstrates repository and official release continuity.
 - [ ] Institutional materials identify the contracting party, support model, data roles, liability position, insurance decision and exit arrangements.
 - [ ] Role records confirm that Karl or another contributor has not been assigned organisational duties merely by developing or contributing to ECO.
-- [ ] Public documentation identifies the accountable organisation without implying certification, regulatory approval or wider responsibility than it has accepted.
+- [ ] Official public documentation identifies the accountable organisation without implying certification, regulatory approval or wider responsibility than it has accepted.
+- [ ] The document states clearly that independent GPL forks and redistributions are not controlled or endorsed by the official ECO publisher unless expressly agreed.
 
 ## Stop rules
 
-Stop before ordinary-user distribution where:
+Stop before an official ordinary-user binary distribution where:
 
-- no accountable organisation has accepted the publisher role;
+- no accountable organisation has accepted the official publisher role;
 - vulnerability reporting and security maintenance are not operational;
 - release authenticity, supported versions or withdrawal arrangements are undefined;
 - privacy, accessibility and product complaint routes do not exist;
-- continuity depends on a single personal account.
+- continuity depends on a single personal account;
+- any release-blocking P0 or P1 finding remains unresolved.
 
-Stop before institutional supply where:
+Stop before official institutional supply where:
 
 - no contracting legal entity exists;
 - support, data roles, liability, insurance or exit arrangements are unresolved;
 - the organisation cannot provide accurate procurement and AI disclosures.
 
-Stop before healthcare, justice-sector or EU availability where:
+Stop before official healthcare, justice-sector or EU availability where:
 
 - the responsible organisation has not completed the relevant legal and regulatory assessment;
 - mandatory reporting, conformity or legal-representative arrangements are absent;
 - the intended purpose or actual functionality exceeds the approved boundary.
+
+These stop rules govern official ECO distributions and project-endorsed supply. They do not remove third parties' GPL rights or make the ECO project responsible for an unauthorised fork or redistribution.
 
 ## Official reference basis
 
