@@ -9,7 +9,6 @@ permissions:
 
 jobs:
   apply-exact-null-guard:
-    if: github.actor == 'Nexlu1'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
