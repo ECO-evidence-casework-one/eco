@@ -11,7 +11,7 @@
 - Original evidence preserved separately from derived readings
 - Streaming local hashing, encrypted storage and integrity checks
 - Source-backed outputs that distinguish documents, OCR suggestions, ECO suggestions, user confirmations and notes
-- Calm, accessible and plain-language operation
+- Calm, accessible and plain-language operation as a design objective; accessibility conformance is not yet claimed
 - Free and open-source project source, with exact bundled-component licensing and provenance required before distribution
 
 ## Current recorded milestone
@@ -43,17 +43,20 @@ A bundled production OCR engine, OCR language/model package and generative local
 Later public source-development work is tracked through narrow issues and pull requests with explicit acceptance tests.
 
 - PR #10 merged evidence-preservation and source-binding changes, but issue #3 is reopened pending independent closure and follow-up issue #12.
-- PR #11 remains a draft for candidate-specific workspace state, migration, recovery and reset. It is not approved.
+- PR #11 remains a draft for candidate-specific workspace state, migration, recovery and reset. It contains material progress but remains blocked by exact-head ownership, concurrency and filesystem-object findings recorded in issue #22 and on the PR.
+- Draft PR #18 proposes intended-purpose and public-claims controls; issue #20 records the unresolved health-related generated-processing implementation gate.
 - Issues #5–#8 continue to track offline-AI behaviour, responsiveness, accessibility and document navigation.
 - Issues #14–#17 track diagnostic privacy and offline claims, actual-build SBOM/licensing/provenance, intended purpose and excluded uses, and accountable publisher/continuity arrangements.
 
-See the [canonical current project status](CURRENT_STATUS.md) and the [current release gate](docs/control/CURRENT_RELEASE_GATE.md).
+See the [canonical current project status](CURRENT_STATUS.md), the [current release gate](docs/control/CURRENT_RELEASE_GATE.md) and the operational [control board](https://github.com/ECO-evidence-casework-one/eco/issues/22).
 
 ## Important release warning
 
 There is currently **no approved signed end-user release**. New unsigned Windows executables may be blocked by Windows Smart App Control. Do not weaken Windows security controls to run an ECO development build.
 
 Official releases will appear only on this repository's **Releases** page and will include checksums, source provenance, known limitations and signature-verification instructions.
+
+The current `main` Windows build script is not itself an approved release gate. A fail-fast native-command correction exists only in blocked draft PR #11 and has not yet been merged. Do not treat a green Windows artifact job on `main` as independent proof that every native test command was enforced.
 
 ## Documentation
 
@@ -83,7 +86,7 @@ See the [Code signing policy](CODE_SIGNING_POLICY.md), [maintainer roles](MAINTA
 
 ## Privacy statement
 
-This program will not transfer information to other networked systems unless specifically requested by the user or the person installing or operating it. Any local inter-process communication used by a later candidate must be accurately documented and independently tested before release claims are made.
+This program will not transfer information to other networked systems unless specifically requested by the user or the person installing or operating it. This describes the current source-level product rule, not independent qualification of a future bundled runtime. Any local inter-process communication used by a later candidate must be accurately documented and independently tested before release claims are made.
 
 ## Licence
 
