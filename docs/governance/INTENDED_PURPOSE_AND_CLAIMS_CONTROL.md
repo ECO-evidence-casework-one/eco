@@ -41,7 +41,7 @@ ECO is intended to support **information organisation and user-led casework prep
 
 The intended primary user is an individual working with files and casework that they are lawfully entitled to hold and review.
 
-Possible later use by advisers, charities, public bodies, healthcare organisations, legal practices or other institutions requires a separate deployment assessment, accountable publisher, contractual and data-role allocation, accessibility evidence, security evidence and any required sector-specific review. No institutional use is currently approved.
+The ECO project will not approve, endorse, supply, promote or support an official deployment for advisers, charities, public bodies, healthcare organisations, legal practices or other institutions until a separate deployment assessment, accountable publisher, contractual and data-role allocation, accessibility evidence, security evidence and any required sector-specific review exist. No project-endorsed institutional use is currently approved.
 
 ## Intended inputs
 
@@ -121,9 +121,9 @@ For mixed-purpose material, the restricted boundary applies to any generated pro
 
 This classification does not prevent byte-preserving display, deterministic extraction, exact-text search or user-requested sorting on explicit non-clinical metadata.
 
-#### Current permitted handling of health-related source material
+#### Handling approved under this control for health-related source material
 
-Under the current intended purpose, health-related source material may only be handled through the same non-clinical document functions available to other source material:
+Under this control, approved handling of health-related source material is limited to the same non-clinical document functions available to other source material:
 
 - preserve the selected file;
 - calculate and verify byte-comparison hashes;
@@ -135,11 +135,11 @@ Under the current intended purpose, health-related source material may only be h
 - sort records using explicit metadata selected by the user, such as filename, import date or recorded file date, without interpreting the content;
 - store a chronology, summary or note written by the user.
 
-These functions must not semantically select, omit, reorder, combine or paraphrase clinical facts on the user's behalf.
+Functions approved under this control must not semantically select, omit, reorder, combine or paraphrase clinical facts on the user's behalf.
 
-#### Current prohibited handling of health-related source material
+#### Handling not approved under this control for health-related source material
 
-No current ECO feature may use generative AI, a language model or semantic application-authored rules to create a summary, synopsis, chronology, priority list or action list from health-related source material.
+No current ECO feature is approved under this control to use generative AI, a language model or semantic application-authored rules to create a summary, synopsis, chronology, priority list or action list from health-related source material.
 
 The prohibition applies even where the output is described as administrative, general-purpose or document organisation. It includes:
 
