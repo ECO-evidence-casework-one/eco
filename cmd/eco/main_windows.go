@@ -223,15 +223,21 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		procDragAcceptFiles.Call(hwnd, 1)
 		return 0
 	case WM_GETMINMAXINFO:
-		mmi := (*MINMAXINFO)(unsafe.Pointer(lparam))
-		mmi.PtMinTrackSize = POINT{X: 1000, Y: 730}
+		minTrack := POINT{X: 1000, Y: 730}
+		copyGoMemoryToWindows(
+			lparam+unsafe.Offsetof(MINMAXINFO{}.PtMinTrackSize),
+			unsafe.Pointer(&minTrack),
+			unsafe.Sizeof(minTrack),
+		)
 		return 0
 	case WM_DPICHANGED:
 		newDPI := int32(loword(wparam))
 		if newDPI > 0 && newDPI != app.dpi {
 			app.dpi = newDPI
 			app.createFonts()
-			if suggested := (*RECT)(unsafe.Pointer(lparam)); suggested != nil {
+			if lparam != 0 {
+				var suggested RECT
+				copyWindowsMemoryToGo(unsafe.Pointer(&suggested), lparam, unsafe.Sizeof(suggested))
 				procSetWindowPos.Call(hwnd, 0, uintptr(suggested.Left), uintptr(suggested.Top), uintptr(suggested.Right-suggested.Left), uintptr(suggested.Bottom-suggested.Top), SWP_NOZORDER|SWP_NOACTIVATE)
 			}
 			var dr RECT
@@ -1834,8 +1840,8 @@ func clipboardBMP() ([]byte, error) {
 	if sz < 40 || sz > 250*1024*1024 {
 		return nil, fmt.Errorf("clipboard image size is unsafe or unsupported")
 	}
-	dib := make([]byte, sz)
-	copy(dib, unsafe.Slice((*byte)(unsafe.Pointer(p)), int(sz)))
+	dib := make([]byte, int(sz))
+	copyWindowsMemoryToGo(unsafe.Pointer(&dib[0]), p, sz)
 	headerSize := int(binary.LittleEndian.Uint32(dib[:4]))
 	if headerSize < 40 || headerSize > len(dib) {
 		return nil, fmt.Errorf("clipboard DIB header is unsupported")
