@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-004`  
+**Gate record:** `ECO-RELEASE-GATE-20260803-005`  
 **Updated:** 3 August 2026  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this consistency update:** `9fc0b1156d1373e95dd0ee3ed8d6598d4382362d`  
+**Baseline `main` commit reviewed before the issue #24 correction:** `aac8f6f3d5d9314d765cc14546d66ec7fc376aec`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -14,7 +14,7 @@ ECO remains a source-development project only.
 The following remain blocked:
 
 - use with real, sensitive or irreplaceable evidence;
-- ordinary-user binary distribution;
+- ordinary-user binary distribution through GitHub Releases, Actions artifacts or another public route;
 - public preview, release-candidate or stable-release status;
 - public-sector or institutional deployment;
 - healthcare or clinical deployment;
@@ -36,6 +36,7 @@ The following remain blocked:
 | Linux nested cleanup | Blocked by PR #11 exact-head finding: an inspected directory can be closed and reopened by name during recursive cleanup |
 | Diagnostic privacy and offline claims | Blocked by issue #14 |
 | Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
+| Public Actions binary distribution | Blocked by P0 issue #24; the corrected workflow uploads no runnable payload, but historical unapproved artifacts require inventory and deletion or expiry evidence |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
 | Signing order and authenticity | Blocked until the final file is assembled, hashed and Authenticode-signed with no later mutation |
 | OCR and local AI | Not approved as reliable production functionality |
@@ -71,6 +72,21 @@ The fail-fast Windows CI correction, object-bound reset/migration operations, au
 
 PR #11 must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
 
+### Issue #24 — public Actions executable distribution
+
+The earlier workflow uploaded unsigned executable packages from push, pull-request and manual-dispatch jobs. Documentation-only pull requests generated runnable binaries even though every public-binary gate was closed.
+
+The corrected workflow must:
+
+- build and test the Windows executable internally;
+- upload no executable, DLL, installer, model/runtime payload or runnable archive;
+- discard unsigned build outputs before the hosted job ends;
+- preserve only independently approved, privacy-safe non-runnable evidence where needed.
+
+Issue #24 remains open until all trigger paths are independently verified, live prohibited artifacts are deleted or expire with a preserved inventory, and future public binary automation has an explicit issue #15, issue #17, signing and release-approval gate.
+
+A short retention period, the word `unsigned`, a warning or a provenance label does not make a public Actions executable permissible.
+
 ### Issues #14–#17 and #20
 
 - Issue #14 blocks unsafe diagnostic sharing and inaccurate offline/network claims.
@@ -81,12 +97,15 @@ PR #11 must not be marked ready, merged or used to close issue #4 until one cohe
 
 ## Public-document assurance result
 
-The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record now describe the blocked development position consistently.
+The 3 August 2026 public-document assurance reconciliation is complete. The README, current status, release gate, known limitations, release policy, roadmap, building guide, privacy policy, security policy, threat model and maintainer-role record describe the blocked development position.
 
-That reconciliation changed documentation/control wording only and did not change source behaviour, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve a build or resolve a technical gate.
+That reconciliation changed documentation and control wording only and did not change source behaviour, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve a build or resolve a technical gate.
+
+The issue #24 correction is a separate bounded workflow and documentation change. It removes the public executable-upload route. It does not approve the Windows build, validate historical artifacts, close issue #15 or #17, or authorise a private or public test candidate.
 
 The following underlying limits remain release-blocking:
 
+- historical unapproved Actions executable artifacts may remain live until deletion or expiry;
 - current `main` still lacks explicit native exit-code enforcement in the Windows PowerShell build gate;
 - current `main` portable restore still uses pathname-based activation and best-effort rollback;
 - PR #11 still has the four exact-head ownership/concurrency blockers above and is currently non-mergeable pending reconciliation;
@@ -121,7 +140,15 @@ Stop where:
 - no accountable steward accepts security, privacy, complaints, support and continuity duties;
 - public claims cannot be supported by the exact released artefact.
 
-### Stop before GitHub Release
+### Stop before any public binary distribution
+
+This stop applies equally to:
+
+- GitHub Release assets;
+- GitHub Actions artifacts;
+- public preview or test download pages;
+- public mirrors or archives;
+- any other project-controlled public route.
 
 Stop where:
 
@@ -129,9 +156,11 @@ Stop where:
 - final model/runtime provenance is incomplete;
 - Smart App Control and clean-machine testing have not passed;
 - the file was changed after signing;
+- no accountable publisher and operational response route exists;
+- a public distribution-surface inventory is incomplete;
 - any P0 or P1 finding remains unresolved.
 
-A finding must not be labelled non-release-blocking or accepted as an exception to bypass this stop rule.
+A finding must not be labelled non-release-blocking or accepted as an exception to bypass this stop rule. Renaming a binary as `test`, `provenance`, `unsigned` or `artifact` does not change the distribution decision.
 
 ## Public-record rule
 
