@@ -3,7 +3,7 @@
 **Gate record:** `ECO-RELEASE-GATE-20260803-002`  
 **Updated:** 3 August 2026  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Current `main` commit reviewed:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
+**Baseline `main` commit reviewed before this gate update:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
