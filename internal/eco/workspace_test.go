@@ -34,15 +34,19 @@ func hasChange(workspace Workspace, changeType string) bool {
 	return false
 }
 
-func TestCandidateIdentityIncludesSourceRevision(t *testing.T) {
-	first := candidateIDForSource("ECO-TEST", "aaaaaaaa", false)
-	second := candidateIDForSource("ECO-TEST", "bbbbbbbb", false)
-	modified := candidateIDForSource("ECO-TEST", "aaaaaaaa", true)
-	if first == second || first == modified || !strings.Contains(modified, "modified") {
-		t.Fatalf("source-distinct candidates did not receive distinct identities: %q %q %q", first, second, modified)
+func TestCandidateIdentityIncludesSourceRevisionAndArtifact(t *testing.T) {
+	first := candidateIDForSource("ECO-TEST", "aaaaaaaa", false, strings.Repeat("1", 64))
+	second := candidateIDForSource("ECO-TEST", "bbbbbbbb", false, strings.Repeat("1", 64))
+	modified := candidateIDForSource("ECO-TEST", "aaaaaaaa", true, strings.Repeat("1", 64))
+	artifact := candidateIDForSource("ECO-TEST", "aaaaaaaa", false, strings.Repeat("2", 64))
+	if first == second || first == modified || first == artifact || !strings.Contains(modified, "modified") {
+		t.Fatalf("distinct candidates did not receive distinct identities: %q %q %q %q", first, second, modified, artifact)
 	}
-	if unrecorded := candidateIDForSource("ECO-TEST", "", false); !strings.Contains(unrecorded, "source-unrecorded") {
+	if unrecorded := candidateIDForSource("ECO-TEST", "", false, strings.Repeat("1", 64)); !strings.Contains(unrecorded, "source-unrecorded") {
 		t.Fatalf("unrecorded source identity is ambiguous: %q", unrecorded)
+	}
+	if withoutArtifact := candidateIDForSource("ECO-TEST", "aaaaaaaa", false, ""); withoutArtifact != "" {
+		t.Fatalf("missing artifact fingerprint did not block candidate identity: %q", withoutArtifact)
 	}
 }
 

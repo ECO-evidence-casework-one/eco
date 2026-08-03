@@ -1,9 +1,12 @@
 package eco
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -25,7 +28,11 @@ type RuntimeIdentity struct {
 
 func CurrentRuntime() RuntimeIdentity {
 	revision, modified := currentSourceRevision()
-	return RuntimeIdentity{CandidateID: candidateIDForSource(BuildID, revision, modified), BuildID: BuildID, Schema: Schema}
+	artifactSHA256, err := currentArtifactSHA256()
+	if err != nil {
+		return RuntimeIdentity{BuildID: BuildID, Schema: Schema}
+	}
+	return RuntimeIdentity{CandidateID: candidateIDForSource(BuildID, revision, modified, artifactSHA256), BuildID: BuildID, Schema: Schema}
 }
 
 func currentSourceRevision() (string, bool) {
@@ -46,16 +53,37 @@ func currentSourceRevision() (string, bool) {
 	return revision, modified
 }
 
-func candidateIDForSource(buildID, revision string, modified bool) string {
+func currentArtifactSHA256() (string, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("locate this ECO build: %w", err)
+	}
+	f, err := os.Open(executable)
+	if err != nil {
+		return "", fmt.Errorf("open this ECO build: %w", err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err = io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("fingerprint this ECO build: %w", err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func candidateIDForSource(buildID, revision string, modified bool, artifactSHA256 string) string {
 	revision = strings.TrimSpace(revision)
 	if revision == "" {
 		revision = "unrecorded"
+	}
+	artifactSHA256 = strings.TrimSpace(artifactSHA256)
+	if artifactSHA256 == "" {
+		return ""
 	}
 	id := buildID + "-source-" + revision
 	if modified {
 		id += "-modified"
 	}
-	return id
+	return id + "-artifact-" + artifactSHA256
 }
 
 type WorkspaceIdentity struct {
@@ -132,7 +160,7 @@ func (s WorkspaceSession) StatusText() string {
 
 func validateRuntime(runtime RuntimeIdentity) error {
 	if !validIdentityLabel(runtime.CandidateID, 256) {
-		return errors.New("the development candidate identity is missing")
+		return errors.New("ECO could not confirm this development candidate's identity, so no workspace was opened")
 	}
 	if !validIdentityLabel(runtime.BuildID, 128) {
 		return errors.New("the build identity is missing")

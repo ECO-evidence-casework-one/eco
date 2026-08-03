@@ -17,7 +17,7 @@ The encrypted record and identity file must agree. A mismatch blocks opening. A 
 
 ## Candidate-specific application state
 
-Each development candidate derives a separate application-state folder from its build identity and embedded source revision. Its automatic development workspace is inside that folder. A different committed candidate produces a different folder even when the public milestone label has not changed, so another candidate's last-selected workspace, settings and test records are not inherited.
+Each development candidate derives a separate application-state folder from its build identity, embedded source revision and exact executable SHA-256. Its automatic development workspace is inside that folder. A different committed or ad-hoc binary produces a different folder even when the public milestone label has not changed, so another candidate's last-selected workspace, settings and test records are not inherited. If ECO cannot fingerprint its own executable, startup is blocked instead of risking an ambiguous candidate identity.
 
 The candidate application audit records successful and blocked create, reopen, migration, recovery and reset actions. A previously selected external workspace is recorded for truthfulness but is never automatically reopened at the next launch. Restart opens only that candidate's own default development workspace; an external workspace must be selected again deliberately.
 
