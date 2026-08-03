@@ -1,0 +1,65 @@
+name: Apply issue 27 source fix once
+
+on:
+  push:
+    branches: [ control/issue-27-native-fail-fast ]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-exact-source-fix:
+    if: github.actor == 'Nexlu1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: control/issue-27-native-fail-fast
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Apply three exact pointer-lifetime corrections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("cmd/eco/main_windows.go")
+          text = path.read_text(encoding="utf-8")
+          replacements = [
+              (
+                  "\tcase WM_GETMINMAXINFO:\n\t\tmmi := (*MINMAXINFO)(unsafe.Pointer(lparam))\n\t\tmmi.PtMinTrackSize = POINT{X: 1000, Y: 730}\n\t\treturn 0",
+                  "\tcase WM_GETMINMAXINFO:\n\t\tminTrack := POINT{X: 1000, Y: 730}\n\t\tcopyGoMemoryToWindows(\n\t\t\tlparam+unsafe.Offsetof(MINMAXINFO{}.PtMinTrackSize),\n\t\t\tunsafe.Pointer(&minTrack),\n\t\t\tunsafe.Sizeof(minTrack),\n\t\t)\n\t\treturn 0",
+              ),
+              (
+                  "\t\t\tif suggested := (*RECT)(unsafe.Pointer(lparam)); suggested != nil {\n\t\t\t\tprocSetWindowPos.Call(hwnd, 0, uintptr(suggested.Left), uintptr(suggested.Top), uintptr(suggested.Right-suggested.Left), uintptr(suggested.Bottom-suggested.Top), SWP_NOZORDER|SWP_NOACTIVATE)\n\t\t\t}",
+                  "\t\t\tif lparam != 0 {\n\t\t\t\tvar suggested RECT\n\t\t\t\tcopyWindowsMemoryToGo(unsafe.Pointer(&suggested), lparam, unsafe.Sizeof(suggested))\n\t\t\t\tprocSetWindowPos.Call(hwnd, 0, uintptr(suggested.Left), uintptr(suggested.Top), uintptr(suggested.Right-suggested.Left), uintptr(suggested.Bottom-suggested.Top), SWP_NOZORDER|SWP_NOACTIVATE)\n\t\t\t}",
+              ),
+              (
+                  "\tdib := make([]byte, sz)\n\tcopy(dib, unsafe.Slice((*byte)(unsafe.Pointer(p)), int(sz)))",
+                  "\tdib := make([]byte, int(sz))\n\tcopyWindowsMemoryToGo(unsafe.Pointer(&dib[0]), p, sz)",
+              ),
+          ]
+
+          for index, (old, new) in enumerate(replacements, 1):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"replacement {index} expected once, found {count}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding="utf-8")
+          PY
+          gofmt -w cmd/eco/main_windows.go cmd/eco/windows_memory_windows.go cmd/eco/windows_memory_windows_test.go
+          git diff --check
+      - name: Commit bounded source correction and remove this workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cmd/eco/main_windows.go cmd/eco/windows_memory_windows.go cmd/eco/windows_memory_windows_test.go
+          git rm .github/workflows/issue27-apply-source-fix.yml
+          git commit -m "fix: copy transient Windows memory without uintptr pointer casts"
+          git push origin HEAD:control/issue-27-native-fail-fast
