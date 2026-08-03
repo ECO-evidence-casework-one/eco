@@ -2,7 +2,7 @@
 
 **Status date:** 3 August 2026  
 **Canonical public status record:** this file  
-**Baseline `main` commit reviewed before this status update:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
+**Baseline `main` commit reviewed before this consistency update:** `4acad97bae9e8fd1f751404c044bf19951ffcb54`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Release position:** development only; no approved public binary
 
@@ -70,20 +70,35 @@ The following remain blocked:
 - all healthcare or clinical deployment;
 - all EU availability, including download, supply or deployment.
 
-## Current public-document assurance note
+## Public-document assurance reconciliation
 
-A 3 August 2026 independent documentation audit found that the canonical status and release stop rules remain protective, but several supporting documents need reconciliation before any release decision:
+A 3 August 2026 independent documentation audit found that the canonical status and stop rules were protective but several supporting documents were stale or overbroad. The public-safe reconciliation is now complete across:
 
-- `docs/control/CURRENT_RELEASE_GATE.md` still describes older PR #11 findings rather than the current exact-head ownership/concurrency blockers;
-- `RELEASE_POLICY.md` still names only issues #3–#8 in its dated current-gate section and omits later release-blocking issues #12, #14–#17 and #20;
-- `KNOWN_LIMITATIONS.md` remains narrowly scoped to the recorded V25 N2 P1 milestone and does not summarise the later active workspace, Ask, diagnostic, governance and health-input gates;
-- `THREAT_MODEL.md` uses “staged transactional restore” as a current core-control phrase even though `main` still uses pathname-based activation and best-effort rollback and PR #11 remains blocked;
-- `BUILDING.md` describes the Windows script as running tests and vet as a controlled gate, but the fail-fast native-command correction is not yet on `main`;
-- `ROADMAP.md` needs to distinguish existing bounded Office/email text extraction from the richer structured and receipt-bearing extraction still required;
-- maintainer and signing-role documents need an explicit statement that repository roles do not appoint the named individual as legal publisher, supplier, support operator, complaints handler, data controller or liability owner;
-- the root V25 SBOM and notices are historical/source-level records, not actual packaged-binary provenance under issue #15.
+- `README.md`;
+- `KNOWN_LIMITATIONS.md`;
+- `RELEASE_POLICY.md`;
+- `ROADMAP.md`;
+- `BUILDING.md`;
+- `PRIVACY.md`;
+- `SECURITY.md`;
+- `THREAT_MODEL.md`;
+- `MAINTAINERS.md`;
+- this canonical status record;
+- `docs/control/CURRENT_RELEASE_GATE.md`.
 
-These documentation findings do not open any gate. They must be reconciled through a controlled documentation change without weakening the current stop rules or restoring stale milestone wording.
+The reconciliation changed documentation and control wording only. It did not change application source, tests, workflows, `VERSION`, binaries, models, the historical V25 SBOM, licences or third-party notices. It did not approve PR #11 or open any release gate.
+
+The following underlying technical and organisational limits remain controlling despite the documentation reconciliation:
+
+- current `main` still has a Windows PowerShell build script that does not explicitly enforce every native command exit code; a green artifact job is not independent fail-fast evidence;
+- current `main` still uses pathname-based portable-restore activation with best-effort rollback;
+- PR #11 remains blocked by stale-writer, alias/retained-parent, Linux nested-cleanup and unowned-creation/first-launch findings;
+- issue #12 still blocks safe Ask verification cost and Ask/restore serialisation;
+- issue #14 still blocks privacy-safe diagnostics and final bundled-runtime network claims;
+- the root V25 SBOM and notices remain historical/source-level records rather than the actual packaged-artifact provenance required by issue #15;
+- PR #18, issues #16 and #20 remain unresolved;
+- no accountable established publisher, support operator, complaints handler or continuity owner has accepted the issue #17 duties;
+- accessibility, responsiveness and page-aware search qualification remains incomplete.
 
 ## Release prerequisites
 
