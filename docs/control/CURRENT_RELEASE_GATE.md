@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-002`  
+**Gate record:** `ECO-RELEASE-GATE-20260803-003`  
 **Updated:** 3 August 2026  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` commit reviewed before this gate update:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
+**Baseline `main` commit reviewed before this gate update:** `71c225df4e967b192abf43797d0587ba36e68763`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -26,24 +26,27 @@ The following remain blocked:
 | Gate | Current position |
 |---|---|
 | Source identity | `main` contains post-V25 development changes; no later named source milestone is approved |
-| Evidence preservation | PR #10 merged materially improved controls, but issue #3 is reopened pending independent closure |
+| Evidence preservation | PR #10 merged materially improved controls, but issue #3 is reopened pending issue #12 and independent closure |
 | Ask verification and restore concurrency | Blocked by open issue #12 |
 | Ask health-related input boundary | Blocked by P0 issue #20; current Ask source does not yet enforce the proposed restriction |
-| Candidate workspace identity | PR #11 remains draft; exact candidate binding is not independently approved |
-| Migration, rollback and reset | PR #11 remains draft with unresolved P0 filesystem and recovery boundaries |
+| Candidate workspace identity | PR #11 contains material candidate-binding improvements but remains draft and blocked by current ownership/concurrency findings |
+| Workspace creation and first launch | Blocked by PR #11 exact-head finding: creation and candidate state are not yet protected by one alias-safe cross-process ownership transaction |
+| Ordinary workspace writers | Blocked by PR #11 exact-head finding: stale independently opened writers can still erase newer metadata without revision/CAS conflict detection |
+| Alias and retained-parent ownership | Blocked by PR #11 exact-head finding: lock, recovery controls and workspace participants are not all derived from one retained object identity |
+| Linux nested cleanup | Blocked by PR #11 exact-head finding: an inspected directory can be closed and reopened by name during recursive cleanup |
 | Diagnostic privacy and offline claims | Blocked by issue #14 |
 | Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
 | Signing order and authenticity | Blocked until the final file is assembled, hashed and Authenticode-signed with no later mutation |
 | OCR and local AI | Not approved as reliable production functionality |
-| Intended purpose and public claims | Blocked by issue #16 and the issue #20 implementation dependency |
+| Intended purpose and public claims | Blocked by draft PR #18, issue #16 and the issue #20 implementation dependency |
 | Accessibility | Blocked pending issue #7 evidence and truthful conformance documentation |
 | Security reporting, publisher and continuity | Blocked by issue #17 |
 | Public claims | Only controlled development claims are permitted |
 
 ## Issue and pull-request controls
 
-### Issue #3
+### Issue #3 and issue #12
 
 Issue #3 is open. The implementation merged through PR #10 is not rejected, but it must not be described as independently closed while:
 
@@ -51,13 +54,22 @@ Issue #3 is open. The implementation merged through PR #10 is not rejected, but 
 - the issue #3 acceptance checklist is not completed with evidence references;
 - exact-commit hostile and concurrency testing remains incomplete.
 
-### Issue #12
-
-Issue #12 blocks issue #3 closure and real-evidence approval. It requires bounded verification cost, safe cache invalidation or source-limited verification, and safe serialisation of Ask against restore.
+Issue #12 requires bounded verification cost, safe cache invalidation or source-limited verification, and safe serialisation of Ask against restore.
 
 ### PR #11 and issue #4
 
-PR #11 remains a draft. It must not be merged or used to close issue #4 until independent re-review confirms correction of the candidate-identity, migration-record, rollback, reparse-point/reset and preservation-interaction findings.
+PR #11 remains draft and unmerged at the last independently inspected head `73689717bb08bb8cec0fc1233b92f843b449484a`.
+
+The current exact-head blockers are:
+
+1. stale concurrent writers without exact revision/CAS conflict protection;
+2. alias-bypassable path-derived locking and split pathname resolution instead of one retained-parent transaction;
+3. Linux nested cleanup reopening an inspected directory by name;
+4. unowned workspace creation, first launch and candidate-state writes.
+
+The fail-fast Windows CI correction, object-bound reset/migration operations, authenticated restore phases and issue #3 regression coverage at that head are material progress, but they do not close these four blockers.
+
+PR #11 must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
 
 ### Issues #14–#17 and #20
 
@@ -65,7 +77,21 @@ PR #11 remains a draft. It must not be merged or used to close issue #4 until in
 - Issue #15 blocks distribution without actual-build SBOM, licensing, provenance and signing evidence.
 - Issue #16 blocks unsupported intended-purpose, legal, medical, forensic, high-risk-decision and compliance claims.
 - Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
-- P0 issue #20 blocks Ask ECO or another generated-answer route from semantically selecting, reordering, combining or composing health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
+- P0 issue #20 blocks generated processing of health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
+
+## Current public-document assurance findings
+
+The canonical status and stop rules remain protective. Supporting documents still require controlled reconciliation:
+
+- `RELEASE_POLICY.md` has a dated current-gate section that names only issues #3–#8 and omits later blocking issues;
+- `KNOWN_LIMITATIONS.md` is narrowly scoped to V25 N2 P1 and omits later workspace, Ask, diagnostic, governance and health-input gates;
+- `THREAT_MODEL.md` uses “staged transactional restore” as though fully qualified on `main`, although current activation is still pathname-based and best-effort;
+- `BUILDING.md` says the Windows script runs tests and vet as a controlled gate, but the fail-fast native-command correction is not yet on `main`;
+- `ROADMAP.md` does not distinguish current bounded Office/email extraction from richer structured and receipt-bearing extraction still required;
+- maintainer/signing documents need to state that repository roles do not appoint the named individual as legal publisher, supplier, support operator, complaints handler, data controller or liability owner;
+- the root V25 SBOM and third-party notices are historical/source-level records, not the actual packaged-artifact provenance required by issue #15.
+
+These are documentation-control findings. They do not weaken or replace any technical blocker.
 
 ## Stop rules
 
@@ -74,9 +100,9 @@ PR #11 remains a draft. It must not be merged or used to close issue #4 until in
 Stop where any of the following remains unresolved:
 
 - preserved bytes, recorded hashes and derived readings cannot be reconciled exactly;
-- Ask, restore, migration or reset can observe or create mixed or unsafe state;
+- Ask, restore, migration, creation or reset can observe or create mixed or unsafe state;
 - health-related or mixed-purpose clinical material can enter semantic Ask or generated-answer processing without the issue #20 gate;
-- filesystem boundaries are not proven against Windows reparse points, junctions and links;
+- filesystem boundaries are not proven against Windows reparse points, junctions, links, aliases and parent substitution;
 - diagnostic or runtime records may expose case content without a safe redacted mode;
 - endpoint, runtime or local IPC risks remain unqualified;
 - any real-evidence P0 or P1 finding remains open.
