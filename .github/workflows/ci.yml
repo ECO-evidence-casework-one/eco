@@ -46,8 +46,11 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Prove native-command failures stop the Windows gate
+        shell: pwsh
+        run: ./scripts/test-native-command-failure.ps1
       - name: Deterministic Windows build and tests
         shell: pwsh
         run: ./scripts/build-windows.ps1
-      # P0 issue #24: the executable remains only on the ephemeral runner.
+      # P0 issues #24 and #27: the executable remains only on the ephemeral runner.
       # Public Actions artifact upload is disabled while binary release gates are closed.
