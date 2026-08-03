@@ -54,7 +54,9 @@ The following remain blocked:
 - claims of reliable generative offline AI assistance;
 - claims of completed production OCR or complete native PDF investigation;
 - claims of accessibility, forensic, legal, medical or regulatory compliance;
-- public-sector, healthcare or EU deployment.
+- all public-sector or private-institutional deployment;
+- all healthcare or clinical deployment;
+- all EU availability, including download, supply or deployment.
 
 ## Release prerequisites
 
