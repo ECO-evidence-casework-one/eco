@@ -45,6 +45,7 @@ Later public source-development work is tracked through narrow issues and pull r
 - PR #10 merged evidence-preservation and source-binding changes, but issue #3 is reopened pending independent closure and follow-up issue #12.
 - PR #11 remains a draft for candidate-specific workspace state, migration, recovery and reset. It is not approved.
 - Issues #5–#8 continue to track offline-AI behaviour, responsiveness, accessibility and document navigation.
+- Issues #14–#17 track diagnostic privacy and offline claims, actual-build SBOM/licensing/provenance, intended purpose and excluded uses, and accountable publisher/continuity arrangements.
 
 See the [canonical current project status](CURRENT_STATUS.md) and the [current release gate](docs/control/CURRENT_RELEASE_GATE.md).
 
