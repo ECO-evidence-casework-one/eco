@@ -36,7 +36,7 @@ The V25 N2 P1 foundation introduced:
 - exact OCR citation-region highlighting foundations;
 - exclusion of very low-confidence OCR segments from Ask ECO retrieval.
 
-A bundled generative local language model is not part of the recorded V25 milestone.
+A bundled production OCR engine, OCR language/model package and generative local language model are **not** part of the recorded V25 milestone. V25 provides document-vision and OCR-provenance foundations rather than approved production OCR or generative-AI operation.
 
 ## Current controlled development
 
