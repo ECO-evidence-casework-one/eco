@@ -170,7 +170,7 @@ The organisation must define:
 
 Risk acceptance may document deferred remediation for continued private or synthetic development. It must not close an unresolved finding, alter its severity or waive an active release stop rule.
 
-The current release rule is non-waivable: no official GitHub Release or ordinary-user binary may be approved while any P0 or P1 finding remains unresolved. A finding must not be labelled non-release-blocking to bypass this rule. A high or critical exception cannot be used to bypass that rule.
+The current release rule is non-waivable: no official GitHub Release, ordinary-user binary or project-endorsed institutional supply may be approved while any P0 or P1 finding remains unresolved. A finding must not be labelled non-release-blocking to bypass this rule. A high or critical exception cannot be used to bypass that rule.
 
 ### 10. Contracts, procurement, liability and insurance
 
@@ -267,13 +267,15 @@ Stop before official institutional supply where:
 
 - no contracting legal entity exists;
 - support, data roles, liability, insurance or exit arrangements are unresolved;
-- the organisation cannot provide accurate procurement and AI disclosures.
+- the organisation cannot provide accurate procurement and AI disclosures;
+- any P0 or P1 finding remains unresolved.
 
 Stop before official healthcare, justice-sector or EU availability where:
 
 - the responsible organisation has not completed the relevant legal and regulatory assessment;
 - mandatory reporting, conformity or legal-representative arrangements are absent;
-- the intended purpose or actual functionality exceeds the approved boundary.
+- the intended purpose or actual functionality exceeds the approved boundary;
+- any P0 or P1 finding remains unresolved.
 
 These stop rules govern official ECO distributions and project-endorsed supply. They do not remove third parties' GPL rights or make the ECO project responsible for an unauthorised fork or redistribution.
 
