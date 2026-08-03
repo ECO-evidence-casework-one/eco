@@ -2,7 +2,7 @@
 
 **Status date:** 3 August 2026  
 **Canonical public status record:** this file  
-**Current `main` commit reviewed for this status:** `2dcb44ba8541ab7a319de6e1f14f016aafe2ac1b`  
+**Baseline `main` commit reviewed before this status update:** `4c130a915d2fd9f4e20274dc4e29bddeb8fb472d`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Release position:** development only; no approved public binary
 
@@ -32,6 +32,12 @@ Issue #3 has been reopened. Its implementation is materially improved, but indep
 
 PR #11 remains a draft. It proposes clean candidate-specific workspace state, migration, recovery and reset controls, but independent review identified unresolved P0 boundaries. It must not be treated as approved or merged until those findings are corrected and re-reviewed.
 
+### Intended-purpose and health-input conformance
+
+PR #18 proposes a controlling intended-purpose and public-claims boundary. Source review found that the current Ask ECO path can rank, truncate, reorder and compose passages without first applying the proposed restriction for health-related source material or health-related or clinical content within mixed-purpose material.
+
+P0 issue #20 records the implementation gate. Until it is independently closed, the current source must not be described as enforcing that boundary, and health-related material must not enter Ask ECO or another generated-answer route except in synthetic tests designed to prove safe rejection.
+
 ### Other active grouped work
 
 - Issue #5: instruction-faithful, source-backed and non-operative offline AI.
@@ -43,6 +49,7 @@ PR #11 remains a draft. It proposes clean candidate-specific workspace state, mi
 - Issue #15: actual-build SBOM, licence notices and release provenance.
 - Issue #16: intended purpose, excluded uses and controlled public claims.
 - Issue #17: accountable publisher, response routes and project continuity.
+- Issue #20: gate Ask and generated processing for health-related inputs.
 
 ## Current stop gates
 
@@ -52,6 +59,7 @@ The following remain blocked:
 - public end-user binary distribution;
 - release-candidate or stable-release status;
 - claims of reliable generative offline AI assistance;
+- claims that the intended-purpose health-input boundary is implemented;
 - claims of completed production OCR or complete native PDF investigation;
 - claims of accessibility, forensic, legal, medical or regulatory compliance;
 - all public-sector or private-institutional deployment;
@@ -73,8 +81,9 @@ Before the release position can be reconsidered, ECO requires objective evidence
 - keyboard, assistive-technology, DPI and cognitive-accessibility evidence;
 - trusted Authenticode signing with no post-signing file mutation;
 - an authoritative intended-purpose and excluded-use boundary;
+- technical enforcement of the health-related generated-processing boundary recorded in issue #20;
 - an accountable publisher or steward for security, privacy, complaints, support and continuity;
-- independent closure of all release-blocking P0 and P1 findings.
+- independent closure of every P0 and P1 finding.
 
 ## Public-record rule
 
