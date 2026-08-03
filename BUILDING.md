@@ -14,7 +14,7 @@ go test ./...
 go vet ./...
 ```
 
-Run these commands directly and inspect their exit status. The current `main` PowerShell build script does not reliably stop on every non-zero native command exit code.
+Run these commands directly and inspect their exit status.
 
 ## Controlled Windows build development
 
@@ -22,21 +22,28 @@ Run these commands directly and inspect their exit status. The current `main` Po
 ./scripts/build-windows.ps1
 ```
 
-The current `main` script intends to:
+The current `main` script:
 
-- run tests, `go vet` and the source-policy check;
-- build the Windows x86-64 GUI twice with deterministic flags;
-- reject the build if the two SHA-256 values differ;
-- write `dist/ECO.exe` locally as an **unsigned development/provenance output**;
-- write a SHA-256 sidecar and JSON build receipt.
+- runs tests, `go vet` and the source-policy check;
+- routes every native test, vet, policy, build and `go version` command through `Invoke-NativeChecked`;
+- captures `$LASTEXITCODE` immediately and terminates on every non-zero native exit;
+- builds the Windows x86-64 GUI twice with deterministic flags;
+- rejects the build if the two SHA-256 values differ;
+- writes `dist/ECO.exe` locally as an **unsigned private development/provenance output**;
+- writes a SHA-256 sidecar and JSON build receipt.
 
-However, PowerShell's `$ErrorActionPreference = "Stop"` does not by itself guarantee failure propagation from native commands. On current `main`, a failed native test, vet, policy or build command can be followed by later steps if the script does not check `$LASTEXITCODE` explicitly. Therefore:
+The Windows workflow also runs:
 
-- do not treat the script or a green Windows job on `main` as independent proof that every validation passed;
-- inspect raw logs and direct command results;
-- do not publish, use or rely on an executable produced after any failed command.
+```powershell
+./scripts/test-native-command-failure.ps1
+./scripts/test-build-windows-failure-matrix.ps1
+```
 
-Draft PR #11 contains a fail-fast native-command helper and controlled failure self-test, but that correction is not on `main` and the PR remains blocked for separate P0 reasons.
+The first script proves a controlled native exit code stops the gate. The second tests failure at each native stage—tests, vet, source policy, first build, second build and `go version`—and verifies that no later logical stage executes. It also checks that the real build script contains exactly one checked wrapper for each native stage and no legacy unwrapped test, vet, policy or build line.
+
+The fail-fast correction merged in commits `176bf4a51950c42f83456cc45f33e801dd994303` and `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`. Final merged-main verification through PR #32, workflow run `30852039542`, passed Linux tests/vet, source policy, the controlled native-failure self-test, the six-stage failure matrix, Windows tests/vet, source policy and deterministic rebuild. The run exposed no downloadable artifact.
+
+A green job is evidence only for the exact source and commands actually reviewed. It is not a release approval, signing result, SBOM, accessibility result, real-evidence approval or assurance that unrelated open P0/P1 findings are resolved.
 
 ## Public Actions artifact rule
 
