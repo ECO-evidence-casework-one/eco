@@ -2,7 +2,9 @@
 
 **Local validation date:** 4 August 2026  
 **Package:** `internal/runtime/turnorchestrator`  
-**Base intended for branch:** canonical `main` `f997e1049f8c24ed04848127ec26d55ee784b6f4`
+**Current-main branch base:** `e6e83dd7adc0269c16afda806c324063264e5e6e`
+
+The package was first published on a branch from `f997e1049f8c24ed04848127ec26d55ee784b6f4`. While that work was underway, `main` advanced through documentation/control-only PR #55. The exact nine M1.18 Git blobs were then transplanted without source mutation onto the current-main base above. No application, workflow or release-gate file was selected from the older branch.
 
 ## Source inventory
 
