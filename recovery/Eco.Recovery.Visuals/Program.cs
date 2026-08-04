@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Eco.Recovery;
 
@@ -68,8 +69,9 @@ internal static class Program
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
         Dispatcher.UIThread.RunJobs();
 
-        using var frame = window.CaptureRenderedFrame();
-        frame.Save(path);
+        using var frame = window.CaptureRenderedFrame()
+            ?? throw new InvalidOperationException($"No rendered frame was produced for {Path.GetFileName(path)}.");
+        frame.Save(path, PngBitmapEncoderOptions.Default);
 
         window.Close();
         Dispatcher.UIThread.RunJobs();
