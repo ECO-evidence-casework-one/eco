@@ -27,6 +27,7 @@ The reports supplement, but do not replace:
 - [`2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md`](2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md) — publisher/stewardship gate, contributor-role protection and future partner checklist. Read with the later correction below.
 - [`2026-08-04_INSPECTION_CONTROL_ROOM_PROGRESS_REPORT.md`](2026-08-04_INSPECTION_CONTROL_ROOM_PROGRESS_REPORT.md) — consolidated post-merge inspection, tested-checkout classification, reviewer-relationship correction, private-pack verification and PR #11 continuity.
 - [`2026-08-04_PARTNER_PACK_PROGRESS_REPORT.md`](2026-08-04_PARTNER_PACK_PROGRESS_REPORT.md) — generic public-safe partner pack, correctly classified PR #51 evidence, non-binding outreach controls and issue #50 closure.
+- [`2026-08-04_LEGAL_RESEARCH_AND_M1_18_PROGRESS_REPORT.md`](2026-08-04_LEGAL_RESEARCH_AND_M1_18_PROGRESS_REPORT.md) — audit and canonical-gate repair, steward-research method and longlist, concurrent M1.18 legal/privacy review and unchanged release blocks.
 
 ## Controlling correction
 
