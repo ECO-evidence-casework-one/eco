@@ -168,6 +168,7 @@ func (o *Orchestrator) Run(parent context.Context, req Request) Result {
 			return o.deps.Fallback.Resolve(ctx, req, stage, reason)
 		})
 		if err != nil {
+			zeroBytes(fb.Text)
 			mapped := ReasonFallbackFailed
 			if errors.Is(err, errDependencyPanic) {
 				mapped = ReasonDependencyPanic
@@ -178,9 +179,16 @@ func (o *Orchestrator) Run(parent context.Context, req Request) Result {
 			zeroBytes(fb.Text)
 			return finish(OutcomeFailed, StageFallback, ReasonInvalidFallback, "")
 		}
+		if cancelled := ctxReason(ctx); cancelled != ReasonNone {
+			zeroBytes(fb.Text)
+			return finish(OutcomeCancelled, stage, cancelled, "")
+		}
 		receipt.FallbackID = fb.FallbackID
 		text := string(fb.Text)
 		zeroBytes(fb.Text)
+		if cancelled := ctxReason(ctx); cancelled != ReasonNone {
+			return finish(OutcomeCancelled, stage, cancelled, "")
+		}
 		return finish(OutcomeFallback, StageComplete, reason, text)
 	}
 
@@ -329,6 +337,9 @@ func (o *Orchestrator) Run(parent context.Context, req Request) Result {
 		}
 		return failOrFallback(StageVerify, reason)
 	}
+	if cancelled := ctxReason(ctx); cancelled != ReasonNone {
+		return failOrFallback(StageVerify, cancelled)
+	}
 	if !verified.Accepted {
 		return failOrFallback(StageVerify, ReasonVerificationRejected)
 	}
@@ -341,6 +352,9 @@ func (o *Orchestrator) Run(parent context.Context, req Request) Result {
 	acceptedText := string(transient.Verified)
 	if !erase() {
 		return finish(OutcomeFailed, StageErase, ReasonErasureFailed, "")
+	}
+	if cancelled := ctxReason(ctx); cancelled != ReasonNone {
+		return finish(OutcomeCancelled, StageVerify, cancelled, "")
 	}
 	return finish(OutcomeAccepted, StageComplete, ReasonNone, acceptedText)
 }
