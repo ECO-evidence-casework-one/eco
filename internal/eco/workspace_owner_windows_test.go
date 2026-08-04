@@ -12,3 +12,12 @@ func TestWorkspaceCreationKeyNormalisesWindowsAliases(t *testing.T) {
 		}
 	}
 }
+
+func TestWorkspaceCreationKeyNormalisesNestedWindowsAliases(t *testing.T) {
+	want := platformWorkspaceCreationKey(`Application\Candidate\Casework`)
+	for _, alias := range []string{`APPLICATION\candidate\CASEWORK`, `Application/Candidate/Casework.`, `Application\Candidate.\Casework   `} {
+		if got := platformWorkspaceCreationKey(alias); got != want {
+			t.Fatalf("nested creation key %q != %q for alias %q", got, want, alias)
+		}
+	}
+}
