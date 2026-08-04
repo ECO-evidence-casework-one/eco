@@ -68,6 +68,10 @@ GitHub Actions run `30913011238` passed:
 
 The run artifact inventory was empty. No executable or other runnable payload was uploaded.
 
+## Documentation-only qualification after the code run
+
+The architecture, hostile-path test plan and this result record were then aligned with the proven Slice 1 boundary. That documentation-only head requires its own exact-head source-policy, Linux and Windows workflow pass before it can be used as the controlling branch checkpoint.
+
 ## Explicit remaining blockers
 
 Slice 1 is not wired into `OpenVault` yet. That is deliberate because portable restore replaces the active root object and must transfer or retarget ownership without creating a second owner or retaining a lease on the pre-restore checkpoint.
