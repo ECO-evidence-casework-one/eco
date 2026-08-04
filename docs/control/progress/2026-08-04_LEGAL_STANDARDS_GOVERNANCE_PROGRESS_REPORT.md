@@ -36,7 +36,7 @@ This lane did **not** change application code, AI models, executable packaging, 
 
 ### 1. Repository provenance and public-record corrections
 
-The repository was independently rechecked after the earlier control checkpoint.
+The repository was rechecked in the legal and governance control lane after the earlier control checkpoint.
 
 Material documentation-control merges included:
 
@@ -250,6 +250,12 @@ Effect: a reviewer relying only on the Control Board could have misunderstood th
 The first draft used the user-message time, 07:41 BST / 08:41 CEST, as the preparation and Control Board update time. GitHub's authoritative write timestamps showed that the Control Board was updated at approximately 07:45 BST and the audit PR was opened at approximately 07:50 BST.
 
 Effect: the report was corrected before merge. No substantive project decision changed.
+
+### Review-wording correction
+
+The first draft described the repository as independently rechecked even though the same connected control account performed the review.
+
+Effect: the wording was corrected to `rechecked in the legal and governance control lane` before merge. No substantive decision changed and no organisational independence is claimed.
 
 ## Next controlled actions
 
