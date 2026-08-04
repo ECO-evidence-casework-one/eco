@@ -17,7 +17,11 @@ One person may initially hold more than one role. Roles and permissions must rem
 
 The official ECO intended purpose, excluded uses and public-claims boundary is defined in [`docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md`](docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md).
 
-That record becomes controlling only when merged into the canonical branch after independent review. Governance adoption must remain separate from:
+That record becomes controlling when merged into the canonical branch after a documented review whose scope, evidence and reviewer relationship are stated truthfully. A shared technical posting account does not by itself prove or defeat independence; the actual preparer and reviewer lanes, agents or people must be identified. Where the same underlying workstream prepared and reviewed the change, the record must say `self-review` or `control review` rather than `independent review`.
+
+The evidence-classification correction for the 4 August 2026 governance and reporting merges is recorded in [`docs/control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md`](docs/control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md).
+
+Governance adoption must remain separate from:
 
 - proof that the application implements the boundary;
 - legal or regulatory classification;
