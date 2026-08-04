@@ -89,7 +89,7 @@ func acquireWorkspaceCreationOwner(root string) (*workspaceCreationLease, error)
 	if err != nil {
 		return nil, fmt.Errorf("identify workspace parent: %w", err)
 	}
-	sum := sha256.Sum256([]byte(leaf))
+	sum := sha256.Sum256([]byte(platformWorkspaceCreationKey(leaf)))
 	lockName := workspaceCreationLockPrefix + hex.EncodeToString(sum[:16]) + ".lock"
 	lock, err := platformAcquireWorkspaceLock(filepath.Join(parent, lockName))
 	if err != nil {
