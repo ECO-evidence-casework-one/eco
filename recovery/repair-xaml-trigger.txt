@@ -1,2 +1,2 @@
-repair-sequence: 1
-purpose: correct exact Avalonia 12 syntax findings from Windows compile run 30948598312
+repair-sequence: 2
+purpose: correct visual review findings for transient toasts, AI truth status and 225 percent sidebar layout
