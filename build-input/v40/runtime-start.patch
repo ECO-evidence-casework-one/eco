@@ -1,6 +1,8 @@
 --- a/cmd/eco-v40/main_windows.go
 +++ b/cmd/eco-v40/main_windows.go
-@@ -129,6 +129,7 @@
+@@ -131,7 +131,8 @@
+ 	a.rebuildFonts()
+ 	a.createControls()
  	a.config = v40.DiscoverRuntimeConfig(filepath.Dir(mustExecutable()))
  	a.worker = &v40.AIWorker{Config: a.config, Timeout: 90 * time.Second}
 +	a.prepareRuntime()
