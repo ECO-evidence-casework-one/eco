@@ -1,157 +1,164 @@
-# ECO partnership exploration records
+# ECO partnership and organisational-evidence records
 
-This directory contains public-safe material for research and tightly controlled, non-binding evidence enquiries with established organisations.
+This directory contains public-safe organisational research and governance for a possible future ECO publisher/steward.
 
 ## Current status
 
 - No ECO publisher, steward, partner or institutional deployment is appointed.
-- No organisation is shortlisted, preferred, approved as an evidence-enquiry candidate or authorised for contact.
-- Ten organisations appear in the initial public-source longlist.
-- Five role-specific assessments exist across four organisations.
-- Limited-role findings:
-  - Software Freedom Conservancy, Inc. — `POTENTIAL FIT` for a limited FOSS fiscal/legal-host role;
-  - mySociety — `HOLD` for a civic-tech/public-interest collaborator role;
-  - AbilityNet — `POTENTIAL FIT` for an accessibility assessment/assurance role.
+- No organisation is shortlisted, preferred or approved for contact.
+- No Stage C evidence-enquiry candidate exists.
+- No Stage D message, sender, correspondence route or reply operator is approved.
+- Five role-specific public assessments exist across four organisations.
 - Full-role findings:
   - Open Knowledge Foundation — `HOLD`;
   - mySociety — `HOLD`.
-- Public-source research has reached its useful ceiling for the two full-role candidates. Several issue #17 duties can be proved only through organisational evidence, formal acceptance or synthetic/tabletop testing.
-- The preferred future model remains **one exact accountable official publisher/steward with controlled and replaceable specialists**.
-- Fragmented responsibility without one accountable legal organisation is rejected.
+- Limited-role findings:
+  - Software Freedom Conservancy — `POTENTIAL FIT` for a limited FOSS fiscal/legal-host role;
+  - AbilityNet — `POTENTIAL FIT` for a limited accessibility role;
+  - mySociety — `HOLD` for a limited civic-technology collaborator role.
+- Public research has reached its useful ceiling for the two full-role candidates.
+- The preferred future model is one exact accountable legal organisation with controlled and replaceable specialists.
 - No research record implies knowledge, interest, endorsement, capacity, acceptance or appointment.
-- Real evidence, private diagnostics, credentials and identifying case material must not be shared.
+- Real evidence, confidential credentials and identifying case material must not be requested or shared.
 
-## Documents
+## Controlling documents
 
-- [`PARTNER_INFORMATION_PACK.md`](PARTNER_INFORMATION_PACK.md) — public-safe explanation of ECO, its boundaries and organisational need.
-- [`EXPLORATORY_OUTREACH_TEMPLATE.md`](EXPLORATORY_OUTREACH_TEMPLATE.md) — legacy generic non-binding introduction template. Its existence does not authorise use with a named organisation and it must be reconciled to the staged evidence-enquiry process before any future use.
-- [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md) — evidence hierarchy, fatal exclusions, mandatory boundaries and public-source assessment rules.
-- [`CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md`](CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md) — live candidate/role index, public-evidence ceiling, corrected stages and contact boundary.
-- [`PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md`](PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md) — ten organisations for public research only.
-- [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md) — limited-role assessments for Software Freedom Conservancy, mySociety and AbilityNet.
-- [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md) — first OKFN full-role assessment.
-- [`OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md`](OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md) — deeper OKFN corporate, security, signing, support, privacy, liability and evidence review.
-- [`CANDIDATE_ASSESSMENT_MYSOCIETY_FULL_ROLE_2026-08-04.md`](CANDIDATE_ASSESSMENT_MYSOCIETY_FULL_ROLE_2026-08-04.md) — separate mySociety full-role assessment, including the SocietyWorks legal-entity split and hosted-versus-offline controls.
-- [`PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md`](PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md) — selects one accountable steward plus controlled specialists and rejects unowned fragmentation.
-- [`FULL_ROLE_PUBLIC_EVIDENCE_CEILING_AND_COMPARISON_2026-08-04.md`](FULL_ROLE_PUBLIC_EVIDENCE_CEILING_AND_COMPARISON_2026-08-04.md) — maps OKFN and mySociety against the publisher acceptance checklist, identifies what public research can and cannot prove, and defines the corrected evidence-enquiry and due-diligence stages.
+- [`PARTNER_INFORMATION_PACK.md`](PARTNER_INFORMATION_PACK.md) — public background information only. It is not contact authority and is subordinate to the corrected Stage C/D protocol where wording conflicts.
+- [`CONTROLLED_EVIDENCE_ENQUIRY_PROTOCOL_2026-08-04.md`](CONTROLLED_EVIDENCE_ENQUIRY_PROTOCOL_2026-08-04.md) — controlling sender, question, route, reply-minimisation, retention, confidentiality and stop controls for any future Stage C/D process.
+- [`EXPLORATORY_OUTREACH_TEMPLATE.md`](EXPLORATORY_OUTREACH_TEMPLATE.md) — superseded and blocked. Do not send it.
+- [`FULL_ROLE_PUBLIC_EVIDENCE_CEILING_AND_COMPARISON_2026-08-04.md`](FULL_ROLE_PUBLIC_EVIDENCE_CEILING_AND_COMPARISON_2026-08-04.md) — maps the two full-role candidates against the publisher checklist and defines the corrected stages.
+- [`PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md`](PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md) — requires one accountable official steward and rejects unowned fragmentation.
+- [`CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md`](CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md) — live role index and decision status.
+- [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md) — public-source evidence method and fatal exclusions.
+- [`PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md`](PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md) — initial research pool only.
+- [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md) — limited-role assessments.
+- [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md) and [`OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md`](OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md) — OKFN full-role evidence and limitations.
+- [`CANDIDATE_ASSESSMENT_MYSOCIETY_FULL_ROLE_2026-08-04.md`](CANDIDATE_ASSESSMENT_MYSOCIETY_FULL_ROLE_2026-08-04.md) — mySociety full-role evidence and limitations.
 
-## Controlling records
+These materials remain subordinate to the intended-purpose, publisher/stewardship, publisher-acceptance and release-gate records. Where wording conflicts, the more restrictive current gate applies.
 
-These materials are subordinate to:
-
-- [`../governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md`](../governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md);
-- [`../governance/PUBLISHER_AND_STEWARDSHIP_GATE.md`](../governance/PUBLISHER_AND_STEWARDSHIP_GATE.md);
-- [`../governance/PUBLISHER_ACCEPTANCE_CHECKLIST.md`](../governance/PUBLISHER_ACCEPTANCE_CHECKLIST.md);
-- [`../control/CURRENT_RELEASE_GATE.md`](../control/CURRENT_RELEASE_GATE.md);
-- [`../control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md`](../control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md);
-- [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md);
-- [`../../KNOWN_LIMITATIONS.md`](../../KNOWN_LIMITATIONS.md);
-- [`../../RELEASE_POLICY.md`](../../RELEASE_POLICY.md).
-
-Where wording conflicts or implementation evidence is incomplete, the more restrictive current gate applies.
-
-## Corrected stages
+## Organisational stages
 
 ### Stage A — public longlist
 
-Identify organisations worth researching. No suitability, interest or contact authority is implied.
+Identify organisations worth researching. No suitability, interest or contact authority.
 
 ### Stage B — public-source role assessment
 
-Verify legal identity, mission, public capability, fatal conflicts, contrary evidence and material unknowns. A Stage B record may produce `POTENTIAL FIT`, `HOLD`, `UNSUITABLE` or `NOT ASSESSED` for the exact role. It does not create a shortlist or authorise contact.
+Verify legal identity, mission, public capability, fatal conflicts, contrary evidence and unknowns. No shortlist or contact.
 
 ### Stage C — controlled evidence-enquiry candidate
 
-A separate control decision may approve one exact legal organisation only to receive a limited written enquiry about organisational evidence that cannot be verified publicly.
+A later separate decision may identify one exact legal organisation only as potentially suitable to receive limited written organisational questions.
 
-Stage C is not a shortlist, recommendation, partnership proposal or appointment.
-
-The decision must approve:
-
-- exact legal organisation and exact role;
-- evidence justifying questions;
-- unresolved risks and stop conditions;
-- public organisational contact route;
-- truthful sender role;
-- exact written questions and message;
-- non-binding and no-real-evidence wording;
-- response minimisation, handling, retention and deletion;
-- prohibition on meetings, pilots, contracts, asset transfers and confidential credentials unless separately approved.
+Stage C is not a shortlist, recommendation, partnership proposal, appointment or contact authority.
 
 No Stage C candidate exists.
 
-### Stage D — non-binding evidence enquiry
+### Stage D — non-binding written evidence enquiry
 
-Send only the exact approved written questions. No Stage D contact is authorised.
+A separate decision must approve the exact legal target, role, public route, sender, sender role, message, questions, response operator, minimisation, retention/deletion and stop conditions.
+
+No Stage D contact is authorised.
 
 ### Stage E — formal due diligence
 
-Inspect public and approved confidential organisational evidence against the publisher acceptance checklist using an approved handling process.
+Inspect approved public and confidential organisational evidence against the publisher acceptance checklist using an approved organisational handling process.
 
 ### Stage F — qualified shortlist
 
-A qualified shortlist may exist only after material due-diligence evidence supports legal authority, mandatory-boundary acceptance, security, signing, support, complaints, continuity, liability, insurance, regulation and credible resources.
-
-A qualified shortlist is not appointment or release approval.
+May exist only after material due-diligence evidence supports authority, mandatory-boundary acceptance, security, signing, support, complaints, continuity, liability, insurance, regulation and resources.
 
 ### Stage G — governing-body acceptance and operational validation
 
-The exact governing body accepts the duties and synthetic/tabletop exercises prove the principal routes and controls. Issue #17 may approach closure only after this stage. Release remains separately gated.
+The exact governing body accepts the duties and synthetic/tabletop exercises prove the principal controls. Release remains separately gated.
 
-## Why the corrected stages are necessary
+## Sender and correspondence boundary
 
-Public sources cannot normally prove an ECO-specific board decision, authorised role holders, approved funding, private security/signing procedures, insurance, contracts or successful operational tests.
+No person becomes ECO's sender because they originated the project, contributed work, own a GitHub account or prepared research.
 
-Requiring all of that before any controlled question could be asked would make issue #17 impossible to complete. Stage C resolves the procedural deadlock without weakening the final gate:
+The originating developer and other contributors are not automatically:
 
-- contact still requires a separate decision;
-- the exact legal organisation, role, route, sender and questions must be approved;
-- no candidate is called shortlisted or preferred;
-- real evidence, pilots, contracts and transfers remain prohibited;
-- every final publisher acceptance test remains unchanged;
-- no organisational duty falls onto an individual contributor by implication.
+- publisher or supplier;
+- director, trustee or office-holder;
+- contracting party;
+- spokesperson;
+- support or complaints service;
+- correspondence or data-handling operator;
+- controller or processor for users' evidence;
+- legal, security, accessibility or regulatory representative.
 
-## Responsibility-model rules
+No individual personal email, phone, home address or social-media account may be used by default.
 
-- One exact legal organisation remains the accountable official ECO publisher/steward.
-- A parent and subsidiary, multiple nonprofits or several specialists must not be described vaguely as one accountable group.
-- Specialists may perform bounded work only under written agreements.
-- The steward retains final release, withdrawal, incident, signing, complaints, data-role, contracting, regulatory and continuity authority.
-- Users receive one official front door.
-- No duty may fall back onto an individual contributor because an organisation or supplier lacks capacity.
+A future sender must be separately approved as either:
 
-## Evidence rules
+- an established organisational intermediary under a narrow mandate; or
+- a research correspondent who freely accepts an exact limited written task and cannot bind ECO.
 
-- Prefer official registers, governance records, annual reports, policies and programme documentation.
-- Record source and access dates.
-- Separate fact, inference, conflict and unknown information.
-- Do not score missing information positively.
-- Do not repeatedly search unchanged pages hoping that absence will become proof.
-- Do not convert corporate filings, charges, hosted-service models or other dependencies into unsupported claims of insolvency, misconduct, incapacity or fatal incompatibility.
-- Do not describe source-control signatures as Windows Authenticode proof.
-- Distinguish hosted server security from offline native Windows application security.
-- Distinguish institutional client SLAs from anonymous end-user support and product complaints.
-- Distinguish web WCAG claims from exact native ECO accessibility evidence.
-- Record when a PDF or instrument was not inspected through a valid auditable process.
-- Reputation, size, mission language, certification or previous partnerships do not prove full publisher capability or interest.
-- A collection of specialist strengths does not satisfy issue #17 without one accountable steward.
+No sender is currently approved.
+
+## Question boundary
+
+A future first enquiry may ask only organisation-level questions concerning:
+
+- exact legal entity and authority;
+- mission and role fit;
+- willingness to preserve FOSS/offline/no-account/no-telemetry/no-custody requirements;
+- security and vulnerability response;
+- Windows release/signing and provenance capability;
+- accessible support and complaints;
+- resources, continuity, insurance and regulatory capacity;
+- conflicts or incompatible conditions;
+- whether formal due diligence should be considered.
+
+It must not request confidential proof, credentials, signing secrets, insurance documents, privileged advice, personal records, real evidence or a pilot.
+
+## Reply-handling boundary
+
+Before Stage D, the project must approve:
+
+- who operates the written route;
+- access permissions;
+- the actual legal/data role arising from the arrangement;
+- fields that may be retained;
+- a retention and deletion deadline;
+- redaction and public-summary rules;
+- handling of unsolicited attachments or confidential material.
+
+A reply must be minimised to organisation-level facts needed for the next decision. Personal contact details must not be published merely because they appear in a signature.
+
+No reply-handling operator or retention period exists.
+
+## Stop conditions
+
+Stop where an organisation requests or proposes:
+
+- real case material or identifiable user data;
+- a meeting, pilot, contract or transfer not separately approved;
+- proprietary relicensing or closed control;
+- required cloud evidence upload, accounts, telemetry or advertising;
+- routine access to user evidence;
+- unsupported legal, medical, forensic, security or compliance claims;
+- personal warranties, support, contracts or liability from an individual contributor;
+- credentials, signing secrets or confidential security material;
+- authority-side scoring or adverse decisions;
+- public announcement of a relationship.
+
+One reply does not authorise continuing discussion. Substantive follow-up requires another decision.
 
 ## Prohibited use
 
 Do not use these materials to:
 
-- announce or imply a partnership;
-- appoint a publisher or steward;
-- designate a Stage C candidate without a separate decision;
-- contact a named organisation without approval of the exact route, sender and message;
-- rank organisations as winners or losers;
-- combine organisations into an assumed partnership;
-- divide publisher responsibility informally;
-- form a company, CIC, charity or other entity;
-- request or receive real evidence;
-- agree a pilot or institutional supply;
-- transfer repository, assets, trademarks, domains or signing authority;
-- make unsupported legal, medical, forensic, security, accessibility, accuracy, compliance or release claims;
+- contact an organisation without a separate Stage D authorisation;
+- claim that an organisation is interested or selected;
+- create a shortlist or assumed team;
+- appoint a publisher or specialist;
+- divide publisher duties informally;
+- form a company, charity or CIC;
+- request real evidence, confidential credentials or a pilot;
+- transfer repository, assets, name, domain or signing authority;
+- make unsupported release, legal, medical, forensic, accessibility, security or compliance claims;
 - assign organisational duties or personal liability to an individual contributor.
 
-Completion of research opens no product, evidence-use, signing, release or deployment gate.
+Completion of organisational research or enquiry governance opens no product, evidence-use, signing, release or deployment gate.
