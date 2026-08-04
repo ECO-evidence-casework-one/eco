@@ -1,10 +1,26 @@
-# Third-party notices
+# Third-party notices — current source status
 
-The current Version 25 N2 P1 source uses:
+This file records the reviewed **source-level** dependency and notice position for current `main`.
 
-- the Go standard library, distributed under the Go project's BSD-style licence;
-- Microsoft Windows system libraries supplied by the operating system.
+It is not the final notice bundle for a released executable and does not satisfy P0 issue #15. Final notices must be generated and reconciled against the exact packaged executable, embedded payload, runtime-created files, SBOM, content manifest and corresponding source.
 
-No third-party Go module dependency is declared in `go.mod`.
+## Current source declarations
 
-No OCR engine, OCR language data, AI runtime or AI model is bundled in N2 P1. Future components must be added here only after exact version-level licence, redistribution, provenance, security, supply-chain and offline-operation review.
+- `go.mod` declares no third-party Go module dependency.
+- The source uses the Go standard library, distributed under the Go project's BSD-style licence.
+- The Windows source calls Microsoft Windows system libraries supplied by the operating system; these are dependencies of the program but are not presently redistributed by ECO.
+- No production OCR engine, OCR language data, AI runtime or AI model is bundled in the current recorded V25 milestone.
+
+These statements describe reviewed source declarations only. They do not replace inspection of the actual PE import table, resources, sections, overlay, embedded payload, runtime extraction or clean-machine behaviour of a future final executable.
+
+## Historical V25 notice record
+
+The exact former V25 N2 P1 notice file is preserved at:
+
+`docs/provenance/historical/ECO_V25_N2_P1_THIRD_PARTY_NOTICES_2026-07-31.md`
+
+That historical record is not authoritative for later source commits or a future release.
+
+## Release authority
+
+P0 issue #15 controls the future actual-build SBOM, licence, notice and provenance package. No executable, public binary, ordinary-user test or release is approved by this source-level notice file.
