@@ -1,0 +1,278 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Eco.Recovery.MainWindow"
+        x:Name="MainWindowRoot"
+        Title="ECO — Evidence &amp; Casework One"
+        Width="1360" Height="840"
+        MinWidth="920" MinHeight="640"
+        WindowStartupLocation="CenterScreen">
+  <Grid x:Name="AppRoot" ColumnDefinitions="248,*">
+    <!-- Persistent product navigation -->
+    <Border x:Name="Sidebar" Grid.Column="0" Background="{DynamicResource SidebarBrush}" Padding="18,20">
+      <Grid RowDefinitions="Auto,Auto,*,Auto">
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12" Margin="3,0,0,22">
+          <Border Width="42" Height="42" CornerRadius="13" Background="#43B9AE">
+            <TextBlock Text="ECO" FontWeight="Bold" FontSize="12" Foreground="#082630"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+          </Border>
+          <StackPanel VerticalAlignment="Center">
+            <TextBlock Text="ECO" FontSize="20" FontWeight="Bold" Foreground="White" />
+            <TextBlock x:Name="BrandSubtitle" Text="Evidence &amp; Casework One" FontSize="10.5" Foreground="#B8D3D8" />
+          </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="#123C4A" CornerRadius="12" Padding="12" Margin="0,0,0,14">
+          <Grid RowDefinitions="Auto,Auto">
+            <TextBlock Text="COMMUNITY HALL BOILER REPAIR" FontSize="10.5" FontWeight="Bold" Foreground="#8EDDD5" TextWrapping="Wrap" />
+            <TextBlock Grid.Row="1" Text="Synthetic Matter • local only" FontSize="11" Foreground="#C6DDE1" Margin="0,5,0,0" />
+          </Grid>
+        </Border>
+
+        <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+          <StackPanel Spacing="4">
+            <TextBlock Text="MATTER" Foreground="#7399A3" FontSize="10" FontWeight="Bold" Margin="13,4,0,4" />
+            <Button x:Name="NavCurrent" Classes="Nav Selected" Tag="CurrentPosition" Click="OnNavigate" Content="Current Position" AutomationProperties.Name="Open Current Position" />
+            <Button x:Name="NavEvidence" Classes="Nav" Tag="Evidence" Click="OnNavigate" Content="Evidence" AutomationProperties.Name="Open Evidence" />
+            <Button x:Name="NavTimeline" Classes="Nav" Tag="Timeline" Click="OnNavigate" Content="Timeline" AutomationProperties.Name="Open Timeline" />
+            <Button x:Name="NavMoney" Classes="Nav" Tag="Money" Click="OnNavigate" Content="Money" AutomationProperties.Name="Open Money" />
+            <Button x:Name="NavTasks" Classes="Nav" Tag="Tasks" Click="OnNavigate" Content="Tasks" AutomationProperties.Name="Open Tasks" />
+            <Button x:Name="NavConversations" Classes="Nav" Tag="Conversations" Click="OnNavigate" Content="Conversations" AutomationProperties.Name="Open Conversations" />
+            <Button x:Name="NavOutputs" Classes="Nav" Tag="Outputs" Click="OnNavigate" Content="Outputs" AutomationProperties.Name="Open Outputs" />
+            <TextBlock Text="WORKSPACE" Foreground="#7399A3" FontSize="10" FontWeight="Bold" Margin="13,16,0,4" />
+            <Button x:Name="NavMatters" Classes="Nav" Tag="Matters" Click="OnNavigate" Content="All Matters" AutomationProperties.Name="Open all Matters" />
+            <Button x:Name="NavSettings" Classes="Nav" Tag="Settings" Click="OnNavigate" Content="Trust &amp; Settings" AutomationProperties.Name="Open Trust and Settings" />
+          </StackPanel>
+        </ScrollViewer>
+
+        <Border Grid.Row="3" Background="#102F3D" BorderBrush="#28505D" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,16,0,0">
+          <StackPanel Spacing="5">
+            <StackPanel Orientation="Horizontal" Spacing="7">
+              <Ellipse Width="9" Height="9" Fill="#47C98B" VerticalAlignment="Center" />
+              <TextBlock Text="LOCAL • OFFLINE" Foreground="White" FontSize="10.5" FontWeight="Bold" />
+            </StackPanel>
+            <TextBlock x:Name="SidebarStatus" Text="Offline engines preparing" Foreground="#B8D3D8" FontSize="10.5" TextWrapping="Wrap" />
+          </StackPanel>
+        </Border>
+      </Grid>
+    </Border>
+
+    <!-- Top bar and page host -->
+    <Grid Grid.Column="1" RowDefinitions="72,*">
+      <Border Grid.Row="0" Background="{DynamicResource CardBrush}" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="26,0">
+        <Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center">
+          <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+            <TextBlock x:Name="PageTitle" Text="Current Position" FontSize="18" FontWeight="SemiBold" />
+            <Border Classes="Pill"><TextBlock Text="Guided View" Foreground="{DynamicResource AccentBrush}" FontSize="10.5" FontWeight="Bold" /></Border>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button Classes="Secondary" Click="OnWhatsNew" Content="What’s New" AutomationProperties.Name="Open What’s New" />
+            <Button x:Name="ModeButton" Classes="Secondary" Click="OnToggleMode" Content="Full Workspace" AutomationProperties.Name="Switch to Full Workspace" />
+            <Button Classes="Primary" Tag="Conversations" Click="OnNavigate" Content="Ask ECO" AutomationProperties.Name="Ask ECO in Conversations" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Row="1" x:Name="PageHost">
+        <!-- CURRENT POSITION -->
+        <ScrollViewer x:Name="CurrentPositionPage" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="28" Spacing="18" MaxWidth="1240" HorizontalAlignment="Stretch">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel>
+                <TextBlock Classes="Eyebrow" Text="WHERE THINGS STAND" />
+                <TextBlock Classes="H1" Text="Community Hall Boiler Repair" Margin="0,7,0,4" />
+                <TextBlock Classes="Muted" Text="The three material items needing attention now. Each item leads back to its exact source." />
+              </StackPanel>
+              <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                <TextBlock Text="Position version 3" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                <TextBlock Classes="Muted" Text="Updated from 6 evidence items" FontSize="11" />
+              </StackPanel>
+            </Grid>
+
+            <Border Classes="Card" BorderBrush="#D5EAE6" Background="#F8FCFB">
+              <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                <Border Width="48" Height="48" CornerRadius="14" Background="{DynamicResource WarningSoftBrush}">
+                  <TextBlock Text="!" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                </Border>
+                <StackPanel Grid.Column="1" Spacing="5">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border Background="{DynamicResource WarningSoftBrush}" CornerRadius="999" Padding="9,4"><TextBlock Text="DUE SOON" Foreground="{DynamicResource WarningBrush}" FontSize="10.5" FontWeight="Bold" /></Border>
+                    <TextBlock Text="Reply requested by 22 March 2026" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Classes="Muted" Text="The council funding email asks for the final inspection certificate by this date." TextWrapping="Wrap" />
+                  <TextBlock Text="Source: Council funding email.pdf • page 1, paragraph 3" FontSize="11" Foreground="{DynamicResource AccentBrush}" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="Secondary" Content="Open source" Click="OnOpenSyntheticSource" />
+              </Grid>
+            </Border>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="16">
+              <Border Classes="Card">
+                <StackPanel Spacing="12">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border Background="{DynamicResource DangerSoftBrush}" CornerRadius="999" Padding="9,4"><TextBlock Text="MISSING EVIDENCE" Foreground="{DynamicResource DangerBrush}" FontSize="10.5" FontWeight="Bold" /></Border>
+                    <TextBlock Text="Final inspection certificate" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Classes="Muted" Text="Expected because the funding email names it as a condition before the remaining grant can be released." TextWrapping="Wrap" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="Primary" Content="Add or link evidence" Tag="Evidence" Click="OnNavigate" />
+                    <Button Classes="Secondary" Content="Record why unavailable" Click="OnRecordUnavailable" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="Card">
+                <StackPanel Spacing="12">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border Background="{DynamicResource DifferentSoftBrush}" CornerRadius="999" Padding="9,4"><TextBlock Text="DIFFERENT ACCOUNTS" Foreground="{DynamicResource DifferentBrush}" FontSize="10.5" FontWeight="Bold" /></Border>
+                    <TextBlock Text="When the repair was completed" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Classes="Muted" Text="The contractor invoice says 15 March. The caretaker note says engineers returned on 17 March." TextWrapping="Wrap" />
+                  <Button Classes="Secondary" Content="Compare both sources" Click="OnCompareSources" HorizontalAlignment="Left" />
+                </StackPanel>
+              </Border>
+            </Grid>
+
+            <Grid ColumnDefinitions="1.25*,0.75*" ColumnSpacing="16">
+              <Border Classes="Card">
+                <StackPanel Spacing="13">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel><TextBlock Classes="Eyebrow" Text="CURRENT POSITION" /><TextBlock Classes="H2" Text="What the evidence supports" Margin="0,5,0,0" /></StackPanel>
+                    <TextBlock Grid.Column="1" Text="Source-led" Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                  </Grid>
+                  <Border Classes="SubtleCard">
+                    <StackPanel Spacing="7">
+                      <TextBlock Text="Document says" FontWeight="SemiBold" />
+                      <TextBlock Classes="Muted" Text="A quotation of £1,240 was accepted. A £620 grant payment has been recorded. The final £620 remains conditional on inspection evidence." TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="SubtleCard">
+                    <StackPanel Spacing="7">
+                      <TextBlock Text="ECO suggests" FontWeight="SemiBold" />
+                      <TextBlock Classes="Muted" Text="Confirm the completion date, obtain the final certificate, then prepare one written response linking the certificate and payment evidence." TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="SubtleCard" BorderBrush="#A7D7CE">
+                    <StackPanel Spacing="7">
+                      <TextBlock Text="You confirmed" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" />
+                      <TextBlock Classes="Muted" Text="The hall committee wants all correspondence kept in writing and does not want the remaining amount treated as received yet." TextWrapping="Wrap" />
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </Border>
+
+              <StackPanel Grid.Column="1" Spacing="16">
+                <Border Classes="Card">
+                  <StackPanel Spacing="10">
+                    <TextBlock Classes="Eyebrow" Text="ONE THING NOW" />
+                    <TextBlock Classes="H3" Text="Find or request the inspection certificate" />
+                    <TextBlock Classes="Muted" Text="This unlocks the clearest next response and the remaining payment decision." TextWrapping="Wrap" />
+                    <Button Classes="Primary" Content="Work on this" Tag="Tasks" Click="OnNavigate" />
+                  </StackPanel>
+                </Border>
+                <Border Classes="Card">
+                  <StackPanel Spacing="9">
+                    <TextBlock Classes="H3" Text="Quick links" />
+                    <Button Classes="Secondary" Content="View all evidence" Tag="Evidence" Click="OnNavigate" HorizontalContentAlignment="Left" />
+                    <Button Classes="Secondary" Content="Open conversation" Tag="Conversations" Click="OnNavigate" HorizontalContentAlignment="Left" />
+                    <Button Classes="Secondary" Content="Review timeline" Tag="Timeline" Click="OnNavigate" HorizontalContentAlignment="Left" />
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- EVIDENCE -->
+        <ScrollViewer x:Name="EvidencePage" IsVisible="False" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="28" Spacing="18" MaxWidth="1240">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel><TextBlock Classes="Eyebrow" Text="PRESERVED LOCALLY" /><TextBlock Classes="H1" Text="Evidence" Margin="0,7,0,4" /><TextBlock Classes="Muted" Text="Originals, extracted text, OCR, corrections and notes remain visibly separate." /></StackPanel>
+              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Classes="Secondary" Content="Import folder" Click="OnSyntheticImport" /><Button Classes="Primary" Content="Add evidence" Click="OnSyntheticImport" /></StackPanel>
+            </Grid>
+            <Grid ColumnDefinitions="1.1*,0.9*" ColumnSpacing="16">
+              <Border Classes="Card">
+                <StackPanel Spacing="10">
+                  <Grid ColumnDefinitions="*,Auto"><TextBlock Classes="H3" Text="6 evidence items" /><ComboBox Grid.Column="1" Width="160" SelectedIndex="0"><ComboBoxItem Content="Newest first" /><ComboBoxItem Content="Name" /><ComboBoxItem Content="Evidence state" /></ComboBox></Grid>
+                  <Border Classes="SubtleCard" BorderBrush="#9BCFC5"><Grid ColumnDefinitions="44,*,Auto" ColumnSpacing="12"><Border Width="42" Height="42" CornerRadius="11" Background="#E4F2EF"><TextBlock Text="PDF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><StackPanel Grid.Column="1"><TextBlock Text="Council funding email.pdf" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Ready • 2 pages • original SHA-256 recorded" FontSize="11" /><TextBlock Text="Used by 2 Current Position items" Foreground="{DynamicResource AccentBrush}" FontSize="11" /></StackPanel><Button Grid.Column="2" Classes="Secondary" Content="Open" Click="OnOpenSyntheticSource" /></Grid></Border>
+                  <Border Classes="SubtleCard"><Grid ColumnDefinitions="44,*,Auto" ColumnSpacing="12"><Border Width="42" Height="42" CornerRadius="11" Background="#EAF0F2"><TextBlock Text="PDF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><StackPanel Grid.Column="1"><TextBlock Text="Contractor quotation.pdf" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Ready • 3 pages • text extracted" FontSize="11" /></StackPanel><Button Grid.Column="2" Classes="Secondary" Content="Open" Click="OnOpenSyntheticSource" /></Grid></Border>
+                  <Border Classes="SubtleCard"><Grid ColumnDefinitions="44,*,Auto" ColumnSpacing="12"><Border Width="42" Height="42" CornerRadius="11" Background="#FFF1DC"><TextBlock Text="IMG" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><StackPanel Grid.Column="1"><TextBlock Text="Inspection note scan.png" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="OCR complete • 1 region needs checking" FontSize="11" /></StackPanel><Button Grid.Column="2" Classes="Secondary" Content="Review OCR" Click="OnOpenSyntheticSource" /></Grid></Border>
+                  <Border Classes="SubtleCard"><Grid ColumnDefinitions="44,*,Auto" ColumnSpacing="12"><Border Width="42" Height="42" CornerRadius="11" Background="#EAF0F2"><TextBlock Text="DOCX" FontSize="9" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><StackPanel Grid.Column="1"><TextBlock Text="Caretaker completion note.docx" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Ready • exact text available" FontSize="11" /></StackPanel><Button Grid.Column="2" Classes="Secondary" Content="Open" Click="OnOpenSyntheticSource" /></Grid></Border>
+                </StackPanel>
+              </Border>
+              <Border Grid.Column="1" Classes="Card">
+                <StackPanel Spacing="14">
+                  <Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Classes="Eyebrow" Text="SELECTED SOURCE" /><TextBlock Classes="H2" Text="Council funding email" Margin="0,5,0,0" /></StackPanel><Border Grid.Column="1" Classes="Pill"><TextBlock Text="ORIGINAL VERIFIED" Foreground="{DynamicResource AccentBrush}" FontSize="10" FontWeight="Bold" /></Border></Grid>
+                  <Border Background="#F9FBFC" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="12" Padding="20" MinHeight="300"><StackPanel Spacing="14"><TextBlock Text="Community Improvement Fund" FontSize="17" FontWeight="Bold" /><TextBlock Classes="Muted" Text="We confirm that the first grant instalment of £620 has been released." TextWrapping="Wrap" /><Border BorderBrush="{DynamicResource AccentBrush}" BorderThickness="3,0,0,0" Padding="13,7"><TextBlock Text="Please provide the final inspection certificate by 22 March 2026 before the remaining £620 can be authorised." TextWrapping="Wrap" /></Border><TextBlock Classes="Muted" Text="Source target: page 1 • paragraph 3 • extracted text layer" FontSize="11" /></StackPanel></Border>
+                  <StackPanel Orientation="Horizontal" Spacing="8"><Button Classes="Primary" Content="Use in conversation" Tag="Conversations" Click="OnNavigate" /><Button Classes="Secondary" Content="Add note" Click="OnAddNote" /></StackPanel>
+                </StackPanel>
+              </Border>
+            </Grid>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- TIMELINE -->
+        <ScrollViewer x:Name="TimelinePage" IsVisible="False" VerticalScrollBarVisibility="Auto">
+          <StackPanel Margin="28" Spacing="18" MaxWidth="1080"><TextBlock Classes="Eyebrow" Text="SOURCE-LINKED EVENTS" /><TextBlock Classes="H1" Text="Timeline" /><TextBlock Classes="Muted" Text="Dates preserve precision and disagreement instead of forcing one account." />
+            <Border Classes="Card"><StackPanel Spacing="0"><Grid ColumnDefinitions="130,18,*" Margin="0,0,0,18"><TextBlock Text="8 March 2026" FontWeight="SemiBold" /><Ellipse Grid.Column="1" Width="12" Height="12" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Top" Margin="0,4,0,0" /><StackPanel Grid.Column="2"><TextBlock Text="Quotation accepted" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Contractor quotation.pdf • page 3" /></StackPanel></Grid><Grid ColumnDefinitions="130,18,*" Margin="0,0,0,18"><TextBlock Text="15 March 2026" FontWeight="SemiBold" /><Ellipse Grid.Column="1" Width="12" Height="12" Fill="{DynamicResource DifferentBrush}" VerticalAlignment="Top" Margin="0,4,0,0" /><StackPanel Grid.Column="2"><TextBlock Text="Contractor records completion" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Different account: caretaker note records a return visit on 17 March." /><Button Classes="Secondary" Content="Compare source passages" HorizontalAlignment="Left" Margin="0,8,0,0" Click="OnCompareSources" /></StackPanel></Grid><Grid ColumnDefinitions="130,18,*" Margin="0,0,0,18"><TextBlock Text="18 March 2026" FontWeight="SemiBold" /><Ellipse Grid.Column="1" Width="12" Height="12" Fill="{DynamicResource AccentBrush}" VerticalAlignment="Top" Margin="0,4,0,0" /><StackPanel Grid.Column="2"><TextBlock Text="First grant instalment received" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="£620 • bank payment image and funding email" /></StackPanel></Grid><Grid ColumnDefinitions="130,18,*"><TextBlock Text="22 March 2026" FontWeight="SemiBold" /><Ellipse Grid.Column="1" Width="12" Height="12" Fill="{DynamicResource WarningBrush}" VerticalAlignment="Top" Margin="0,4,0,0" /><StackPanel Grid.Column="2"><TextBlock Text="Inspection certificate requested" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Due date stated in council funding email." /></StackPanel></Grid></StackPanel></Border>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- MONEY -->
+        <ScrollViewer x:Name="MoneyPage" IsVisible="False" VerticalScrollBarVisibility="Auto"><StackPanel Margin="28" Spacing="18" MaxWidth="1100"><TextBlock Classes="Eyebrow" Text="AMOUNTS AND STATUS" /><TextBlock Classes="H1" Text="Money" /><TextBlock Classes="Muted" Text="Confirmed, expected and disputed amounts remain separate. This is not financial advice." /><Grid ColumnDefinitions="*,*,*" ColumnSpacing="14"><Border Classes="Card"><TextBlock Text="£1,240" FontSize="28" FontWeight="Bold" /><TextBlock Classes="Muted" Text="Accepted quotation" /></Border><Border Grid.Column="1" Classes="Card"><TextBlock Text="£620" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" /><TextBlock Classes="Muted" Text="Received and evidenced" /></Border><Border Grid.Column="2" Classes="Card"><TextBlock Text="£620" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" /><TextBlock Classes="Muted" Text="Conditional / not received" /></Border></Grid><Border Classes="Card"><StackPanel Spacing="10"><Grid ColumnDefinitions="140,*,160,120"><TextBlock Text="DATE" Classes="Muted" FontSize="10" FontWeight="Bold" /><TextBlock Grid.Column="1" Text="DESCRIPTION" Classes="Muted" FontSize="10" FontWeight="Bold" /><TextBlock Grid.Column="2" Text="STATE" Classes="Muted" FontSize="10" FontWeight="Bold" /><TextBlock Grid.Column="3" Text="AMOUNT" Classes="Muted" FontSize="10" FontWeight="Bold" HorizontalAlignment="Right" /></Grid><Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,12"><Grid ColumnDefinitions="140,*,160,120"><TextBlock Text="8 Mar 2026" /><TextBlock Grid.Column="1" Text="Contractor quotation" FontWeight="SemiBold" /><TextBlock Grid.Column="2" Text="Accepted" Foreground="{DynamicResource AccentBrush}" /><TextBlock Grid.Column="3" Text="£1,240.00" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid></Border><Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,12"><Grid ColumnDefinitions="140,*,160,120"><TextBlock Text="18 Mar 2026" /><TextBlock Grid.Column="1" Text="First grant instalment" FontWeight="SemiBold" /><TextBlock Grid.Column="2" Text="Received" Foreground="{DynamicResource AccentBrush}" /><TextBlock Grid.Column="3" Text="£620.00" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid></Border><Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,1,0,0" Padding="0,12"><Grid ColumnDefinitions="140,*,160,120"><TextBlock Text="Expected" /><TextBlock Grid.Column="1" Text="Final grant instalment" FontWeight="SemiBold" /><TextBlock Grid.Column="2" Text="Conditional" Foreground="{DynamicResource WarningBrush}" /><TextBlock Grid.Column="3" Text="£620.00" HorizontalAlignment="Right" FontWeight="SemiBold" /></Grid></Border></StackPanel></Border></StackPanel></ScrollViewer>
+
+        <!-- TASKS -->
+        <ScrollViewer x:Name="TasksPage" IsVisible="False" VerticalScrollBarVisibility="Auto"><StackPanel Margin="28" Spacing="18" MaxWidth="1050"><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Classes="Eyebrow" Text="YOUR NEXT ACTIONS" /><TextBlock Classes="H1" Text="Tasks" /><TextBlock Classes="Muted" Text="ECO suggests; you decide. Nothing is sent or changed without you." /></StackPanel><Button Grid.Column="1" Classes="Primary" Content="Add task" Click="OnAddTask" VerticalAlignment="Center" /></Grid><Border Classes="Card"><StackPanel Spacing="12"><Border Classes="SubtleCard" BorderBrush="#E6B778"><Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><CheckBox AutomationProperties.Name="Mark certificate task complete" /><StackPanel Grid.Column="1"><TextBlock Text="Find or request the final inspection certificate" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Suggested because the funding email explicitly requires it by 22 March." /></StackPanel><Border Grid.Column="2" Background="{DynamicResource WarningSoftBrush}" CornerRadius="999" Padding="9,4"><TextBlock Text="HIGH" Foreground="{DynamicResource WarningBrush}" FontSize="10" FontWeight="Bold" /></Border></Grid></Border><Border Classes="SubtleCard"><Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><CheckBox AutomationProperties.Name="Mark date comparison task complete" /><StackPanel Grid.Column="1"><TextBlock Text="Resolve the 15 / 17 March completion-date difference" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Compare the invoice with the caretaker note before drafting." /></StackPanel><Border Grid.Column="2" Background="#EEF2F3" CornerRadius="999" Padding="9,4"><TextBlock Text="MEDIUM" FontSize="10" FontWeight="Bold" /></Border></Grid></Border><Border Classes="SubtleCard"><Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="12"><CheckBox IsChecked="True" AutomationProperties.Name="First grant task completed" /><StackPanel Grid.Column="1"><TextBlock Text="Link the first £620 grant payment" FontWeight="SemiBold" TextDecorations="Strikethrough" /><TextBlock Classes="Muted" Text="Completed • linked to bank payment image and funding email." /></StackPanel><Border Grid.Column="2" Background="{DynamicResource AccentSoftBrush}" CornerRadius="999" Padding="9,4"><TextBlock Text="DONE" Foreground="{DynamicResource AccentBrush}" FontSize="10" FontWeight="Bold" /></Border></Grid></Border></StackPanel></Border></StackPanel></ScrollViewer>
+
+        <!-- CONVERSATIONS -->
+        <Grid x:Name="ConversationsPage" IsVisible="False" Margin="28" RowDefinitions="Auto,*" MaxWidth="1240" HorizontalAlignment="Stretch">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16"><StackPanel><TextBlock Classes="Eyebrow" Text="MATTER-SCOPED WORK" /><TextBlock Classes="H1" Text="Conversations" /><TextBlock Classes="Muted" Text="Each conversation keeps its own draft, sources and transcript position." /></StackPanel><Button Grid.Column="1" Classes="Primary" Content="New conversation" Click="OnNewConversation" VerticalAlignment="Center" /></Grid>
+          <Border Grid.Row="1" Classes="Card" Padding="0">
+            <Grid RowDefinitions="58,*">
+              <Border BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="18,0"><StackPanel Orientation="Horizontal" Spacing="6"><Button Classes="Tab Selected" Content="General casework" /><Button Classes="Tab" Content="Draft council reply" /><Button Classes="Tab" Content="Payment review" /><Button Classes="Tab" Content="+" Click="OnNewConversation" AutomationProperties.Name="Add conversation tab" /></StackPanel></Border>
+              <Grid Grid.Row="1" ColumnDefinitions="*,310">
+                <Grid RowDefinitions="*,Auto" Margin="20">
+                  <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Spacing="12" Margin="0,0,12,16"><Border Background="#EAF6F3" CornerRadius="15" Padding="14" MaxWidth="650" HorizontalAlignment="Left"><StackPanel Spacing="7"><TextBlock Text="ECO" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" /><TextBlock Text="I can help organise this Matter, compare source passages, identify what is missing, or draft something for you to review. What should we work on?" TextWrapping="Wrap" /></StackPanel></Border><Border Background="#153F4E" CornerRadius="15" Padding="14" MaxWidth="620" HorizontalAlignment="Right"><TextBlock Text="What do I need to do next about the council funding?" Foreground="White" TextWrapping="Wrap" /></Border><Border Background="#EAF6F3" CornerRadius="15" Padding="14" MaxWidth="720" HorizontalAlignment="Left"><StackPanel Spacing="9"><TextBlock Text="ECO" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" /><TextBlock Text="The clearest next step is to obtain or request the final inspection certificate. The council email says it is needed by 22 March 2026 before the remaining £620 can be authorised." TextWrapping="Wrap" /><Border Background="White" BorderBrush="#B7DAD4" BorderThickness="1" CornerRadius="10" Padding="11"><StackPanel><TextBlock Text="Council funding email.pdf" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Page 1 • paragraph 3 • open exact source" FontSize="11" /></StackPanel></Border><TextBlock Classes="Muted" Text="Checked against 2 retrieved passages • no unsupported amount added" FontSize="11" /></StackPanel></Border></StackPanel></ScrollViewer>
+                  <Border Grid.Row="1" Background="#F7F9FA" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1" CornerRadius="13" Padding="10"><Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8"><Button Classes="Secondary" Content="Attach" Click="OnSyntheticImport" /><TextBox Grid.Column="1" x:Name="ConversationDraft" Watermark="Ask about this Matter or request a draft…" AcceptsReturn="True" MinHeight="48" AutomationProperties.Name="Conversation draft" /><Button Grid.Column="2" Classes="Secondary" Content="Stop" Click="OnStopAI" IsEnabled="False" x:Name="StopButton" /><Button Grid.Column="3" Classes="Primary" Content="Send" Click="OnSendConversation" /></Grid></Border>
+                </Grid>
+                <Border Grid.Column="1" Background="#F7FAFA" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1,0,0,0" Padding="18"><StackPanel Spacing="14"><TextBlock Classes="H3" Text="Conversation context" /><TextBlock Classes="Muted" Text="Sources selected for this turn" /><Border Classes="SubtleCard"><StackPanel><TextBlock Text="Council funding email.pdf" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Page 1 • paragraph 3" FontSize="11" /></StackPanel></Border><Border Classes="SubtleCard"><StackPanel><TextBlock Text="Contractor quotation.pdf" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Page 3 • total and terms" FontSize="11" /></StackPanel></Border><TextBlock Classes="Muted" Text="AI status" /><StackPanel Orientation="Horizontal" Spacing="8"><Ellipse Width="9" Height="9" Fill="#47C98B" VerticalAlignment="Center" /><TextBlock x:Name="AIStatusText" Text="Offline engine ready" FontWeight="SemiBold" /></StackPanel><TextBlock Classes="Muted" Text="AI failure never blocks earlier conversations, evidence or Current Position." FontSize="11" TextWrapping="Wrap" /></StackPanel></Border>
+              </Grid>
+            </Grid>
+          </Border>
+        </Grid>
+
+        <!-- OUTPUTS -->
+        <ScrollViewer x:Name="OutputsPage" IsVisible="False" VerticalScrollBarVisibility="Auto"><StackPanel Margin="28" Spacing="18" MaxWidth="1100"><TextBlock Classes="Eyebrow" Text="REVIEWABLE WORK PRODUCTS" /><TextBlock Classes="H1" Text="Outputs" /><TextBlock Classes="Muted" Text="Drafts and summaries stay local and remain clearly labelled until you approve them." /><Grid ColumnDefinitions="*,*" ColumnSpacing="16"><Border Classes="Card"><StackPanel Spacing="10"><TextBlock Classes="H3" Text="Draft council reply" /><TextBlock Classes="Muted" Text="Draft • last updated 18 minutes ago" /><TextBlock Text="Explains the inspection-certificate position and asks whether a short extension is available." TextWrapping="Wrap" /><Button Classes="Primary" Content="Open draft" Click="OnOpenDraft" HorizontalAlignment="Left" /></StackPanel></Border><Border Grid.Column="1" Classes="Card"><StackPanel Spacing="10"><TextBlock Classes="H3" Text="Matter chronology" /><TextBlock Classes="Muted" Text="Generated from 4 source-linked events" /><TextBlock Text="A reviewable timeline with date precision, different accounts and exact source links." TextWrapping="Wrap" /><Button Classes="Secondary" Content="Open chronology" Tag="Timeline" Click="OnNavigate" HorizontalAlignment="Left" /></StackPanel></Border></Grid></StackPanel></ScrollViewer>
+
+        <!-- MATTERS -->
+        <ScrollViewer x:Name="MattersPage" IsVisible="False" VerticalScrollBarVisibility="Auto"><StackPanel Margin="28" Spacing="18" MaxWidth="1180"><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Classes="Eyebrow" Text="LOCAL WORKSPACES" /><TextBlock Classes="H1" Text="Matters" /><TextBlock Classes="Muted" Text="A Matter contains its own evidence, conversations, position and work history." /></StackPanel><Button Grid.Column="1" Classes="Primary" Content="Create Matter" Click="OnShowStart" VerticalAlignment="Center" /></Grid><Grid ColumnDefinitions="*,*,*" ColumnSpacing="14"><Border Classes="Card" BorderBrush="#92CFC4"><StackPanel Spacing="9"><Border Classes="Pill"><TextBlock Text="ACTIVE" Foreground="{DynamicResource AccentBrush}" FontSize="10" FontWeight="Bold" /></Border><TextBlock Classes="H3" Text="Community Hall Boiler Repair" /><TextBlock Classes="Muted" Text="3 material position items • 6 evidence items • 2 conversations" TextWrapping="Wrap" /><Button Classes="Primary" Content="Open Matter" Tag="CurrentPosition" Click="OnNavigate" /></StackPanel></Border><Border Grid.Column="1" Classes="Card"><StackPanel Spacing="9"><Border Background="#EEF2F3" CornerRadius="999" Padding="9,5" HorizontalAlignment="Left"><TextBlock Text="SYNTHETIC" FontSize="10" FontWeight="Bold" /></Border><TextBlock Classes="H3" Text="Garden Lease Review" /><TextBlock Classes="Muted" Text="Example empty Matter used for isolation testing." TextWrapping="Wrap" /><Button Classes="Secondary" Content="Open Matter" Click="OnNotImplemented" /></StackPanel></Border><Border Grid.Column="2" Classes="Card"><StackPanel Spacing="9"><Border Background="#EEF2F3" CornerRadius="999" Padding="9,5" HorizontalAlignment="Left"><TextBlock Text="NEW" FontSize="10" FontWeight="Bold" /></Border><TextBlock Classes="H3" Text="Start another Matter" /><TextBlock Classes="Muted" Text="Create a genuinely empty Matter. Nothing is imported automatically." TextWrapping="Wrap" /><Button Classes="Secondary" Content="Create Matter" Click="OnShowStart" /></StackPanel></Border></Grid></StackPanel></ScrollViewer>
+
+        <!-- SETTINGS -->
+        <ScrollViewer x:Name="SettingsPage" IsVisible="False" VerticalScrollBarVisibility="Auto"><StackPanel Margin="28" Spacing="18" MaxWidth="980"><TextBlock Classes="Eyebrow" Text="CONTROL AND ACCESSIBILITY" /><TextBlock Classes="H1" Text="Trust &amp; Settings" /><TextBlock Classes="Muted" Text="ECO remains local, source-led and under your control." /><Border Classes="Card"><StackPanel Spacing="16"><TextBlock Classes="H2" Text="Appearance" /><Grid ColumnDefinitions="180,*" RowDefinitions="Auto,Auto,Auto" RowSpacing="14"><TextBlock Text="Workspace view" FontWeight="SemiBold" VerticalAlignment="Center" /><StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"><Button x:Name="GuidedModeSetting" Classes="Primary" Content="Guided View" Click="OnSetGuided" /><Button x:Name="FullModeSetting" Classes="Secondary" Content="Full Workspace" Click="OnSetFull" /></StackPanel><TextBlock Grid.Row="1" Text="Text and interface" FontWeight="SemiBold" VerticalAlignment="Center" /><ComboBox Grid.Row="1" Grid.Column="1" x:Name="ScaleSelector" SelectedIndex="0" SelectionChanged="OnScaleChanged" Width="230" HorizontalAlignment="Left"><ComboBoxItem Content="100% — Default" Tag="1.0" /><ComboBoxItem Content="150% — Large" Tag="1.5" /><ComboBoxItem Content="200% — Extra large" Tag="2.0" /><ComboBoxItem Content="225% — Maximum test" Tag="2.25" /></ComboBox><TextBlock Grid.Row="2" Text="Sensory settings" FontWeight="SemiBold" VerticalAlignment="Center" /><CheckBox Grid.Row="2" Grid.Column="1" x:Name="LowSensoryCheck" Content="Reduce animation and visual effects" Checked="OnLowSensoryChanged" Unchecked="OnLowSensoryChanged" /></Grid></StackPanel></Border><Border Classes="Card"><StackPanel Spacing="12"><TextBlock Classes="H2" Text="Offline engines" /><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Text="Qwen local assistant" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Packaged runtime will be verified before this recovery candidate is delivered." /></StackPanel><TextBlock Grid.Column="1" Text="Integration pending" Foreground="{DynamicResource WarningBrush}" FontWeight="SemiBold" VerticalAlignment="Center" /></Grid><Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Text="OCR and PDF readers" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Tesseract and Poppler runtime proven separately; application integration is being rebuilt." /></StackPanel><TextBlock Grid.Column="1" Text="Integration pending" Foreground="{DynamicResource WarningBrush}" FontWeight="SemiBold" VerticalAlignment="Center" /></Grid></StackPanel></Border><Border Classes="Card"><StackPanel Spacing="9"><TextBlock Classes="H2" Text="Privacy boundary" /><TextBlock Text="No account. No telemetry. No cloud processing. No evidence leaves this computer." TextWrapping="Wrap" /><TextBlock Classes="Muted" Text="This recovery lane uses synthetic information only and is not approved for real evidence." TextWrapping="Wrap" /></StackPanel></Border></StackPanel></ScrollViewer>
+      </Grid>
+    </Grid>
+
+    <!-- Clean first-launch / create-Matter surface -->
+    <Border x:Name="StartOverlay" Grid.ColumnSpan="2" Background="#EFF4F7" IsVisible="True">
+      <Grid RowDefinitions="72,*">
+        <Border Background="White" BorderBrush="{DynamicResource BorderBrush}" BorderThickness="0,0,0,1" Padding="28,0"><Grid ColumnDefinitions="*,Auto" VerticalAlignment="Center"><StackPanel Orientation="Horizontal" Spacing="12"><Border Width="42" Height="42" CornerRadius="13" Background="#0F766E"><TextBlock Text="ECO" FontWeight="Bold" FontSize="12" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><StackPanel VerticalAlignment="Center"><TextBlock Text="ECO" FontSize="20" FontWeight="Bold" /><TextBlock Text="Evidence &amp; Casework One" Classes="Muted" FontSize="11" /></StackPanel></StackPanel><Button Grid.Column="1" Classes="Secondary" Content="What’s New" Click="OnWhatsNew" /></Grid></Border>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto"><StackPanel Margin="40" Spacing="24" MaxWidth="1050" HorizontalAlignment="Center"><StackPanel HorizontalAlignment="Center" Spacing="8"><TextBlock Classes="Eyebrow" Text="PRIVATE • LOCAL • SOURCE-LED" HorizontalAlignment="Center" /><TextBlock Classes="H1" Text="Start a genuinely empty Matter" HorizontalAlignment="Center" /><TextBlock Classes="Muted" Text="ECO will not silently load an earlier development workspace. Choose how you want to begin." TextAlignment="Center" MaxWidth="680" TextWrapping="Wrap" /></StackPanel><Grid ColumnDefinitions="*,*" ColumnSpacing="18"><Border Classes="Card" BorderBrush="#80C8BC" Padding="24"><StackPanel Spacing="14"><Border Width="46" Height="46" CornerRadius="14" Background="{DynamicResource AccentSoftBrush}" HorizontalAlignment="Left"><TextBlock Text="1" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><TextBlock Classes="H2" Text="Guide me step by step" /><TextBlock Classes="Muted" Text="Start with a calm, focused view. ECO shows no more than the most important items first, while keeping every capability available." TextWrapping="Wrap" /><Border Classes="Pill"><TextBlock Text="RECOMMENDED" Foreground="{DynamicResource AccentBrush}" FontSize="10" FontWeight="Bold" /></Border><Button Classes="Primary" Content="Use Guided View" Click="OnCreateGuidedMatter" /></StackPanel></Border><Border Grid.Column="1" Classes="Card" Padding="24"><StackPanel Spacing="14"><Border Width="46" Height="46" CornerRadius="14" Background="#E8EEF2" HorizontalAlignment="Left"><TextBlock Text="2" FontSize="20" FontWeight="Bold" Foreground="#385363" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border><TextBlock Classes="H2" Text="Open the full workspace" /><TextBlock Classes="Muted" Text="See denser evidence, timeline, money, task and conversation controls immediately. It uses exactly the same Matter information." TextWrapping="Wrap" /><Border Background="#EEF2F3" CornerRadius="999" Padding="9,5" HorizontalAlignment="Left"><TextBlock Text="ADVANCED LAYOUT" FontSize="10" FontWeight="Bold" /></Border><Button Classes="Secondary" Content="Use Full Workspace" Click="OnCreateFullMatter" /></StackPanel></Border></Grid><Border Classes="Card"><Grid ColumnDefinitions="*,Auto" ColumnSpacing="20"><StackPanel Spacing="7"><TextBlock Classes="H3" Text="Community Hall Boiler Repair" /><TextBlock Classes="Muted" Text="The recovery candidate currently uses this neutral synthetic fixture for visible testing. Creating it never imports real or previous ECO data." TextWrapping="Wrap" /></StackPanel><Button Grid.Column="1" Classes="Secondary" Content="Open existing recovery Matter…" Click="OnOpenExisting" VerticalAlignment="Center" /></Grid></Border><TextBlock Text="Recovery candidate • synthetic development only • no release or real-evidence approval" Classes="Muted" FontSize="11" HorizontalAlignment="Center" /></StackPanel></ScrollViewer>
+      </Grid>
+    </Border>
+
+    <!-- What’s New / transparent scope dialog -->
+    <Border x:Name="WhatsNewOverlay" Grid.ColumnSpan="2" Background="#99081924" IsVisible="False">
+      <Border Classes="Card" Width="720" MaxHeight="680" HorizontalAlignment="Center" VerticalAlignment="Center" Padding="26">
+        <Grid RowDefinitions="Auto,*,Auto">
+          <Grid ColumnDefinitions="*,Auto"><StackPanel><TextBlock Classes="Eyebrow" Text="RECOVERY CANDIDATE" /><TextBlock Classes="H1" Text="What’s being rebuilt" Margin="0,6,0,0" /></StackPanel><Button Grid.Column="1" Classes="Secondary" Content="Close" Click="OnCloseWhatsNew" VerticalAlignment="Top" /></Grid>
+          <ScrollViewer Grid.Row="1" Margin="0,20,0,18"><StackPanel Spacing="12"><Border Classes="SubtleCard"><StackPanel><TextBlock Text="Modern Matter workspace" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Current Position, Evidence, Timeline, Money, Tasks, Conversations, Outputs and Trust settings are one coherent product again." TextWrapping="Wrap" /></StackPanel></Border><Border Classes="SubtleCard"><StackPanel><TextBlock Text="Guided and Full views" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="Both views use the same underlying Matter facts, sources, drafts and selection state." TextWrapping="Wrap" /></StackPanel></Border><Border Classes="SubtleCard"><StackPanel><TextBlock Text="Offline engines carried forward carefully" FontWeight="SemiBold" /><TextBlock Classes="Muted" Text="The proven Qwen, llama.cpp, OCR and PDF packaging work will be integrated after this visual and interaction baseline passes." TextWrapping="Wrap" /></StackPanel></Border><Border Background="{DynamicResource WarningSoftBrush}" BorderBrush="#E9C28A" BorderThickness="1" CornerRadius="12" Padding="14"><StackPanel><TextBlock Text="Not yet a deliverable" FontWeight="SemiBold" Foreground="{DynamicResource WarningBrush}" /><TextBlock Text="This candidate remains synthetic and unapproved until the full visible journey, engine integration, accessibility, persistence and Acer tests pass." TextWrapping="Wrap" /></StackPanel></Border></StackPanel></ScrollViewer>
+          <Button Grid.Row="2" Classes="Primary" Content="Continue" Click="OnCloseWhatsNew" HorizontalAlignment="Right" />
+        </Grid>
+      </Border>
+    </Border>
+
+    <!-- Lightweight status/toast -->
+    <Border x:Name="Toast" Grid.Column="1" Background="#123C4A" CornerRadius="12" Padding="14,11" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,84,24,0" IsVisible="False" BoxShadow="0 10 28 0 #44000000">
+      <TextBlock x:Name="ToastText" Text="Action recorded" Foreground="White" FontWeight="SemiBold" />
+    </Border>
+  </Grid>
+</Window>
