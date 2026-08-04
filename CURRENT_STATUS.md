@@ -1,190 +1,167 @@
 # Current ECO project status
 
 **Status date:** 4 August 2026  
-**Latest control update:** 4 August 2026, 06:58 BST  
+**Latest control update:** 4 August 2026, approximately 10:50 BST / 11:50 CEST  
 **Canonical public status record:** this file  
-**Current reviewed `main` commit before this documentation correction:** `c36753f0fff3daef3b94d1e3ae11fd25bea8933e`  
+**Current reviewed `main` before this reconciliation:** `0dc57720c1c3394b03342427bc9b4dca09c1f040`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
-**Release position:** development only; no approved public binary
+**Release position:** source development only; no approved public binary
 
 ## Status authority
 
-This root `CURRENT_STATUS.md` file is the single current public status authority.
+This root file is ECO's current public status authority. The live Control Board in issue #22 carries operational detail, exact heads and dated decisions. Dated reports under `docs/control/progress/` and `docs/status/` are historical records and do not replace this file.
 
-The operational control board in issue #22 tracks exact active pull-request heads, independent inspection decisions, owners and next actions. It does not replace this canonical public status record.
+`main` contains post-V25 security, governance, provenance and repository-control work. Those commits do not create a new approved milestone, release candidate or end-user release.
 
-Files under `docs/status/` with dates are historical daily records. The former `docs/status/CURRENT_STATUS.md` path is retained only as a pointer to this canonical record.
+## Application implementation lane
 
-## What `main` represents
+PR #11 is the sole active application implementation lane.
 
-`VERSION` still records the last named source milestone approved under the earlier milestone process: `ECO-V25-20260731-N2-P1`.
-
-The `main` branch also contains later controlled source-development, security and repository-control changes. Those changes do **not** create a new approved source milestone, release candidate or end-user release merely because they were committed.
-
-No private model bundle, diagnostic archive, screenshot set, private workspace or personal evidence is represented by this repository.
-
-## Current controlled development position
-
-### Evidence preservation
-
-PR #10 merged source changes intended to make the verified preserved object the source of truth for extraction, OCR, citation and retrieval.
-
-Issue #3 remains open. Its implementation is materially improved, but independent closure is pending because follow-up work is recorded in issue #12. Until that work and the complete acceptance evidence are independently verified, use with real, sensitive or irreplaceable evidence remains blocked.
-
-### Workspace identity, migration and reset
-
-PR #11 remains draft, unmerged, non-mergeable and independently blocked.
-
-- Last independently reviewed workspace implementation head: `73689717bb08bb8cec0fc1233b92f843b449484a`.
+- Last inspected workspace implementation: `73689717bb08bb8cec0fc1233b92f843b449484a`.
 - Current PR head: `61a2004809b341e72f70321843c64c3ff477f549`.
-- The commits after the reviewed workspace implementation change only `.github/workflows/ci.yml` to stop public executable upload; they do not correct workspace ownership or concurrency.
+- Current relation to reviewed `main` `0dc57720...`: 8 commits ahead, 41 commits behind; common base `2dcb44ba8541ab7a319de6e1f14f016aafe2ac1b`.
+- State: draft, unmerged and non-mergeable.
 
-Its four current P0 blockers are:
+The branch commits after the inspected workspace implementation contain workflow upload containment only. They do not correct the workspace findings.
 
-1. stale independently opened writers can overwrite newer workspace metadata without exact revision/CAS conflict detection;
-2. path-derived locking can be split by aliases and separate pathname resolution instead of one retained-parent transaction;
-3. Linux nested cleanup can close an inspected directory and reopen it by name;
-4. workspace creation, first launch and candidate-state writes are not protected by one alias-safe cross-process ownership transaction.
+### Four issue #4 P0 blockers
 
-Issue #4 remains open. The branch must be reconciled with current `main` `c36753f0fff3daef3b94d1e3ae11fd25bea8933e` without losing the no-public-artifact workflow, verified fail-fast controls, Windows pointer-safety corrections, current canonical records or historical-provenance controls.
+1. Independently opened stale writers can overwrite newer metadata without exact revision/CAS conflict detection.
+2. Path-derived locking and separate pathname resolution can split ownership across aliases instead of one retained-parent object identity.
+3. Linux nested cleanup can close an inspected directory and reopen it by name.
+4. Workspace creation, first launch and candidate-state writes are not protected by one alias-safe cross-process ownership transaction.
 
-### Windows CI truthfulness — issue #27 closed
+PR #11 must be reconstructed from current `main`, deliberately carrying forward only valid workspace work. It must preserve the no-public-artifact workflow, fail-fast and six-stage Windows controls, Windows pointer-safety fixes, current governance, provenance and audit records, and every evidence-use and release stop gate.
 
-The former Windows false-green defect was reproduced: a non-zero native `go vet` result could be followed by policy and build steps while the job reported success.
+No merge, issue #4 closure or real-evidence test is authorised.
 
-PR #28 isolated and merged the fail-fast correction and the three resulting Windows unsafe-pointer corrections. PR #31 then added a six-stage failure matrix and static assertions for every real native stage in `scripts/build-windows.ps1`.
+## Evidence preservation and Ask
 
-Final merged issue #27 control commit:
+PR #10 materially improved preserved-object source binding for extraction, OCR, citation and retrieval. Issue #3 remains open pending issue #12 and complete acceptance evidence.
 
-`9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`
+Issue #12 still blocks:
 
-Final independent merged-tree verification used run `30852039542` and proved:
+- bounded verification cost;
+- safe cache invalidation or source-limited verification;
+- serialization of Ask against restore;
+- persistence-error propagation and truthful rollback.
 
-- Linux tests and vet passed;
-- source policy passed;
-- a controlled non-zero native command terminated the Windows gate;
-- separate injected failures at test, vet, source policy, first build, second build and `go version` stopped all later logical stages;
-- every real native stage remained wrapped by `Invoke-NativeChecked`;
-- ordinary Windows tests, vet, policy and deterministic rebuild passed;
-- the run published exactly zero Actions artifacts.
+Use with real, sensitive or irreplaceable evidence remains blocked.
 
-Issue #27 closed as completed on 3 August 2026. This establishes CI truthfulness for the covered commands only; it does not approve the unsigned runner-built executable or open a release gate.
+## Windows CI and public artifact control
 
-### Public Actions executable containment — issue #24 remains open
+Issue #27 is closed. The covered Windows native-command path now has:
 
-Independent inspection found that the public GitHub Actions workflow uploaded unsigned `ECO.exe` packages for successful pull-request and `main` runs, including documentation-only changes. Four unexpired runnable artifacts were identified and recorded in P0 issue #24.
+- `Invoke-NativeChecked` fail-fast handling;
+- a controlled non-zero native-command test;
+- a six-stage failure matrix for tests, vet, source policy, first build, second build and `go version`;
+- Windows unsafe-pointer corrections exposed by truthful vet.
 
-Emergency containment commit `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a` removed the public `upload-artifact` step while preserving internal Windows compilation and testing on the hosted runner.
+This establishes CI truthfulness for the covered commands only. It does not approve the runner-built executable.
 
-Multiple independently inspected pull-request routes—including failed native validation, successful builds, affected-branch containment checks and final merged-main verification—have since produced exactly zero Actions artifacts.
+Issue #24 remains open. The workflow no longer uploads runnable artifacts, and inspected PR merge-tree and merged-tree routes have exposed zero artifacts. Four historical unsigned executable archives remain prohibited until administrator deletion or confirmed expiry. A one-time recheck is scheduled for 10 August 2026 at 19:00 Europe/London. Controlled manual-dispatch no-artifact evidence is still outstanding.
 
-Issue #24 remains open because:
+No historical or runner-built executable is approved for download, testing, use or redistribution.
 
-- the four historical executable artifacts must be deleted by an authorised repository administrator or expire;
-- a controlled manual-dispatch run still requires explicit no-artifact evidence;
-- affected development branches must preserve the corrected no-upload workflow when reconciled;
-- no later automation may reintroduce public runnable uploads before signing, provenance and publisher gates pass.
+## Provenance and packaging
 
-No listed Actions executable is approved for testing, use or redistribution.
+Issue #15 remains P0 and open.
 
-### Actual-build provenance — issue #15 remains open
+The root manifest, preparation receipt and SPDX record are explicitly historical V25 or source-level records. Exact former bytes are preserved under versioned historical paths. They cannot support a current executable or release claim.
 
-The generic root repository manifest and preparation receipt are now explicit pointers to preserved historical V25 records. The root SPDX document is explicitly labelled as a historical V25 source-level SBOM, and the exact former bytes are preserved under a versioned historical path. Root third-party notices now describe current source-level declarations only.
+ECO still lacks one reconciled final package containing:
 
-These corrections prevent the historical files from being mistaken for current release evidence. They do not create an authoritative exact-build manifest, executable SBOM, final notice bundle, signing record or release receipt. P0 issue #15 remains open.
+- exact source commit and tree identity;
+- clean-source manifest;
+- final executable hash and PE inventory;
+- actual-build SBOM;
+- complete notices and corresponding source;
+- reproducible build receipt;
+- final model/runtime provenance;
+- Authenticode signing record with no post-signing mutation.
 
-### Intended purpose and targeted high-consequence output boundary
+The current build remains an unsigned private runner output, not an end-user deliverable.
 
-Issue #20 permits ECO, in principle, to assist a user with supplied evidence and casework that contains health, legal, benefits, housing, employment or other sensitive subject matter. Document subject matter alone is not a reason to disable evidence assistance.
+## Intended purpose and prohibited outputs
 
-Subject to exact source binding, visible output status and meaningful user review, the intended evidence-assistance boundary may include:
+The controlling intended-purpose and public-claims boundary is:
 
-- deterministic extraction, OCR, exact search and source navigation;
-- identifying names, dates, deadlines, events and actions stated in supplied documents;
-- source-linked summaries, chronologies and comparisons of what documents say;
-- helping the user prepare questions, notes, letters and draft responses;
-- identifying possible omissions or inconsistencies for the user to examine.
+[`docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md`](docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md)
+
+ECO may, in principle, provide source-linked, visibly labelled and user-controlled assistance with supplied health, legal, benefits, housing, employment and other sensitive evidence. That may include exact extraction, OCR, search, source navigation, document-stated facts, summaries, chronologies, questions, notes, letters and draft responses.
 
 ECO must not be presented, configured or relied upon to:
 
-- diagnose a condition or infer an unstated diagnosis;
-- recommend treatment, medication or a clinical course of action;
+- diagnose or infer an unstated diagnosis;
+- recommend treatment, medication or clinical action;
 - perform prognosis, triage, monitoring, clinical-risk or emergency assessment;
-- conduct reserved legal activities or claim professional legal representation;
+- conduct reserved legal activities or claim professional representation;
 - guarantee legal correctness, admissibility or outcome;
 - profile or score eligibility, credibility, honesty, dangerousness or entitlement;
-- grant, deny, reduce, revoke or reclaim benefits, housing, healthcare, employment, education or another essential service;
-- materially influence an authority-side or institutional adverse decision without a fresh assessment.
+- grant, deny, reduce, revoke or reclaim an essential service;
+- materially influence an authority-side adverse decision without a fresh assessment and separate approval.
 
-The earlier whole-vault health-content ban and the stale intended-purpose approach retained in PR #18 are not controlling. Issue #16 remains open for a clean intended-purpose record, and corrected issue #20 remains P0.
+Issues #16, #20 and #46 remain open because governance adoption does not prove application conformance. Current Ask ECO and generated routes are not approved for real evidence or public AI-assisted use.
 
-Current Ask ECO and other generated routes are **not** approved for real or sensitive evidence or public AI-assisted use. Exact implementation tests must prove source attribution, output-status separation, safe boundary responses and the absence of prohibited clinical, professional, profiling and high-consequence outputs before that position can change.
+## Publisher, stewardship and partner controls
 
-### Other active grouped work
+The controlling publisher/stewardship gate is:
 
-- Issue #5: instruction-faithful, source-backed and non-operative offline AI.
-- Issue #6: responsive background import, OCR and local-AI work.
-- Issue #7: keyboard, screen-reader, DPI, scrolling and working-control accessibility.
-- Issue #8: page-aware document search, visible highlights and source navigation.
-- Issue #12: bounded Ask verification cost and safe serialisation against restore.
-- Issue #14: privacy-safe diagnostics and accurate offline/network claims.
-- Issue #15: actual-build SBOM, licence notices and release provenance.
-- Issue #16: intended purpose, excluded uses and controlled public claims.
-- Issue #17: accountable publisher, response routes and project continuity.
-- Issue #20: gate clinical, diagnostic, treatment, professional, profiling and high-consequence outputs while permitting evidence assistance.
-- Issue #24: historical executable containment and manual-dispatch proof.
+[`docs/governance/PUBLISHER_AND_STEWARDSHIP_GATE.md`](docs/governance/PUBLISHER_AND_STEWARDSHIP_GATE.md)
+
+No organisation or individual is appointed as publisher, supplier, support operator, complaints handler, controller or liability owner. Contribution or repository administration alone does not appoint those roles, while responsibilities arising from actual publishing, signing, contracting, data processing, claims or law remain preserved.
+
+Issue #17 remains open until a named established organisation completes due diligence, formally accepts the role and proves the operational, security, support, complaints and continuity routes.
+
+The generic public-safe partner pack is present under `docs/partnership/`. It names, researches, ranks and contacts no organisation. It authorises no outreach, relationship, pilot, contract, repository/signing transfer, release or deployment. Any named-organisation research or contact requires a separate issue, evidence and approval decision.
+
+## Audit and progress controls
+
+The controlling workflow-evidence and reviewer-relationship correction is:
+
+[`docs/control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md`](docs/control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md)
+
+PR workflows must be described as tested PR merge-tree evidence when raw logs show a synthetic `refs/pull/<number>/merge` checkout. `Exact-head` may be used only when the raw checkout proves that exact branch head was tested. Final squash-tree comparison and post-merge CI are separate evidence classes.
+
+The progress standard and supplement require truthful reviewer relationships and verified downloadable audit packs after substantial control cycles. The private 07:42 BST inspection pack is recorded at ZIP SHA-256 `76763897af9a3b20b3e8c18c018d625d0542a1bca620f95173db0c1d48fbc7f3`.
 
 ## Current stop gates
 
 The following remain blocked:
 
-- use with real, sensitive or irreplaceable evidence;
-- public end-user binary distribution through Releases, Actions artifacts or another public channel;
-- use or redistribution of historical unsigned Actions executables;
+- real, sensitive or irreplaceable evidence;
+- current Ask ECO or public AI-assisted evidence functions;
+- diagnosis, treatment, clinical-risk, professional-representation, profiling, scoring and authority-side adverse-decision outputs;
+- ordinary-user executable testing;
+- public binary distribution through Releases, Actions or another channel;
+- use or redistribution of historical unsigned executables;
 - release-candidate or stable-release status;
-- public promotion of AI-assisted evidence functions before exact implementation qualification;
-- claims that the targeted clinical, professional and high-consequence output boundary is implemented;
-- diagnosis, treatment, clinical-risk, professional-representation, profiling, scoring or authority-side decision outputs;
-- claims of completed production OCR or complete native PDF investigation;
-- claims of accessibility, forensic, legal, medical or regulatory compliance;
-- all public-sector or private-institutional deployment;
-- all healthcare or clinical deployment;
-- all EU availability, including download, supply or deployment.
+- claims of reliable production OCR, local AI, native PDF investigation, accessibility, forensic, legal, medical, security or regulatory compliance;
+- named outreach, partnership or publisher appointment without separate approval;
+- public-sector, institutional, healthcare, justice-sector or EU supply and deployment.
 
-## Underlying technical and organisational limits
+## Other active release-blocking work
 
-- Current `main` portable restore still uses pathname-based activation and best-effort rollback.
-- PR #11 retains four workspace ownership/concurrency P0 blockers.
-- Issue #12 blocks safe Ask verification cost and Ask/restore serialisation.
-- Issue #14 blocks privacy-safe diagnostics and final bundled-runtime network claims.
-- There is no authoritative current exact-build manifest, executable SBOM, final notice bundle, signed receipt or actual packaged-artifact reconciliation required by issue #15.
-- Issue #24 remains open despite successful no-artifact PR evidence.
-- PR #18 is stale and not controlling; issues #16 and #20 remain unresolved.
-- No accountable established publisher, support operator, complaints handler or continuity owner has accepted the issue #17 duties.
-- Accessibility, responsiveness and page-aware search qualification remains incomplete.
+- Issue #5: instruction-faithful, source-backed and non-operative offline AI.
+- Issue #6: responsive background import, OCR and local-AI work.
+- Issue #7: keyboard, screen-reader, DPI, scrolling and cognitive accessibility.
+- Issue #8: page-aware search, highlights and source navigation.
+- Issue #14: privacy-safe diagnostics and final offline/network claims.
+- Issue #15: actual-build SBOM, notices, provenance and signing.
+- Issue #16: intended-purpose and public-claims conformance.
+- Issue #17: accountable publisher, response routes and continuity.
+- Issue #20: targeted clinical, professional, profiling and high-consequence output boundary.
+- Issue #24: historical executable expiry/deletion and manual-dispatch proof.
+- Issue #46: cross-surface implementation conformance with the governance boundary.
 
-## Release prerequisites
+## Next controlled sequence
 
-Before the release position can be reconsidered, ECO requires objective evidence for at least:
-
-- exact source, build and binary identity;
-- complete corresponding source, manifest, SBOM and licence notices;
-- verified model and runtime provenance;
-- genuine one-file packaging and clean-machine execution;
-- Windows stability, low-resource and long-duration testing;
-- no-external-network proof for all bundled runtime components;
-- evidence-integrity and recovery qualification;
-- privacy-safe diagnostics and accurate public network claims;
-- keyboard, assistive-technology, DPI and cognitive-accessibility evidence;
-- trusted Authenticode signing with no post-signing file mutation;
-- an authoritative intended-purpose and excluded-use boundary;
-- technical enforcement of issue #20's targeted clinical, professional, profiling and high-consequence output boundary while preserving permitted evidence assistance;
-- an accountable publisher or steward for security, privacy, complaints, support and continuity;
-- a controlled distribution pipeline that exposes no runnable artifact before approval;
-- independent closure of every release-blocking P0 and P1 finding.
+1. Keep PR #11 frozen until one coherent workspace-correction candidate is built from current `main`.
+2. Inspect that candidate delta-first against all four issue #4 P0 boundaries and issue #3 regressions.
+3. Complete issue #24 artifact expiry/deletion and manual-dispatch evidence.
+4. Continue issue #15 exact-build provenance work without public executable upload.
+5. Keep all real-evidence, AI, publisher, outreach, signing, release and deployment gates closed until their acceptance evidence passes.
 
 ## Public-record rule
 
-Public updates must remain sanitised. They may record defect classes, controls, acceptance tests and release decisions, but must not publish personal evidence, private diagnostics, exploit-level instructions, confidential screenshots, unapproved binaries, bundled models or private test workspaces.
-
-Use synthetic and non-sensitive information only in this repository.
+Public repository records may state defect classes, requirements, tests and decisions. They must not contain personal evidence, private diagnostics, confidential screenshots, credentials, unapproved binaries, model files, private workspaces or exploit-level instructions. Use synthetic and non-sensitive information only.
