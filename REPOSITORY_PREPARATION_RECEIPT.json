@@ -1,33 +1,12 @@
 {
-  "schema": 1,
-  "package_purpose": "Public source and CI update for the ECO GitHub repository",
-  "build_id": "ECO-V25-20260731-N2-P1",
-  "build_name": "Evidence & Casework One Version 25 N2 — Native Document Vision Foundation Preview 1",
-  "prepared_at_utc": "2026-07-31T09:20:00Z",
-  "source_base_release": "v25.0.0-n1-p3",
-  "release_class": "source development snapshot",
-  "unsigned_executable_included": false,
-  "verification": {
-    "go_test_all": "PASS",
-    "go_vet_all": "PASS",
-    "source_policy": "PASS",
-    "targeted_race_detector": "PASS",
-    "windows_amd64_cross_build": "PASS",
-    "deterministic_rebuild": "PASS",
-    "test_functions": 34,
-    "verification_artifact_sha256": "f1ddb582b307bf4dcdbd606deb5032468fa73a5d648467ffc6b4ce2e9e34c14d",
-    "verification_artifact_size_bytes": 3824640,
-    "verification_artifact_distributed": false,
-    "windows_imported_dlls": [
-      "kernel32.dll"
-    ]
-  },
-  "privacy_and_publication_scan": {
-    "personal_evidence_included": false,
-    "vault_or_backup_included": false,
-    "credentials_or_tokens_included": false,
-    "internal_container_paths_found": false,
-    "runnable_windows_binary_included": false
-  },
-  "known_gate": "Trusted code signing and direct Windows execution testing remain pending."
+  "schema": 2,
+  "record_status": "historical_pointer",
+  "authoritative_for_current_main": false,
+  "historical_build_id": "ECO-V25-20260731-N2-P1",
+  "historical_source_commit": "439863de1cc01e1e08064e86ed08deb9b195e54c",
+  "historical_prepared_at_utc": "2026-07-31T09:20:00Z",
+  "historical_record_path": "docs/provenance/historical/ECO_V25_N2_P1_REPOSITORY_PREPARATION_RECEIPT_2026-07-31.json",
+  "historical_manifest_path": "docs/provenance/historical/ECO_V25_N2_P1_REPOSITORY_MANIFEST_2026-07-31.csv",
+  "current_provenance_gate": "GitHub issue #15",
+  "warning": "This root file is not a current repository manifest, build receipt, release receipt, SBOM, signing record or proof that current main passed the historical checks."
 }
