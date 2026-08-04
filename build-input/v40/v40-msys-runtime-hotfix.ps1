@@ -23,7 +23,7 @@ if ($text.IndexOf($startMarker, $start + $startMarker.Length, [StringComparison]
     throw 'More than one hard-coded MSYS2 runtime block start marker was found.'
 }
 
-$replacement = @'
+$runtimeReplacement = @'
 $msysRoot = (Resolve-Path (Join-Path (Split-Path -Parent $bash) '..\..')).Path
 function Resolve-MsysRuntimeFile([string]$Name) {
   $candidates = Get-ChildItem -Path $msysRoot -Recurse -File -Filter $Name -ErrorAction SilentlyContinue |
@@ -91,9 +91,85 @@ if ($null -ne $msysLicenses) {
   Copy-Item -LiteralPath $msysLicenses.FullName -Destination (Join-Path $licenseRoot 'MSYS2-UCRT64') -Force -Recurse
 }
 '@
+$text = $text.Substring(0, $start) + $runtimeReplacement + "`r`n`r`n" + $text.Substring($end)
 
-$text = $text.Substring(0, $start) + $replacement + "`r`n`r`n" + $text.Substring($end)
+$smokeStartMarker = "Write-Step 'Run genuine local Qwen inference smoke'"
+$smokeEndMarker = "Write-Step 'Run ECO AI adapter against the genuine runtime'"
+$smokeStart = $text.IndexOf($smokeStartMarker, [StringComparison]::Ordinal)
+if ($smokeStart -lt 0) { throw 'Direct llama smoke start marker was not found.' }
+$smokeEnd = $text.IndexOf($smokeEndMarker, $smokeStart, [StringComparison]::Ordinal)
+if ($smokeEnd -lt 0) { throw 'ECO adapter marker was not found after direct llama smoke.' }
+if ($text.IndexOf($smokeStartMarker, $smokeStart + $smokeStartMarker.Length, [StringComparison]::Ordinal) -ge 0) {
+    throw 'More than one direct llama smoke start marker was found.'
+}
+
+$smokeReplacement = @'
+Write-Step 'Run genuine local Qwen inference smoke'
+$llamaPath = Join-Path $runtime 'llama-cli.exe'
+$smokeOut = Join-Path $logs 'llama-direct-smoke.txt'
+$smokeErr = Join-Path $logs 'llama-direct-smoke.stderr.txt'
+$llamaVersionOut = Join-Path $logs 'llama-version.txt'
+$llamaVersionErr = Join-Path $logs 'llama-version.stderr.txt'
+
+function Invoke-CapturedProcess([string]$FilePath, [string[]]$Arguments, [string]$StdoutPath, [string]$StderrPath) {
+  $psi = [Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $FilePath
+  $psi.UseShellExecute = $false
+  $psi.CreateNoWindow = $true
+  $psi.RedirectStandardOutput = $true
+  $psi.RedirectStandardError = $true
+  foreach ($argument in $Arguments) { [void]$psi.ArgumentList.Add($argument) }
+  $process = [Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  if (-not $process.Start()) { throw "Failed to start $FilePath" }
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
+  $process.WaitForExit()
+  $stdout = $stdoutTask.GetAwaiter().GetResult()
+  $stderr = $stderrTask.GetAwaiter().GetResult()
+  [IO.File]::WriteAllText($StdoutPath, $stdout, [Text.UTF8Encoding]::new($false))
+  [IO.File]::WriteAllText($StderrPath, $stderr, [Text.UTF8Encoding]::new($false))
+  return $process.ExitCode
+}
+
+$versionExit = Invoke-CapturedProcess $llamaPath @('--version') $llamaVersionOut $llamaVersionErr
+if ($versionExit -ne 0) {
+  Write-Host (Get-Content -Raw $llamaVersionOut -ErrorAction SilentlyContinue)
+  Write-Host (Get-Content -Raw $llamaVersionErr -ErrorAction SilentlyContinue)
+  throw "llama.cpp version probe failed with exit $versionExit"
+}
+
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$smokeArgs = @(
+  '-m', $modelPath,
+  '-p', 'Reply with exactly: Hello from ECO local AI.',
+  '--single-turn',
+  '--no-display-prompt',
+  '--simple-io',
+  '--no-warmup',
+  '--no-show-timings',
+  '-t', '4',
+  '-c', '512',
+  '-n', '32',
+  '--temp', '0'
+)
+$llamaExit = Invoke-CapturedProcess $llamaPath $smokeArgs $smokeOut $smokeErr
+$sw.Stop()
+if ($llamaExit -ne 0) {
+  Write-Host '--- llama stdout ---'
+  Write-Host (Get-Content -Raw $smokeOut -ErrorAction SilentlyContinue)
+  Write-Host '--- llama stderr ---'
+  Write-Host (Get-Content -Raw $smokeErr -ErrorAction SilentlyContinue)
+  throw "llama.cpp direct smoke failed with exit $llamaExit"
+}
+$smokeText = Get-Content -Raw $smokeOut
+if ([string]::IsNullOrWhiteSpace($smokeText)) {
+  Write-Host (Get-Content -Raw $smokeErr -ErrorAction SilentlyContinue)
+  throw 'llama.cpp direct smoke returned no text'
+}
+'@
+$text = $text.Substring(0, $smokeStart) + $smokeReplacement + "`r`n`r`n" + $text.Substring($smokeEnd)
+
 [IO.File]::WriteAllText($TargetPath, $text, [Text.UTF8Encoding]::new($false))
-
 $hash = (Get-FileHash -Algorithm SHA256 -Path $TargetPath).Hash.ToLowerInvariant()
 Write-Host "Corrected private build script SHA-256: $hash"
