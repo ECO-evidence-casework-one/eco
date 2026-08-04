@@ -1,7 +1,6 @@
 --- a/cmd/eco-v40/main_windows.go
 +++ b/cmd/eco-v40/main_windows.go
-@@ -131,7 +131,8 @@
- 	a.rebuildFonts()
+@@ -132,6 +132,7 @@
  	a.createControls()
  	a.config = v40.DiscoverRuntimeConfig(filepath.Dir(mustExecutable()))
  	a.worker = &v40.AIWorker{Config: a.config, Timeout: 90 * time.Second}
@@ -9,3 +8,36 @@
  	a.showStart()
  	a.layout()
  	showWindow(h, swShow)
+@@ -171,7 +172,7 @@
+ 		if a != nil {
+ 			a.dpi = uint32(hiWord(wParam))
+ 			a.rebuildFonts()
+-			r := (*rect)(unsafe.Pointer(lParam))
++			r := rectFromAddress(lParam)
+ 			moveWindow(hwnd, r.Left, r.Top, r.Right-r.Left, r.Bottom-r.Top)
+ 			a.layout()
+ 		}
+--- a/cmd/eco-v40/winapi_windows.go
++++ b/cmd/eco-v40/winapi_windows.go
+@@ -181,6 +181,7 @@
+ 	pSetProcessDpiAwarenessContext = user32.NewProc("SetProcessDpiAwarenessContext")
+ 	pGetKeyState                   = user32.NewProc("GetKeyState")
+ 	pGetModuleHandle               = kernel32.NewProc("GetModuleHandleW")
++	pRtlMoveMemory                 = kernel32.NewProc("RtlMoveMemory")
+ 	pCreateFont                    = gdi32.NewProc("CreateFontW")
+ 	pDeleteObject                  = gdi32.NewProc("DeleteObject")
+ 	pSHBrowseForFolder             = shell32.NewProc("SHBrowseForFolderW")
+@@ -239,6 +240,13 @@
+ 	v, _, _ := pGetClientRect.Call(uintptr(h), uintptr(unsafe.Pointer(&r)))
+ 	return r, v != 0
+ }
++func rectFromAddress(address uintptr) rect {
++	var r rect
++	if address != 0 {
++		pRtlMoveMemory.Call(uintptr(unsafe.Pointer(&r)), address, unsafe.Sizeof(r))
++	}
++	return r
++}
+ func setFocus(h HWND) { pSetFocus.Call(uintptr(h)) }
+ func enableWindow(h HWND, on bool) {
+ 	v := uintptr(0)
