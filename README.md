@@ -59,12 +59,13 @@ Official releases will appear only on this repository's **Releases** page and wi
 
 GitHub Actions artifacts are also a binary-distribution surface. They are not an alternative release channel. At `main` commit `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a`, ECO stopped uploading `ECO.exe` from the public workflow while retaining internal Windows compilation and testing. Four earlier unsigned Actions executable packages identified by issue #24 are not approved test candidates or releases and must not be used or redistributed.
 
-The current `main` Windows build script is not itself an approved release gate. A fail-fast native-command correction exists only in blocked draft PR #11 and has not yet been merged. Do not treat a green Windows job on `main` as independent proof that every native test command was enforced.
+Issue #27 is closed. Current `main` routes every covered native command in the Windows gate through the checked helper, runs a controlled non-zero native-command self-test and a six-stage failure matrix, and has passed independent merged-tree validation with zero Actions artifacts. This establishes CI truthfulness for those covered commands only; it does not approve the unsigned runner-built executable or open an evidence-use, signing or release gate.
 
 ## Documentation
 
 - [Current project status](CURRENT_STATUS.md)
 - [Current release gate](docs/control/CURRENT_RELEASE_GATE.md)
+- [Historical provenance records](docs/provenance/HISTORICAL_RECORDS.md)
 - [Known limitations](KNOWN_LIMITATIONS.md)
 - [Privacy and offline operation](PRIVACY.md)
 - [Security policy](SECURITY.md)
