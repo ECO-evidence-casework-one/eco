@@ -25,11 +25,8 @@ The reports supplement, but do not replace:
 
 - [`2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md`](2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md) — intended-purpose reset, provenance controls, release containment continuity and audit-reporting restoration. Read with the later correction below.
 - [`2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md`](2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md) — publisher/stewardship gate, contributor-role protection and future partner checklist. Read with the later correction below.
+- [`2026-08-04_PARTNER_PACK_PROGRESS_REPORT.md`](2026-08-04_PARTNER_PACK_PROGRESS_REPORT.md) — generic public-safe partner pack, corrected tested PR merge-tree evidence and continuing outreach blocks.
 - [`2026-08-04_INSPECTION_CONTROL_ROOM_PROGRESS_REPORT.md`](2026-08-04_INSPECTION_CONTROL_ROOM_PROGRESS_REPORT.md) — consolidated post-merge inspection, tested-checkout classification, reviewer-relationship correction, private-pack verification and PR #11 continuity.
-
-## Pending separate report
-
-- PR #54 proposes the generic partner-pack progress report. It remains draft and on hold until the consolidated audit correction is merged and its base is reconciled.
 
 ## Controlling correction
 
