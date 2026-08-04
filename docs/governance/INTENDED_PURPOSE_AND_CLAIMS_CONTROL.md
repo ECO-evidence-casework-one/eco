@@ -1,15 +1,15 @@
 # ECO intended purpose and public claims control
 
-**Control status:** proposed controlling governance record  
+**Authority:** controlling only when this record is present on canonical `main`; branch and pull-request copies are proposals  
 **Issue:** #16  
-**Application source baseline considered:** current canonical `main` when this record is reviewed  
+**Application conformance:** not established by this document  
 **Release effect:** none by itself
 
 ## 1. Authority and limits of this document
 
-This document defines the intended project boundary for official ECO development, documentation, demonstrations, promotion, supply and support.
+On canonical `main`, this document defines the intended project boundary for official ECO development, documentation, demonstrations, promotion, supply and support.
 
-It becomes controlling only if merged into the canonical branch through an independently reviewed pull request.
+A copy or change on any other branch or pull request is a proposal and has no controlling effect. A change becomes controlling only when merged into canonical `main` after independent review.
 
 Adoption of this governance record does **not** by itself:
 
