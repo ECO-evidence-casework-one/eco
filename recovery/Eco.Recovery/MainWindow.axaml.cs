@@ -63,6 +63,7 @@ public sealed partial class MainWindow : Window
         ApplyScale(scale);
         SetMode(fullWorkspace: false, persist: false);
         SetPage(page, persist: false);
+        Toast.IsVisible = false;
     }
 
     public void OpenStartForVisuals()
@@ -342,8 +343,9 @@ public sealed partial class MainWindow : Window
 
     private void ApplyResponsiveLayout()
     {
-        var compact = Bounds.Width < 1050 || _state.InterfaceScale >= 1.9;
-        AppRoot.ColumnDefinitions[0].Width = new GridLength(compact ? 196 : 248);
+        var highScale = _state.InterfaceScale >= 1.9;
+        var compact = Bounds.Width < 1050 && !highScale;
+        AppRoot.ColumnDefinitions[0].Width = new GridLength(highScale ? 280 : compact ? 196 : 248);
         BrandSubtitle.IsVisible = !compact;
     }
 
