@@ -1,0 +1,152 @@
+name: Export successful V40 handoff in verified transport parts
+
+on:
+  push:
+    branches:
+      - development/v40-integrated-synthetic-ai-candidate
+    paths:
+      - '.github/workflows/v40-export-split.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: v40-export-successful-handoff
+  cancel-in-progress: true
+
+jobs:
+  split:
+    name: Verify and split successful V40 artifact
+    runs-on: windows-latest
+    timeout-minutes: 40
+    env:
+      SOURCE_ARTIFACT_ID: '8903656795'
+      SOURCE_ARTIFACT_SIZE: '1213669197'
+      SOURCE_ARTIFACT_SHA256: '8907d528afcadebf09f6b3ff048ebdf7ea03976c2220d3eadde6ef36ce90b1db'
+    steps:
+      - name: Checkout transport workflow identity
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Download and verify successful handoff artifact
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path transport | Out-Null
+          $url = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/actions/artifacts/$env:SOURCE_ARTIFACT_ID/zip"
+          & curl.exe -L --fail --retry 5 --retry-all-errors `
+            -H "Authorization: Bearer $env:GITHUB_TOKEN" `
+            -H "Accept: application/vnd.github+json" `
+            -H "X-GitHub-Api-Version: 2022-11-28" `
+            --output transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip $url
+          if ($LASTEXITCODE -ne 0) { throw 'Successful V40 artifact download failed.' }
+          $file = Get-Item transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip
+          if ($file.Length -ne [int64]$env:SOURCE_ARTIFACT_SIZE) {
+            throw "Artifact size mismatch: expected $env:SOURCE_ARTIFACT_SIZE got $($file.Length)"
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
+          if ($hash -ne $env:SOURCE_ARTIFACT_SHA256) {
+            throw "Artifact SHA-256 mismatch: expected $env:SOURCE_ARTIFACT_SHA256 got $hash"
+          }
+
+      - name: Split artifact and create transport manifest
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $source = (Resolve-Path transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip).Path
+          $chunkSize = [int64](350 * 1024 * 1024)
+          $input = [IO.File]::OpenRead($source)
+          try {
+            $buffer = New-Object byte[] (8 * 1024 * 1024)
+            $index = 0
+            $parts = @()
+            while ($input.Position -lt $input.Length) {
+              $partName = 'ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip.part{0:d2}' -f $index
+              $partPath = Join-Path (Resolve-Path transport).Path $partName
+              $output = [IO.File]::Create($partPath)
+              try {
+                $remaining = [Math]::Min($chunkSize, $input.Length - $input.Position)
+                while ($remaining -gt 0) {
+                  $want = [int][Math]::Min($buffer.Length, $remaining)
+                  $read = $input.Read($buffer, 0, $want)
+                  if ($read -le 0) { throw 'Unexpected end of artifact while splitting.' }
+                  $output.Write($buffer, 0, $read)
+                  $remaining -= $read
+                }
+                $output.Flush($true)
+              } finally {
+                $output.Dispose()
+              }
+              $part = Get-Item $partPath
+              $parts += [ordered]@{
+                index = $index
+                file = $part.Name
+                size_bytes = $part.Length
+                sha256 = (Get-FileHash -Algorithm SHA256 $part.FullName).Hash.ToLowerInvariant()
+              }
+              $index++
+            }
+          } finally {
+            $input.Dispose()
+          }
+          if ($parts.Count -ne 4) { throw "Expected exactly four transport parts; got $($parts.Count)" }
+          $manifest = [ordered]@{
+            source_artifact_id = [int64]$env:SOURCE_ARTIFACT_ID
+            source_file = 'ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip'
+            source_size_bytes = [int64]$env:SOURCE_ARTIFACT_SIZE
+            source_sha256 = $env:SOURCE_ARTIFACT_SHA256
+            chunk_size_bytes = $chunkSize
+            parts = $parts
+          }
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content transport/TRANSPORT_MANIFEST.json -Encoding UTF8
+          Get-Content transport/TRANSPORT_MANIFEST.json
+
+      - name: Upload transport part 00
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_V40_TRANSPORT_PART_00
+          path: transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip.part00
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload transport part 01
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_V40_TRANSPORT_PART_01
+          path: transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip.part01
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload transport part 02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_V40_TRANSPORT_PART_02
+          path: transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip.part02
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload transport part 03
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_V40_TRANSPORT_PART_03
+          path: transport/ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF.zip.part03
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload transport manifest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_V40_TRANSPORT_MANIFEST
+          path: transport/TRANSPORT_MANIFEST.json
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error
