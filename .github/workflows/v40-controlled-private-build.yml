@@ -44,8 +44,15 @@ jobs:
         shell: pwsh
         run: |
           $b = New-Object System.Text.StringBuilder
-          0..3 | ForEach-Object {
-            $p = "build-input/v40/private-build.part{0:d2}" -f $_
+          $parts = @(
+            "build-input/v40/private-build.part00",
+            "build-input/v40/private-build.part01",
+            "build-input/v40/private-build.part020",
+            "build-input/v40/private-build.part021",
+            "build-input/v40/private-build.part022",
+            "build-input/v40/private-build.part03"
+          )
+          foreach ($p in $parts) {
             [void]$b.Append((Get-Content -Raw $p).Trim())
           }
           [IO.File]::WriteAllBytes(
