@@ -115,6 +115,10 @@ func platformWorkspaceObjectIdentity(path string) (workspaceObjectIdentity, erro
 	return workspaceObjectIdentity{Volume: uint64(info.VolumeSerialNumber), File: file}, nil
 }
 
-func platformWorkspaceCreationKey(leaf string) string {
-	return strings.ToLower(strings.TrimRight(leaf, " ."))
+func platformWorkspaceCreationKey(route string) string {
+	parts := strings.FieldsFunc(route, func(r rune) bool { return r == '/' || r == '\\' })
+	for i := range parts {
+		parts[i] = strings.ToLower(strings.TrimRight(parts[i], " ."))
+	}
+	return strings.Join(parts, "\\")
 }
