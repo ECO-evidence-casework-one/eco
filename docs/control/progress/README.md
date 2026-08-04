@@ -14,13 +14,23 @@ The reports supplement, but do not replace:
 
 ## Rules
 
-- Reports follow [`../PROGRESS_REPORTING_AND_AUDIT_STANDARD.md`](../PROGRESS_REPORTING_AND_AUDIT_STANDARD.md).
+- Reports follow [`../PROGRESS_REPORTING_AND_AUDIT_STANDARD.md`](../PROGRESS_REPORTING_AND_AUDIT_STANDARD.md) together with [`../PROGRESS_REPORTING_AND_AUDIT_STANDARD_SUPPLEMENT_2026-08-04.md`](../PROGRESS_REPORTING_AND_AUDIT_STANDARD_SUPPLEMENT_2026-08-04.md).
 - Use a calendar date and descriptive lane in the filename.
 - Reports are historical records after merge.
 - Material corrections must be explicit and traceable; do not silently remove adverse findings.
 - Never include real evidence, private diagnostics, credentials or identifying case information.
+- A private downloadable pack may be represented publicly by its non-sensitive identity, size, hash and verification result.
 
 ## Reports
 
-- [`2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md`](2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md) — intended-purpose reset, provenance controls, release containment continuity and audit-reporting restoration.
-- [`2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md`](2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md) — clean publisher/stewardship gate, contributor-role protection, future partner checklist and retirement of stale PR #19.
+- [`2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md`](2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md) — intended-purpose reset, provenance controls, release containment continuity and audit-reporting restoration. Read with the later correction below.
+- [`2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md`](2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md) — publisher/stewardship gate, contributor-role protection and future partner checklist. Read with the later correction below.
+- [`2026-08-04_INSPECTION_CONTROL_ROOM_PROGRESS_REPORT.md`](2026-08-04_INSPECTION_CONTROL_ROOM_PROGRESS_REPORT.md) — consolidated post-merge inspection, tested-checkout classification, reviewer-relationship correction, private-pack verification and PR #11 continuity.
+
+## Pending separate report
+
+- PR #54 proposes the generic partner-pack progress report. It remains draft and on hold until the consolidated audit correction is merged and its base is reconciled.
+
+## Controlling correction
+
+- [`../AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md`](../AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md) — workflow identity, reviewer terminology and private-pack delivery correction for PRs #45, #47, #48, #49 and #51.

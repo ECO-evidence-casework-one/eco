@@ -15,11 +15,21 @@ One person may initially hold more than one technical role during source develop
 
 Technical repository roles do not appoint a legal publisher, supplier, director, trustee, controller, support operator, complaints handler or liability owner.
 
+## Review relationship and posting identity
+
+A governance record becomes controlling only when merged into canonical `main` after a documented review whose scope, evidence and reviewer relationship are stated truthfully.
+
+A shared GitHub username, service account or technical posting account does not by itself prove or defeat independence. The record must identify the actual reviewing lane, person or agent and whether that reviewer participated in preparing the work or evidence assessed.
+
+Use `self-review` or `control review` where the same or closely connected workstream prepared and reviewed the change. Use `inspection-lane review` where a dedicated inspection workstream that did not create the proposal examines the underlying evidence. Use `organisationally independent review` only for a meaningfully separate person or organisation.
+
+The 4 August 2026 correction for PR workflow identities and review terminology is recorded in [`docs/control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md`](docs/control/AUDIT_EVIDENCE_CLASSIFICATION_CORRECTION_2026-08-04.md).
+
 ## Controlling product boundary
 
 The official ECO intended purpose, excluded uses and public-claims boundary is defined in [`docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md`](docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md).
 
-That record becomes controlling only when merged into the canonical branch after documented review meeting the applicable review and independence requirements. Governance adoption must remain separate from:
+Governance adoption remains separate from:
 
 - proof that the application implements the boundary;
 - legal or regulatory classification;
