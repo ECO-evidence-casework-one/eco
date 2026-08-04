@@ -49,7 +49,7 @@ func TestLateChunksAreSuppressed(t *testing.T) {
 			t.Fatalf("late content entered verifier: %q", in.Generated)
 		}
 		<-lateDone
-		return VerifiedOutput{Accepted: true, Text: "ok", VerificationID: "verify-late"}, nil
+		return VerifiedOutput{Accepted: true, Text: []byte("ok"), VerificationID: "verify-late"}, nil
 	})
 	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-7", Text: "q"})
 	if r.Outcome != OutcomeAccepted || r.Text != "ok" {
@@ -72,7 +72,7 @@ func TestConcurrentTurnsRemainIsolated(t *testing.T) {
 	})
 	d.Supervisor = supervisorFunc(func(_ context.Context, r Route) (Lease, error) { return &testLease{id: "lease-" + r.RouteID}, nil })
 	d.Verifier = verifierFunc(func(_ context.Context, in VerificationInput) (VerifiedOutput, error) {
-		return VerifiedOutput{Accepted: true, Text: string(in.Generated), VerificationID: "verify-" + in.TurnID}, nil
+		return VerifiedOutput{Accepted: true, Text: append([]byte(nil), in.Generated...), VerificationID: "verify-" + in.TurnID}, nil
 	})
 	o := newTestOrchestrator(t, d)
 	ids := []string{"turn-A", "turn-B", "turn-C", "turn-D"}
@@ -156,10 +156,10 @@ func (l *orderedLease) Release(ctx context.Context, r ReasonCode) error {
 func TestAllOwnedBuffersAreErased(t *testing.T) {
 	d, _ := baseDeps(t)
 	var retained *Transient
-	var before [4]int
+	var before [5]int
 	d.Eraser = eraserFunc(func(_ context.Context, x *Transient) error {
 		retained = x
-		before = [4]int{len(x.Prompt), len(x.RuntimePrompt), len(x.Generated), len(x.VerificationCopy)}
+		before = [5]int{len(x.Prompt), len(x.RuntimePrompt), len(x.Generated), len(x.VerificationCopy), len(x.Verified)}
 		x.Zero()
 		return nil
 	})
@@ -172,7 +172,7 @@ func TestAllOwnedBuffersAreErased(t *testing.T) {
 			t.Fatalf("buffer %d was not populated before erasure: %v", i, before)
 		}
 	}
-	if retained == nil || retained.Prompt != nil || retained.RuntimePrompt != nil || retained.Generated != nil || retained.VerificationCopy != nil {
+	if retained == nil || retained.Prompt != nil || retained.RuntimePrompt != nil || retained.Generated != nil || retained.VerificationCopy != nil || retained.Verified != nil {
 		t.Fatalf("buffers retained: %+v", retained)
 	}
 }
@@ -192,5 +192,21 @@ func TestReceiptDigestRecomputesAndContainsNoContentFingerprints(t *testing.T) {
 	}
 	if r.Receipt.RequestBytes != len("unique secret phrase") || r.Receipt.PromptBytes == 0 {
 		t.Fatalf("bounded size metadata missing: %+v", r.Receipt)
+	}
+}
+
+func TestRepeatedTurnInputsReceiveDistinctRunIDs(t *testing.T) {
+	d, _ := baseDeps(t)
+	o := newTestOrchestrator(t, d)
+	seen := make(map[string]struct{})
+	for i := 0; i < 128; i++ {
+		r := o.Run(context.Background(), Request{TurnID: "turn-repeat", Text: "same"})
+		if r.Outcome != OutcomeAccepted {
+			t.Fatalf("iteration %d: %+v", i, r)
+		}
+		if _, duplicate := seen[r.Receipt.RunID]; duplicate {
+			t.Fatalf("duplicate run ID %q", r.Receipt.RunID)
+		}
+		seen[r.Receipt.RunID] = struct{}{}
 	}
 }
