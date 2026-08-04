@@ -368,3 +368,78 @@ func TestFallbackBufferIsZeroedAfterCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestCancellationDuringFallbackSuppressesAndZerosOutput(t *testing.T) {
+	d, _ := baseDeps(t)
+	d.Compiler = compilerFunc(func(context.Context, Request) (CompiledContext, error) {
+		return CompiledContext{}, errors.New("compile failed")
+	})
+	ctx, cancel := context.WithCancel(context.Background())
+	buf := []byte("must-not-return")
+	d.Fallback = fallbackFunc(func(context.Context, Request, Stage, ReasonCode) (FallbackOutput, error) {
+		cancel()
+		return FallbackOutput{Text: buf, FallbackID: "fallback-cancel", Deterministic: true}, nil
+	})
+	r := newTestOrchestrator(t, d).Run(ctx, Request{TurnID: "turn-fallback-cancel", Text: "q"})
+	if r.Outcome != OutcomeCancelled || r.Text != "" || r.Receipt.Reason != ReasonCancelled {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range buf {
+		if b != 0 {
+			t.Fatalf("fallback byte %d not zeroed", i)
+		}
+	}
+}
+
+func TestFallbackErrorBufferIsZeroed(t *testing.T) {
+	d, _ := baseDeps(t)
+	d.Compiler = compilerFunc(func(context.Context, Request) (CompiledContext, error) {
+		return CompiledContext{}, errors.New("compile failed")
+	})
+	buf := []byte("error-buffer-secret")
+	d.Fallback = fallbackFunc(func(context.Context, Request, Stage, ReasonCode) (FallbackOutput, error) {
+		return FallbackOutput{Text: buf, FallbackID: "fallback-error", Deterministic: true}, errors.New("fallback failed")
+	})
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-fallback-error", Text: "q"})
+	if r.Outcome != OutcomeFailed || r.Text != "" || r.Receipt.Reason != ReasonFallbackFailed {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range buf {
+		if b != 0 {
+			t.Fatalf("fallback error byte %d not zeroed", i)
+		}
+	}
+}
+
+func TestCancellationDuringVerificationSuppressesAcceptedOutput(t *testing.T) {
+	d, _ := baseDeps(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	buf := []byte("verified-but-cancelled")
+	d.Verifier = verifierFunc(func(context.Context, VerificationInput) (VerifiedOutput, error) {
+		cancel()
+		return VerifiedOutput{Accepted: true, Text: buf, VerificationID: "verify-cancel"}, nil
+	})
+	r := newTestOrchestrator(t, d).Run(ctx, Request{TurnID: "turn-verify-cancel", Text: "q"})
+	if r.Outcome != OutcomeCancelled || r.Text != "" || r.Receipt.Reason != ReasonCancelled {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range buf {
+		if b != 0 {
+			t.Fatalf("verifier byte %d not erased", i)
+		}
+	}
+}
+
+func TestCancellationDuringErasureSuppressesAcceptedOutput(t *testing.T) {
+	d, _ := baseDeps(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	d.Eraser = eraserFunc(func(_ context.Context, x *Transient) error {
+		x.Zero()
+		cancel()
+		return nil
+	})
+	r := newTestOrchestrator(t, d).Run(ctx, Request{TurnID: "turn-erase-cancel", Text: "q"})
+	if r.Outcome != OutcomeCancelled || r.Text != "" || r.Receipt.Reason != ReasonCancelled {
+		t.Fatalf("unexpected: %+v", r)
+	}
+}
