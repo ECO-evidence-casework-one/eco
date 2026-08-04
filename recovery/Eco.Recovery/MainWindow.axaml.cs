@@ -15,6 +15,7 @@ public sealed partial class MainWindow : Window
     private readonly Dictionary<string, Control> _pages;
     private readonly Dictionary<string, Button> _navigation;
     private bool _fullWorkspace;
+    private bool _isInitialized;
 
     public MainWindow()
     {
@@ -51,6 +52,7 @@ public sealed partial class MainWindow : Window
         {
             _state.ConversationDraft = text ?? string.Empty;
         });
+        _isInitialized = true;
     }
 
     public void LoadSyntheticMatterForVisuals(string page = "CurrentPosition", double scale = 1.0)
@@ -295,6 +297,11 @@ public sealed partial class MainWindow : Window
 
     private void OnScaleChanged(object? sender, SelectionChangedEventArgs e)
     {
+        if (!_isInitialized)
+        {
+            return;
+        }
+
         if (ScaleSelector.SelectedItem is ComboBoxItem { Tag: string raw } &&
             double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var scale))
         {
