@@ -19,10 +19,16 @@ const workspaceCreationLockPrefix = ".eco-create-v2-"
 type workspaceCreationLease struct {
 	parent   string
 	root     string
+	missing  []string
 	identity workspaceObjectIdentity
 	lock     platformWorkspaceLock
 	once     sync.Once
 	closeErr error
+}
+
+type createdWorkspaceDirectory struct {
+	path     string
+	identity workspaceObjectIdentity
 }
 
 func acquireOrCreateWorkspaceRootOwner(root string) (*workspaceOwnerLease, error) {
@@ -47,20 +53,17 @@ func acquireOrCreateWorkspaceRootOwner(root string) (*workspaceOwnerLease, error
 		return nil, err
 	}
 	defer creation.Close()
-	if err := creation.revalidate(); err != nil {
+	created, err := creation.createMissingHierarchy()
+	if err != nil {
+		cleanupCreatedWorkspaceDirectories(created)
 		return nil, err
 	}
-	if info, statErr := os.Stat(absolute); statErr == nil {
-		if !info.IsDir() {
-			return nil, errors.New("workspace root is not a directory")
+	committed := false
+	defer func() {
+		if !committed {
+			cleanupCreatedWorkspaceDirectories(created)
 		}
-	} else if os.IsNotExist(statErr) {
-		if err := os.Mkdir(absolute, 0700); err != nil {
-			return nil, fmt.Errorf("create workspace root: %w", err)
-		}
-	} else {
-		return nil, fmt.Errorf("inspect workspace root after creation claim: %w", statErr)
-	}
+	}()
 	owner, err := acquireWorkspaceRootOwner(absolute)
 	if err != nil {
 		return nil, err
@@ -69,27 +72,28 @@ func acquireOrCreateWorkspaceRootOwner(root string) (*workspaceOwnerLease, error
 		_ = owner.Close()
 		return nil, err
 	}
+	committed = true
 	return owner, nil
 }
 
 func acquireWorkspaceCreationOwner(root string) (*workspaceCreationLease, error) {
-	parent := filepath.Dir(root)
-	leaf := filepath.Base(root)
-	if leaf == "." || leaf == string(filepath.Separator) || leaf == "" {
-		return nil, errors.New("workspace root name is invalid")
-	}
-	info, err := os.Stat(parent)
+	absolute, err := filepath.Abs(root)
 	if err != nil {
-		return nil, fmt.Errorf("inspect workspace parent: %w", err)
+		return nil, fmt.Errorf("resolve workspace root: %w", err)
 	}
-	if !info.IsDir() {
-		return nil, errors.New("workspace parent is not a directory")
+	parent, missing, err := workspaceCreationAnchor(absolute)
+	if err != nil {
+		return nil, err
+	}
+	if len(missing) == 0 {
+		return nil, errors.New("workspace root already exists")
 	}
 	identity, err := platformWorkspaceObjectIdentity(parent)
 	if err != nil {
-		return nil, fmt.Errorf("identify workspace parent: %w", err)
+		return nil, fmt.Errorf("identify workspace creation anchor: %w", err)
 	}
-	sum := sha256.Sum256([]byte(platformWorkspaceCreationKey(leaf)))
+	relative := filepath.Join(missing...)
+	sum := sha256.Sum256([]byte(platformWorkspaceCreationKey(relative)))
 	lockName := workspaceCreationLockPrefix + hex.EncodeToString(sum[:16]) + ".lock"
 	lock, err := platformAcquireWorkspaceLock(filepath.Join(parent, lockName))
 	if err != nil {
@@ -99,11 +103,93 @@ func acquireWorkspaceCreationOwner(root string) (*workspaceCreationLease, error)
 	if err != nil || !identity.equal(after) {
 		_ = lock.Close()
 		if err != nil {
-			return nil, fmt.Errorf("revalidate workspace parent: %w", err)
+			return nil, fmt.Errorf("revalidate workspace creation anchor: %w", err)
 		}
-		return nil, errors.New("workspace parent changed while creation ownership was acquired")
+		return nil, errors.New("workspace creation anchor changed while ownership was acquired")
 	}
-	return &workspaceCreationLease{parent: parent, root: root, identity: identity, lock: lock}, nil
+	return &workspaceCreationLease{parent: parent, root: absolute, missing: missing, identity: identity, lock: lock}, nil
+}
+
+func workspaceCreationAnchor(root string) (string, []string, error) {
+	current := root
+	missingReverse := make([]string, 0, 4)
+	for {
+		info, err := os.Stat(current)
+		if err == nil {
+			if !info.IsDir() {
+				return "", nil, errors.New("workspace creation anchor is not a directory")
+			}
+			missing := make([]string, len(missingReverse))
+			for i := range missingReverse {
+				missing[len(missingReverse)-1-i] = missingReverse[i]
+			}
+			return current, missing, nil
+		}
+		if !os.IsNotExist(err) {
+			return "", nil, fmt.Errorf("inspect workspace creation route: %w", err)
+		}
+		parent := filepath.Dir(current)
+		leaf := filepath.Base(current)
+		if parent == current || leaf == "." || leaf == string(filepath.Separator) || leaf == "" {
+			return "", nil, errors.New("workspace creation route has no existing parent")
+		}
+		missingReverse = append(missingReverse, leaf)
+		current = parent
+	}
+}
+
+func (l *workspaceCreationLease) createMissingHierarchy() ([]createdWorkspaceDirectory, error) {
+	if err := l.revalidate(); err != nil {
+		return nil, err
+	}
+	created := make([]createdWorkspaceDirectory, 0, len(l.missing))
+	current := l.parent
+	for _, leaf := range l.missing {
+		if leaf == "" || leaf == "." || leaf == ".." {
+			return created, errors.New("workspace creation route contains an invalid component")
+		}
+		if err := l.revalidate(); err != nil {
+			return created, err
+		}
+		current = filepath.Join(current, leaf)
+		info, err := os.Lstat(current)
+		if err == nil {
+			if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+				return created, errors.New("workspace creation route contains a non-directory or symbolic link")
+			}
+			continue
+		}
+		if !os.IsNotExist(err) {
+			return created, fmt.Errorf("inspect workspace creation component: %w", err)
+		}
+		if err := os.Mkdir(current, 0700); err != nil {
+			return created, fmt.Errorf("create workspace directory: %w", err)
+		}
+		identity, err := platformWorkspaceObjectIdentity(current)
+		if err != nil {
+			return created, fmt.Errorf("identify created workspace directory: %w", err)
+		}
+		created = append(created, createdWorkspaceDirectory{path: current, identity: identity})
+	}
+	if err := l.revalidate(); err != nil {
+		return created, err
+	}
+	return created, nil
+}
+
+func cleanupCreatedWorkspaceDirectories(created []createdWorkspaceDirectory) {
+	for i := len(created) - 1; i >= 0; i-- {
+		entry := created[i]
+		info, err := os.Lstat(entry.path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			continue
+		}
+		identity, err := platformWorkspaceObjectIdentity(entry.path)
+		if err != nil || !entry.identity.equal(identity) {
+			continue
+		}
+		_ = os.Remove(entry.path)
+	}
 }
 
 func (l *workspaceCreationLease) Close() error {
@@ -113,6 +199,7 @@ func (l *workspaceCreationLease) Close() error {
 	l.once.Do(func() {
 		if l.lock != nil {
 			l.closeErr = l.lock.Close()
+			l.lock = nil
 		}
 	})
 	return l.closeErr
@@ -124,10 +211,10 @@ func (l *workspaceCreationLease) revalidate() error {
 	}
 	current, err := platformWorkspaceObjectIdentity(l.parent)
 	if err != nil {
-		return fmt.Errorf("revalidate workspace parent: %w", err)
+		return fmt.Errorf("revalidate workspace creation anchor: %w", err)
 	}
 	if !l.identity.equal(current) {
-		return errors.New("workspace parent identity changed")
+		return errors.New("workspace creation anchor identity changed")
 	}
 	return nil
 }
@@ -223,8 +310,6 @@ func (l *workspaceOwnerLease) revalidateLocked() error {
 	return nil
 }
 
-// retarget moves the routing path of a still-held lease after the exact owned
-// directory object has been renamed. It never changes the locked object.
 func (l *workspaceOwnerLease) retarget(root string) error {
 	if l == nil {
 		return errors.New("workspace ownership is not held")
