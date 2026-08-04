@@ -7,13 +7,19 @@ on:
     paths:
       - '.github/workflows/v40-controlled-private-build.yml'
       - 'build-input/v40/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/v40-controlled-private-build.yml'
+      - 'build-input/v40/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: v40-controlled-private-windows-build
+  group: v40-controlled-private-windows-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -22,7 +28,7 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 150
     steps:
-      - name: Checkout exact branch head
+      - name: Checkout exact tested ref
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
