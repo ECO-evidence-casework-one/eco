@@ -19,7 +19,7 @@ jobs:
   windows-build:
     name: Compile and inspect recovery workspace
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout exact tested ref
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
@@ -72,6 +72,41 @@ jobs:
           Write-Host "INTERNAL_RECOVERY_SHELL_SIZE=$($files[0].Length)"
           Write-Host "INTERNAL_RECOVERY_SHELL_SHA256=$hash"
 
+      - name: Build visual evidence renderer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore recovery/Eco.Recovery.Visuals/Eco.Recovery.Visuals.csproj --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'Visual evidence restore failed.' }
+          dotnet build recovery/Eco.Recovery.Visuals/Eco.Recovery.Visuals.csproj -c Release --no-restore --nologo -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Visual evidence build failed.' }
+
+      - name: Render and validate visual evidence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet run --project recovery/Eco.Recovery.Visuals/Eco.Recovery.Visuals.csproj `
+            -c Release --no-build -- private-recovery-visuals
+          if ($LASTEXITCODE -ne 0) { throw 'Visual evidence rendering failed.' }
+          $pngs = Get-ChildItem private-recovery-visuals -File -Filter '*.png' | Sort-Object Name
+          $pngs | Format-Table Name,Length
+          if ($pngs.Count -ne 7) { throw "Expected 7 rendered screens; found $($pngs.Count)." }
+          foreach ($png in $pngs) {
+            if ($png.Length -lt 10000) { throw "Rendered screen is unexpectedly small: $($png.Name)" }
+          }
+          Get-Content private-recovery-visuals/VISUAL_INVENTORY.tsv
+
+      - name: Upload non-runnable visual evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_RECOVERY_VISUAL_EVIDENCE
+          path: |
+            private-recovery-visuals/*.png
+            private-recovery-visuals/VISUAL_INVENTORY.tsv
+          if-no-files-found: error
+          retention-days: 1
+          compression-level: 9
+
       - name: Delete runner-only executable
         if: always()
         shell: pwsh
@@ -79,4 +114,4 @@ jobs:
           if (Test-Path private-recovery-publish) {
             Remove-Item private-recovery-publish -Recurse -Force
           }
-          Write-Host 'Runner-only recovery executable removed. No runnable artifact was uploaded.'
+          Write-Host 'Runner-only recovery executable removed. Only non-runnable visual evidence may be uploaded.'
