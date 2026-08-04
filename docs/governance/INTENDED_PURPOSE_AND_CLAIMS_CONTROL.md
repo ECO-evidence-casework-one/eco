@@ -107,7 +107,7 @@ Where a statement is derived from supplied evidence, ECO should retain a usable 
 
 ## 8. Medical and clinical boundary
 
-ECO is not intended to be a medical device, clinical decision-support system or healthcare professional.
+ECO is not intended to be a medical device, clinical decision-support system or healthcare professional. This project statement does not decide the legal classification of a final product; classification must be assessed from the actual features, outputs, claims, users and deployment.
 
 ECO must not be presented, configured or relied upon to:
 
@@ -122,7 +122,7 @@ ECO may identify and summarise what a supplied medical letter or record states, 
 
 ## 9. Legal-services boundary
 
-ECO is not intended to be a solicitor, barrister, authorised legal representative or authoritative current-law service.
+ECO is not intended to be a solicitor, barrister, authorised legal representative or authoritative current-law service. This project statement does not decide whether a future feature or activity is regulated; the actual conduct, authority, feature and deployment must be assessed.
 
 ECO must not be presented, configured or relied upon to:
 
@@ -222,7 +222,24 @@ A qualified statement such as `designed to`, `intended to` or `source-level rule
 
 Synthetic test results must state the test material, sample size, method, limitations and why the result must not be generalised to real-world accuracy.
 
-## 16. Cross-surface consistency
+## 16. Official project identity, open-source rights and forks
+
+This control governs official ECO project decisions, official releases, project-endorsed supply, promotion and support.
+
+It does not remove or narrow lawful rights under ECO's open-source licence to copy, modify or convey the code.
+
+Open-source redistribution rights do not automatically grant authority to:
+
+- describe an independent build as an official ECO release;
+- imply endorsement, support, signing or approval by the ECO project;
+- use project names, marks or release channels in a misleading way;
+- represent that an independent deployment passed ECO's governance or release gates.
+
+An independent fork or redistribution should identify itself truthfully, preserve applicable licence obligations and avoid false endorsement. The official project should identify approved releases through its authoritative release channel, exact hashes and signature information.
+
+This document controls what the ECO project will approve, endorse, supply, promote or support. It is not a universal command to independent third parties, and it does not determine duties that applicable law may attach to their actual conduct.
+
+## 17. Cross-surface consistency
 
 The same boundary must be reflected in:
 
@@ -237,7 +254,7 @@ The same boundary must be reflected in:
 
 Where wording conflicts, the more restrictive current release gate applies until the conflict is corrected and independently reviewed.
 
-## 17. Change triggers
+## 18. Change triggers
 
 A fresh legal, regulatory, safety and claims review is required before the project approves or promotes a change that would:
 
@@ -252,7 +269,7 @@ A fresh legal, regulatory, safety and claims review is required before the proje
 
 The review must consider the actual feature, intended users, outputs, marketing, deployment, legal roles and data flows. A feature name or disclaimer cannot substitute for the assessment.
 
-## 18. Implementation and release dependencies
+## 19. Implementation and release dependencies
 
 This document does not close the linked implementation and organisational gates.
 
@@ -266,7 +283,7 @@ At minimum:
 - issue #17 requires an accountable organisation to accept publisher and continuity duties before official public or institutional release;
 - the exact final product requires fresh jurisdiction, feature and deployment assessment before institutional, healthcare, justice-sector or EU availability.
 
-## 19. Acceptance criteria for this governance control
+## 20. Acceptance criteria for this governance control
 
 Before issue #16 can close:
 
