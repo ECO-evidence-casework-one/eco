@@ -32,3 +32,27 @@ func TestWorkspaceOwnerAliasSharesLockDomain(t *testing.T) {
 		t.Fatalf("alias acquisition error=%v", err)
 	}
 }
+
+func TestWorkspaceCreationParentAliasSharesClaimDomain(t *testing.T) {
+	base := t.TempDir()
+	parent := filepath.Join(base, "parent")
+	if err := os.Mkdir(parent, 0700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(base, "parent-alias")
+	if err := os.Symlink(parent, alias); err != nil {
+		t.Fatal(err)
+	}
+	first, err := acquireWorkspaceCreationOwner(filepath.Join(parent, "workspace"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := acquireWorkspaceCreationOwner(filepath.Join(alias, "workspace"))
+	if second != nil {
+		_ = second.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		t.Fatalf("aliased parent acquisition error=%v", err)
+	}
+}
