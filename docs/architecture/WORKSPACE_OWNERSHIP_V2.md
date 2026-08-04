@@ -1,239 +1,155 @@
 # Workspace ownership V2
 
-**Status:** implementation architecture for issue #53 Phase B and issue #4.  
-**Branch:** `development/issue-53-workspace-integrity-repair`  
-**Date:** 4 August 2026
+**Status:** active bounded P0 repair on current `main`; Slice 1 root-owner and root-creation primitives implemented, but not yet integrated into `OpenVault` or release-approved.
 
-## Problem statement
+## Purpose
 
-The current application protects a Vault only with process-local mutexes. The stale PR #11 implementation added cross-process primitives but released ordinary open ownership before returning the writable Vault and keyed its process registry by pathname. Those behaviours allow stale writers and alias-split ownership.
+Workspace Ownership V2 replaces pathname-scoped lifecycle locking with one owner-scoped transaction over the underlying filesystem objects.
 
-Workspace Ownership V2 must treat writable access as one retained transaction over underlying filesystem objects, not as a short-lived pathname check.
+The complete design must prevent:
 
-## Security property
+- stale writable snapshots replacing newer workspace metadata;
+- aliases, junctions, renamed parents or bind mounts creating separate writable ownership domains;
+- managed children being created before a parent/root ownership transaction exists;
+- cleanup mutating a substituted filesystem object;
+- fixed temporary names allowing one transaction to interfere with another;
+- restore or migration leaving ownership attached to the wrong pre- or post-activation root.
 
-For one underlying workspace object, at most one writable ECO ownership domain may exist at a time across all processes and all path aliases.
+## Slice 1 implemented boundary
 
-A process that does not hold the retained owner lease must not:
+Slice 1 now provides platform ownership primitives behind narrow internal functions:
 
-- create managed workspace children;
-- replace workspace metadata;
-- replace candidate-state selection;
-- migrate, restore or reset the workspace;
-- clean interrupted transaction objects;
-- index or expose a mutation as completed.
+- `acquireWorkspaceRootOwner`;
+- `acquireWorkspaceCreationOwner`;
+- `acquireOrCreateWorkspaceRootOwner`;
+- `workspaceOwnerLease.revalidate`;
+- `workspaceCreationLease.revalidate`.
 
-A stale process must fail before replacing a newer persisted revision.
+These primitives are not yet called by `OpenVault`. They are qualified independently before the root-replacing restore transaction is changed.
 
-## Ownership scopes
+### Root owner lease
 
-### Parent creation claim
+For an existing workspace root:
 
-Creating a workspace begins by retaining and identifying the selected parent directory before any ECO-managed child exists.
+1. convert the supplied route to an absolute path;
+2. stat the root and require a directory;
+3. capture the underlying filesystem object identity;
+4. open/create the owner lock file inside that root;
+5. acquire a non-blocking exclusive OS lock;
+6. recapture and compare the root object identity;
+7. retain the lock and object identity until explicit close.
 
-The claim binds:
+The path string is retained only so the object can be revalidated. It is not treated as the ownership identity.
 
-- retained parent handle/descriptor;
-- exact parent object identity;
-- intended child name;
-- a transaction nonce;
-- a parent-local exclusive claim object created without following links.
+### Missing-root creation claim
 
-The new workspace directory and all managed children are created relative to that retained parent. Cleanup may remove only objects created by the same nonce and exact identities.
+For a root that does not yet exist:
 
-### Workspace owner lease
+1. identify and retain the existing parent object;
+2. derive a bounded creation-lock name from the platform-normalised leaf name;
+3. acquire a non-blocking exclusive lock in the parent;
+4. revalidate the parent object;
+5. create only the named root directory;
+6. acquire and retain the new root's owner lease;
+7. revalidate the parent again;
+8. release the creation claim only after the root lease is secured.
 
-Opening an existing workspace retains:
+This closes the previously unowned interval before a new workspace root exists at the primitive level.
 
-- parent directory;
-- workspace root directory;
-- encrypted object directory;
-- key and metadata control files;
-- an exclusive OS ownership primitive;
-- exact object identities for every retained role.
+## Platform identity and locking
 
-The lease remains attached to the writable `Vault` until `Vault.Close` completes.
+### Linux
 
-It is not released after inspection, authentication, first save or UI startup.
+- root/parent identity: device and inode;
+- owner exclusion: non-blocking exclusive `flock`;
+- creation leaf identity: case-sensitive leaf bytes;
+- symlink aliases resolve to the same target object and lock file.
 
-### Candidate-state owner lease
+### Windows
 
-Candidate-specific application state uses the same principles:
+- root/parent identity: volume serial number and file index from `GetFileInformationByHandle`;
+- owner exclusion: non-blocking exclusive `LockFileEx`;
+- lock handle allows read, write and delete sharing so a later controlled restore transaction can rename owned objects without silently dropping ownership;
+- creation leaf identity is lower-cased with trailing spaces and dots removed, preventing common Win32 path aliases from deriving separate creation claims.
 
-- retain the state parent;
-- acquire a creation/open lease before reading missing state as authoritative;
-- bind replacement to exact current object identity and revision;
-- write through a unique transaction-owned temporary file;
-- fsync the replacement and parent where supported;
-- reject stale revisions.
+### Other platforms
 
-## Object identity
+Ownership acquisition fails closed until equivalent primitives and tests exist.
 
-Logical path strings are display and routing information only. They are not ownership identity.
+## Complete target transaction
 
-### Linux/amd64
+The final writable Vault lifecycle remains:
 
-Identity must include enough kernel-provided information to detect substitution and aliases, including:
+1. acquire or create root under an owned parent transaction;
+2. retain the root owner for the complete writable Vault lifetime;
+3. open or create managed children only after ownership exists;
+4. load authenticated metadata and its persisted revision;
+5. before each mutation, revalidate root identity and expected persisted revision;
+6. write to a unique transaction-owned temporary object;
+7. durably commit and advance revision;
+8. roll back all in-memory mutation if persistence fails;
+9. during restore/migration, own active, staged and checkpoint objects and transfer ownership atomically;
+10. release ownership only through explicit `Vault.Close` or a proven rollback path.
 
-- device;
-- inode;
-- mount identity where available;
-- object type.
+## Restore ownership requirement
 
-Operations must be descriptor-relative with no-follow flags. Recursive cleanup must recurse through retained child descriptors or verify that a reopened child matches the exact previously inspected identity before mutation.
+Portable restore currently renames the active root to a checkpoint, renames a staged root into the active route and calls ordinary `OpenVault` again. Once root ownership is connected, that flow cannot remain unchanged.
 
-### Windows/amd64
+The replacement must:
 
-Identity must use retained handles opened without unsafe reparse traversal and stable file identity information, including volume and file ID.
+- keep the old active-root lease through the rollback window;
+- keep the staged-root lease through validation and activation;
+- permit the controlled renames without closing either lease;
+- retarget and revalidate the staged lease at the active route after activation;
+- avoid opening the activated root through a second ordinary acquisition;
+- transfer the staged owner, key and loaded workspace into the existing Vault;
+- release the old lease only after activation is proven;
+- on failure, restore and retarget the old lease and keep the unrelated replacement object untouched.
 
-The exclusive owner primitive must be shared across path aliases by deriving or storing it relative to a retained object/parent identity rather than the user-supplied logical path.
+## Revision/CAS requirement
 
-Junctions, symbolic links and substituted parents must fail closed unless the retained target identity is exactly the authorised workspace object.
+Root ownership is the primary writer exclusion. Persisted revision is mandatory defence in depth.
 
-### Unsupported platforms
+The encrypted workspace metadata must carry a monotonic revision. A Vault stores the exact revision it loaded. Every save must:
 
-Writable workspace ownership fails closed until equivalent object-bound primitives and tests exist.
+1. authenticate and read the currently persisted revision under ownership;
+2. require it to equal the Vault's expected revision;
+3. reject stale state before replacing any file;
+4. write the next revision to a unique temporary file;
+5. atomically replace the metadata;
+6. update the in-memory expected revision only after durable success.
 
-## Persisted revision and CAS
+A revision conflict is a controlled failure and never a last-writer-wins event.
 
-Cross-process exclusion is the primary control. Persisted compare-and-swap is defence in depth and protects against stale in-memory state, lost locks and implementation errors.
+## Temporary-file requirement
 
-Workspace metadata includes a monotonically increasing `revision`.
+The fixed `workspace.ecodb.tmp` path must be replaced by a unique transaction-owned name created exclusively in the retained root. Cleanup may remove only a file whose identity and transaction nonce it owns.
 
-Every mutating transaction records:
+## Rollback requirement
 
+Every public mutator must preserve the full pre-mutation state needed to undo its change. Persistence failure must restore:
+
+- domain records;
+- selection and settings;
+- audit entries;
+- timestamps and build identity;
 - expected revision;
-- next revision;
-- current metadata object identity;
-- replacement transaction nonce.
+- referenced object ownership state where applicable.
 
-Before replacement, the implementation verifies that:
+A method must not report success when its audit persistence failed.
 
-- the owner lease is still valid;
-- the root and control-file identities remain valid;
-- the persisted revision equals the expected revision;
-- no newer replacement has appeared.
+## Cleanup requirement
 
-A revision mismatch returns a typed stale-workspace error. The in-memory mutation is rolled back to the complete pre-operation snapshot.
+Linux nested cleanup must recurse through retained descriptors or compare any reopened child against the exact object previously inspected. Reopening by name without identity continuity is prohibited.
 
-## Atomic replacement
+Windows cleanup must retain equivalent handle/object continuity and reject reparse-point or replacement ambiguity.
 
-Fixed shared temporary names such as `workspace.ecodb.tmp` are prohibited.
+## Required proof
 
-Each replacement uses a unique owner-scoped name containing an unpredictable nonce. The temporary object must be created exclusively and without following links.
+The controlling hostile test plan is [`../testing/WORKSPACE_OWNERSHIP_V2_TEST_PLAN.md`](../testing/WORKSPACE_OWNERSHIP_V2_TEST_PLAN.md).
 
-Required order:
+Slice 1 results are recorded in [`../testing/WORKSPACE_OWNERSHIP_V2_SLICE1_RESULTS.md`](../testing/WORKSPACE_OWNERSHIP_V2_SLICE1_RESULTS.md).
 
-1. validate owner lease and expected revision;
-2. create unique temporary object relative to retained root;
-3. write complete authenticated replacement;
-4. flush temporary object;
-5. revalidate owner lease, root identity, target identity and expected revision;
-6. atomically replace the authorised target;
-7. flush retained parent/root where supported;
-8. retain or reopen the new target by exact identity;
-9. update in-memory revision only after durable replacement;
-10. remove transaction-owned leftovers.
+## Gate effect
 
-## Mutation rollback
-
-Every public mutating path must establish a complete in-memory rollback point before mutation.
-
-This includes:
-
-- Matter creation and editing;
-- evidence preservation state transitions;
-- OCR and extraction results;
-- Ask records and citations;
-- settings;
-- audit/change records;
-- selection state;
-- backup/restore activation;
-- migration;
-- reset.
-
-If persistence or final verification fails, the entire affected in-memory state returns to its prior value. Partial audit entries, counters, selections and derived segments must not remain.
-
-## Lifecycle
-
-`Vault` gains explicit lifecycle state:
-
-- writable owner lease;
-- retained object binding;
-- persisted revision;
-- closed flag.
-
-All mutating methods require an active writable owner lease. `Save` on a closed or non-owner Vault fails.
-
-`Vault.Close`:
-
-1. prevents new operations;
-2. waits for active operations to finish or cancels them according to contract;
-3. zeroes sensitive key material owned by the Vault;
-4. closes retained control-file and directory handles/descriptors;
-5. releases the OS owner primitive last;
-6. is idempotent;
-7. reports cleanup errors without reopening or mutating by pathname.
-
-## Creation and first launch
-
-Workspace and candidate-state creation are transactions, not optimistic setup.
-
-Concurrent creation must produce:
-
-- one successful owner and complete state; and
-- one clean refusal or safe reopen decision.
-
-It must never produce two keys, two identities, split object directories, mixed metadata or one process deleting the other process's files.
-
-## Migration, restore and reset
-
-These operations must use the same owner lease and revision model.
-
-A checkpoint or staging directory is transaction-owned and object-bound. Recovery records may identify transaction paths for routing but cleanup requires retained identity or exact revalidation.
-
-Reset may remove only:
-
-- the selected workspace's referenced encrypted objects; and
-- exact transaction-owned leftovers.
-
-It may not recursively clean arbitrary path contents.
-
-## Error model
-
-Typed errors must distinguish:
-
-- workspace already owned;
-- stale revision;
-- object identity changed;
-- alias/reparse traversal blocked;
-- recovery required;
-- persistence failed with rollback completed;
-- persistence failed and recovery record retained;
-- unsupported platform.
-
-User-facing messages must explain what was protected and whether anything changed.
-
-## Integration sequence
-
-1. Add platform owner-lease and object-identity primitives with focused tests.
-2. Add revision/CAS metadata and backward-compatible read logic.
-3. Introduce `Vault.Close` and retain ownership for full lifetime.
-4. Convert `OpenVault` and creation to owner-scoped transactions.
-5. Convert `Save` and every public mutation to CAS plus rollback.
-6. Convert candidate state.
-7. Convert migration, restore, reset and cleanup.
-8. Add real subprocess tests.
-9. Run all preservation and application regressions.
-10. Freeze one exact SHA for independent delta-first review.
-
-## Prohibited shortcuts
-
-- pathname-derived ownership domains;
-- lock files inside an unowned new workspace as the first claim;
-- releasing ownership before returning a writable Vault;
-- treating process-local mutexes as cross-process safety;
-- fixed temporary filenames;
-- recursive cleanup by pathname after closing the inspected descriptor/handle;
-- updating in-memory state before durable persistence without rollback;
-- allowing the public-release deadline to narrow or waive these properties.
+Slice 1 proves only the independent owner and creation primitives. It does not close issue #4, approve a workspace, connect the visible V40 journey, or open any real-evidence, source-release, executable, signing, deployment or public-use gate.
