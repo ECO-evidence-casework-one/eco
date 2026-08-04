@@ -1,7 +1,7 @@
 # ECO progress report — legal, standards and governance — 4 August 2026
 
 **Report ID:** `ECO-PROGRESS-20260804-LSG-001`  
-**Prepared:** 4 August 2026, 07:41 BST / 08:41 CEST  
+**Prepared:** 4 August 2026, 07:50 BST / 08:50 CEST  
 **Lane:** legal, standards, governance and release control  
 **Starting reviewed baseline:** `f0894289b4bfd492f92df27e842c2879e59fa17a`  
 **Canonical ending state:** `d63206f64eff3eb230907e869b5d7530cb6d9f8a`  
@@ -118,7 +118,7 @@ Issues #16 and #20 remain open because the application has not yet proved confor
 
 The live Control Board in issue #22 was found to be materially stale. It still named an obsolete `main`, active PR #18 and the former health-input restriction.
 
-Issue #22 was refreshed at 4 August 2026, 07:41 BST / 08:41 CEST to record:
+Issue #22 was refreshed at 4 August 2026, 07:45 BST / 08:45 CEST to record:
 
 - canonical `main` `d63206f64eff3eb230907e869b5d7530cb6d9f8a`;
 - active PRs #11 and #19;
@@ -244,6 +244,12 @@ Effect: the bounded control review, exact-head CI and merged-tree comparison wer
 Issue #22 had become stale despite detailed event evidence existing elsewhere.
 
 Effect: a reviewer relying only on the Control Board could have misunderstood the current project. The board was refreshed and the present reporting framework was prepared.
+
+### Timestamp correction
+
+The first draft used the user-message time, 07:41 BST / 08:41 CEST, as the preparation and Control Board update time. GitHub's authoritative write timestamps showed that the Control Board was updated at approximately 07:45 BST and the audit PR was opened at approximately 07:50 BST.
+
+Effect: the report was corrected before merge. No substantive project decision changed.
 
 ## Next controlled actions
 
