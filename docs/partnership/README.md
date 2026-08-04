@@ -6,6 +6,7 @@ This directory contains public-safe material for research and non-binding explor
 
 - No ECO publisher, steward, partner or institutional deployment is appointed.
 - No named organisation is approved for contact.
+- Ten organisations appear in the initial public-source longlist, all at `NOT ASSESSED`.
 - A research finding must not be described as interest, endorsement, consent or appointment.
 - Discussion of public repository information does not transfer duties or create a partnership.
 - Real evidence, private diagnostics, credentials and identifying case material must not be shared.
@@ -15,7 +16,8 @@ This directory contains public-safe material for research and non-binding explor
 - [`PARTNER_INFORMATION_PACK.md`](PARTNER_INFORMATION_PACK.md) — plain-English explanation of ECO, its boundaries, current position, organisational need and staged engagement process.
 - [`EXPLORATORY_OUTREACH_TEMPLATE.md`](EXPLORATORY_OUTREACH_TEMPLATE.md) — controlled written introduction, short-form message, response record and stop conditions. Its existence does not authorise use with a named recipient.
 - [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md) — evidence hierarchy, fatal exclusions, mandatory boundaries, assessment domains and decision rules for issue #62 research.
-- [`CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md`](CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md) — empty candidate index and repeatable record template. No candidate is currently assessed.
+- [`CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md`](CANDIDATE_ORGANISATION_RESEARCH_REGISTER.md) — empty candidate index and repeatable full-assessment template. No candidate has completed that assessment.
+- [`PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md`](PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md) — ten named organisations for possible deeper research, separated by possible role and retained at `NOT ASSESSED`. The longlist is not a shortlist or contact list.
 
 ## Controlling records
 
@@ -37,13 +39,14 @@ Where wording conflicts or implementation evidence is incomplete, the more restr
 1. Approve the generic public-safe pack.
 2. Merge the objective named-organisation research method and candidate register.
 3. Produce a public-source longlist without contacting organisations.
-4. Apply fatal exclusions and record missing evidence.
-5. Perform deeper review of any potential shortlist.
-6. Stop for control review.
-7. Create a separate outreach-target decision only where justified.
-8. Approve the exact public contact route, sender role, message and pack version.
-9. Send only a non-binding written introduction.
-10. Return any formal interest to issue #17 due diligence and governing-body acceptance.
+4. Create complete candidate records for a controlled first batch.
+5. Apply fatal exclusions and record missing evidence.
+6. Perform deeper review of any potential shortlist.
+7. Stop for control review.
+8. Create a separate outreach-target decision only where justified.
+9. Approve the exact public contact route, sender role, message and pack version.
+10. Send only a non-binding written introduction.
+11. Return any formal interest to issue #17 due diligence and governing-body acceptance.
 
 ## Evidence rules
 
@@ -52,6 +55,7 @@ Where wording conflicts or implementation evidence is incomplete, the more restr
 - Separate facts, inferences and unknowns.
 - Do not score missing evidence positively.
 - Reputation, size, mission language or previous partnerships are not proof of capability or interest.
+- Longlist inclusion is not a positive assessment.
 - Public-source research must not become negotiation or informal outreach.
 
 ## Prohibited use
