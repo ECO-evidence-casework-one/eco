@@ -147,3 +147,60 @@ func TestConcurrentWorkspaceCreationHasOneWritableOwner(t *testing.T) {
 		t.Fatalf("concurrent create/open error=%v", err)
 	}
 }
+
+func TestConcurrentWorkspaceCreationAcrossProcesses(t *testing.T) {
+	if os.Getenv("ECO_WORKSPACE_CREATE_HELPER") == "1" {
+		t.Skip("parent-only test")
+	}
+	parent := t.TempDir()
+	root := filepath.Join(parent, "created-by-child")
+	cmd := exec.Command(os.Args[0], "-test.run=TestWorkspaceCreationHelperProcess")
+	cmd.Env = append(os.Environ(), "ECO_WORKSPACE_CREATE_HELPER=1", "ECO_WORKSPACE_OWNER_ROOT="+root)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(stdout)
+	if !scanner.Scan() || scanner.Text() != "READY" {
+		_ = cmd.Process.Kill()
+		t.Fatalf("creation helper did not become ready: %q err=%v", scanner.Text(), scanner.Err())
+	}
+	lease, err := acquireOrCreateWorkspaceRootOwner(root)
+	if lease != nil {
+		_ = lease.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+		t.Fatalf("concurrent subprocess creation error=%v", err)
+	}
+	_ = stdin.Close()
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	lease, err = acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = lease.Close()
+}
+
+func TestWorkspaceCreationHelperProcess(t *testing.T) {
+	if os.Getenv("ECO_WORKSPACE_CREATE_HELPER") != "1" {
+		return
+	}
+	lease, err := acquireOrCreateWorkspaceRootOwner(os.Getenv("ECO_WORKSPACE_OWNER_ROOT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	_, _ = os.Stdout.WriteString("READY\n")
+	_, _ = bufio.NewReader(os.Stdin).ReadByte()
+}
