@@ -204,3 +204,105 @@ func TestWorkspaceCreationHelperProcess(t *testing.T) {
 	_, _ = os.Stdout.WriteString("READY\n")
 	_, _ = bufio.NewReader(os.Stdin).ReadByte()
 }
+
+func TestWorkspaceOwnerRetargetsSameRenamedObject(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "stage")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	active := filepath.Join(base, "active")
+	if err := os.Rename(root, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.retarget(active); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := acquireWorkspaceRootOwner(active)
+	if second != nil {
+		_ = second.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		t.Fatalf("retargeted owner did not retain exclusion: %v", err)
+	}
+}
+
+func TestWorkspaceOwnerRetargetRejectsDifferentObject(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "owned")
+	other := filepath.Join(base, "other")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(other, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	if err := lease.retarget(other); err == nil {
+		t.Fatal("retarget accepted a different object")
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatalf("original owner route was lost: %v", err)
+	}
+}
+
+func TestWorkspaceOwnerRetargetLeavesReplacementRouteUntouched(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "stage")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	active := filepath.Join(base, "active")
+	if err := os.Rename(root, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(root, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("replacement"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.retarget(active); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(sentinel)
+	if err != nil || string(data) != "replacement" {
+		t.Fatalf("replacement route was altered: %q err=%v", data, err)
+	}
+}
+
+func TestWorkspaceOwnerRetargetAfterCloseFails(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "owned")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.retarget(root); err == nil {
+		t.Fatal("closed lease was retargeted")
+	}
+}
