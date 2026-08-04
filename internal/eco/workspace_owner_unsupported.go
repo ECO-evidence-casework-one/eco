@@ -11,3 +11,5 @@ func platformAcquireWorkspaceLock(string) (platformWorkspaceLock, error) {
 func platformWorkspaceObjectIdentity(string) (workspaceObjectIdentity, error) {
 	return workspaceObjectIdentity{}, errors.New("workspace object identity is unsupported on this platform")
 }
+
+func platformWorkspaceCreationKey(leaf string) string { return leaf }
