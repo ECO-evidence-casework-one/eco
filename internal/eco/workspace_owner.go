@@ -143,6 +143,7 @@ func (i workspaceObjectIdentity) equal(other workspaceObjectIdentity) bool {
 }
 
 type workspaceOwnerLease struct {
+	routeMu  sync.Mutex
 	root     string
 	identity workspaceObjectIdentity
 	lock     platformWorkspaceLock
@@ -188,16 +189,28 @@ func (l *workspaceOwnerLease) Close() error {
 	if l == nil {
 		return nil
 	}
+	l.routeMu.Lock()
+	defer l.routeMu.Unlock()
 	l.once.Do(func() {
 		if l.lock != nil {
 			l.closeErr = l.lock.Close()
+			l.lock = nil
 		}
 	})
 	return l.closeErr
 }
 
 func (l *workspaceOwnerLease) revalidate() error {
-	if l == nil || l.lock == nil {
+	if l == nil {
+		return errors.New("workspace ownership is not held")
+	}
+	l.routeMu.Lock()
+	defer l.routeMu.Unlock()
+	return l.revalidateLocked()
+}
+
+func (l *workspaceOwnerLease) revalidateLocked() error {
+	if l.lock == nil {
 		return errors.New("workspace ownership is not held")
 	}
 	current, err := platformWorkspaceObjectIdentity(l.root)
@@ -208,6 +221,32 @@ func (l *workspaceOwnerLease) revalidate() error {
 		return errors.New("workspace root identity changed")
 	}
 	return nil
+}
+
+// retarget moves the routing path of a still-held lease after the exact owned
+// directory object has been renamed. It never changes the locked object.
+func (l *workspaceOwnerLease) retarget(root string) error {
+	if l == nil {
+		return errors.New("workspace ownership is not held")
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve retargeted workspace root: %w", err)
+	}
+	l.routeMu.Lock()
+	defer l.routeMu.Unlock()
+	if l.lock == nil {
+		return errors.New("workspace ownership is not held")
+	}
+	current, err := platformWorkspaceObjectIdentity(absolute)
+	if err != nil {
+		return fmt.Errorf("identify retargeted workspace root: %w", err)
+	}
+	if !l.identity.equal(current) {
+		return errors.New("retargeted workspace root is not the owned object")
+	}
+	l.root = absolute
+	return l.revalidateLocked()
 }
 
 type platformWorkspaceLock interface{ Close() error }
