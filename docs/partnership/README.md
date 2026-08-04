@@ -12,6 +12,8 @@ This directory contains public-safe material for research and non-binding explor
   - mySociety — `HOLD` for a civic-tech/public-interest software collaborator role;
   - AbilityNet — `POTENTIAL FIT` for an accessibility assessment/assurance role.
 - Open Knowledge Foundation has the first full/near-full publisher/steward assessment and remains `HOLD`.
+- The preferred future operating model is now recorded as **one accountable official publisher/steward with controlled, replaceable specialist suppliers**.
+- Fragmented responsibility without one accountable publisher is rejected.
 - None of these findings forms a shortlist or establishes an organisation as interested, available, endorsed or approved for contact.
 - A research finding must not be described as consent, appointment, organisational acceptance or a transfer of duty.
 - Discussion of public repository information does not create a partnership.
@@ -26,6 +28,7 @@ This directory contains public-safe material for research and non-binding explor
 - [`PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md`](PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md) — ten named organisations for possible deeper research, separated by possible role. The longlist is not a shortlist or contact list.
 - [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md) — full public-source limited-role assessments for Software Freedom Conservancy, mySociety and AbilityNet, including contrary evidence, fatal-exclusion screens, material unknowns and prohibited next actions.
 - [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md) — first assessment against the complete or near-complete issue #17 role; `HOLD` pending current legal/tax, security, signing, support, liability, regulatory and no-custody evidence.
+- [`PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md`](PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md) — comparison of one-organisation, accountable-steward-plus-specialists and fragmented-responsibility models; retains one official accountable publisher and rejects unowned fragmentation.
 
 ## Controlling records
 
@@ -49,14 +52,25 @@ Where wording conflicts or implementation evidence is incomplete, the more restr
 3. Produce a public-source longlist without contacting organisations.
 4. Create complete limited-role records for a controlled first batch.
 5. Assess at least one organisation against the full/near-full publisher role.
-6. Review all records for source freshness, role inflation, contrary evidence and missing duties.
-7. Deepen public-source due diligence where a record remains `POTENTIAL FIT` or `HOLD`.
-8. Compare one accountable steward with a steward-plus-specialists structure.
-9. Stop for control review before creating any shortlist.
-10. Create a separate outreach-target decision only where justified.
-11. Approve the exact public contact route, sender role, message and pack version.
-12. Send only a non-binding written introduction.
-13. Return any formal interest to issue #17 due diligence and governing-body acceptance.
+6. Compare one-accountable-organisation and accountable-steward-plus-specialists structures.
+7. Review all records for source freshness, role inflation, contrary evidence and missing duties.
+8. Deepen public-source due diligence where a record remains `POTENTIAL FIT` or `HOLD`.
+9. Test whether a full-role candidate could govern the preferred specialist model.
+10. Stop for control review before creating any shortlist.
+11. Create a separate outreach-target decision only where justified.
+12. Approve the exact public contact route, sender role, message and pack version.
+13. Send only a non-binding written introduction.
+14. Return any formal interest to issue #17 due diligence and governing-body acceptance.
+
+## Responsibility-model rules
+
+- One legal organisation must remain the official accountable ECO publisher/steward.
+- Specialists may advise or perform bounded work under written agreements.
+- Specialists do not become co-publishers merely by auditing, hosting funds, holding a certificate, building, signing or advising.
+- The steward retains final release, withdrawal, incident, signing, complaints, data-role, contracting, regulatory and continuity authority.
+- Users receive one official front door; they are not required to determine which supplier caused a problem.
+- Specialist contracts must preserve synthetic-only defaults, data minimisation, adverse findings, exit/handover, replaceability and no implied endorsement.
+- No duty may fall back onto an individual contributor because a supplier or steward lacks capacity.
 
 ## Evidence rules
 
@@ -68,6 +82,7 @@ Where wording conflicts or implementation evidence is incomplete, the more restr
 - Longlist inclusion is not a positive assessment.
 - A limited-role `POTENTIAL FIT` is not full-stewardship evidence.
 - A broad-capability organisation remains `HOLD` where mandatory security, signing, support, liability or regulatory duties are unproven.
+- A collection of specialist strengths does not satisfy issue #17 without one accountable steward.
 - Public-source research must not become negotiation or informal outreach.
 
 ## Prohibited use
@@ -77,6 +92,7 @@ Do not use these materials to:
 - announce or imply a partnership;
 - appoint a publisher or steward;
 - contact a named organisation without a separate approved decision;
+- divide publisher responsibility informally among several organisations;
 - form a company, CIC, charity or other entity;
 - request or receive real evidence;
 - agree a real-data pilot or institutional supply;

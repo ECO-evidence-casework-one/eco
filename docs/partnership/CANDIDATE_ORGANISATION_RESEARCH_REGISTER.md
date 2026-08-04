@@ -4,7 +4,8 @@
 **Status:** four public-source assessments completed; no organisation is approved, appointed, shortlisted or authorised for outreach  
 **Method:** [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md)  
 **First assessment batch:** [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md)  
-**First full/near-full assessment:** [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md)
+**First full/near-full assessment:** [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md)  
+**Responsibility model:** [`PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md`](PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md)
 
 ## 1. Register rules
 
@@ -76,7 +77,30 @@ No entry shows that an organisation:
 - would accept ECO's legal, technical or financial conditions;
 - should be contacted.
 
-## 5. Candidate record requirements
+## 5. Controlling responsibility model
+
+The preferred future structure is:
+
+> **one accountable official publisher/steward with controlled, replaceable specialist suppliers.**
+
+The steward must retain final authority for:
+
+- official release, refusal, withdrawal and supported versions;
+- intended purpose, claims and prohibited uses;
+- security incident command;
+- signing approval, revocation and recovery;
+- repository, identity and asset continuity;
+- privacy, accessibility, product complaints and user support accountability;
+- data-role decisions;
+- contracts, liability and insurance;
+- regulatory classification and reporting;
+- selection, monitoring, replacement and escalation of specialists.
+
+A specialist may advise or perform bounded work. It must not become an unrecorded co-publisher or the only party able to operate a critical function.
+
+A fragmented multi-organisation model with no clear lead publisher is rejected and does not satisfy issue #17.
+
+## 6. Candidate record requirements
 
 Each future record must contain:
 
@@ -91,9 +115,14 @@ Each future record must contain:
 9. permitted and prohibited next actions;
 10. control review confirming that missing evidence was not scored positively.
 
-For a full or near-full role, the record must also map every issue #17 publisher/steward duty and identify which legal organisation would remain accountable when specialist suppliers are used.
+For a full or near-full role, the record must also:
 
-## 6. Shortlist control
+- map every issue #17 publisher/steward duty;
+- test whether the organisation can retain final accountability while using specialists;
+- identify procurement, contract, data, incident, signing, complaints and exit capabilities;
+- identify which legal organisation would remain accountable when a specialist fails or withdraws.
+
+## 7. Shortlist control
 
 No organisation may enter a shortlist unless:
 
@@ -106,31 +135,34 @@ No organisation may enter a shortlist unless:
 - the difference between a limited role and full publisher duties is explicit;
 - a separate control review confirms the provisional status.
 
-A full/near-full candidate cannot be shortlisted while private security response, release/signing, complaints/support, insurance/liability and regulatory ownership remain materially unproven.
+A full/near-full candidate cannot be shortlisted while private security response, release/signing, complaints/support, insurance/liability, regulatory ownership or specialist-governance capability remain materially unproven.
+
+A limited-role candidate cannot be shortlisted as a specialist unless a plausible accountable steward model exists and can contract, supervise and replace that function.
 
 A shortlist is not an outreach list.
 
 The current register contains **no shortlist**.
 
-## 7. Full-stewardship control
+## 8. Specialist-relationship controls
 
-A combination of limited-role organisations does not automatically satisfy issue #17.
+Before any limited-role organisation could become a specialist candidate, the proposed accountable steward must be capable of providing:
 
-Before distributed roles could be treated as an alternative to one full steward, the project would need a documented responsibility model showing:
+- an exact statement of work;
+- synthetic-only and no-real-evidence defaults;
+- data-role, confidentiality, retention and deletion controls;
+- adverse-finding preservation;
+- conflict and independence rules;
+- competence, deputy and continuity evidence;
+- security and incident escalation;
+- correction and retesting;
+- insurance and liability allocation;
+- subcontractor controls;
+- termination, handover and access revocation;
+- public-claims and no-endorsement rules.
 
-- which legal organisation is the accountable official publisher;
-- who owns release, signing, withdrawal and supported-version decisions;
-- who operates security, privacy, accessibility, product-complaint and general-support routes;
-- who contracts with institutions and holds relevant insurance;
-- who owns regulatory classification and reporting;
-- how disagreements and incidents are resolved;
-- how users receive one clear accountable route;
-- how continuity survives the failure or withdrawal of one specialist provider;
-- how duties are prevented from falling back onto an individual contributor.
+The specialist must remain replaceable without transferring publisher duties to an individual contributor.
 
-No such distributed-responsibility model is approved.
-
-## 8. Outreach boundary
+## 9. Outreach boundary
 
 Before any contact, create a separate outreach-target decision recording:
 
@@ -144,12 +176,13 @@ Before any contact, create a separate outreach-target decision recording:
 - non-binding wording;
 - evidence that no real case material will be requested or supplied.
 
-Issue #62, the longlist, this register and all current assessments do not authorise contact.
+Issue #62, the longlist, this register, the responsibility-model decision and all current assessments do not authorise contact.
 
-## 9. Current next research step
+## 10. Current next research step
 
-1. Review all four records for factual accuracy, source freshness and role inflation.
-2. Deepen Open Knowledge Foundation's current legal/tax, accounts, repository, security, release/signing, complaints, insurance and accessibility evidence.
-3. Deepen the Software Freedom Conservancy and AbilityNet limited-role records and the mySociety `HOLD` questions.
-4. Compare a single accountable-steward model with a steward-plus-specialists model without allocating duties by assumption.
-5. Stop for control review before creating any shortlist or outreach-target proposal.
+1. Review the responsibility-model comparison against the issue #17 gate and acceptance checklist.
+2. Review all four candidate records for factual accuracy, source freshness and role inflation.
+3. Deepen Open Knowledge Foundation's current legal/tax, accounts, repository, security, release/signing, complaints, insurance and accessibility evidence.
+4. Deepen the Software Freedom Conservancy and AbilityNet limited-role records and the mySociety `HOLD` questions.
+5. Test whether OKFN or another full-role candidate could govern the preferred steward-plus-specialists model.
+6. Stop for control review before creating any shortlist or outreach-target proposal.
