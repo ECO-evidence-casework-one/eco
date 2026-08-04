@@ -1,0 +1,77 @@
+name: ECO recovery UI build
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'recovery/**'
+      - '.github/workflows/eco-recovery-ui-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-recovery-ui-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-build:
+    name: Compile and inspect recovery workspace
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact tested ref
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Record .NET environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet --info
+          if ($LASTEXITCODE -ne 0) { throw '.NET environment inspection failed.' }
+
+      - name: Restore recovery application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet restore recovery/Eco.Recovery/Eco.Recovery.csproj --nologo
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery application restore failed.' }
+
+      - name: Build recovery application
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet build recovery/Eco.Recovery/Eco.Recovery.csproj -c Release --no-restore --nologo -warnaserror
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery application build failed.' }
+
+      - name: Publish internal one-file Windows shell
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          dotnet publish recovery/Eco.Recovery/Eco.Recovery.csproj `
+            -c Release -r win-x64 --self-contained true --nologo `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:DebugType=None -p:DebugSymbols=false `
+            -o private-recovery-publish
+          if ($LASTEXITCODE -ne 0) { throw 'Recovery application publish failed.' }
+          $files = Get-ChildItem private-recovery-publish -File | Sort-Object Name
+          $files | Format-Table Name,Length
+          if ($files.Count -ne 1 -or $files[0].Extension -ne '.exe') {
+            throw "Expected exactly one internal EXE; found $($files.Count) files."
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 $files[0].FullName).Hash.ToLowerInvariant()
+          Write-Host "INTERNAL_RECOVERY_SHELL_SIZE=$($files[0].Length)"
+          Write-Host "INTERNAL_RECOVERY_SHELL_SHA256=$hash"
+
+      - name: Delete runner-only executable
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path private-recovery-publish) {
+            Remove-Item private-recovery-publish -Recurse -Force
+          }
+          Write-Host 'Runner-only recovery executable removed. No runnable artifact was uploaded.'
