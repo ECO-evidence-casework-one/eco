@@ -40,7 +40,7 @@ jobs:
           check-latest: false
           cache: false
 
-      - name: Reconstruct controlled private build script
+      - name: Reconstruct and correct controlled private build script
         shell: pwsh
         run: |
           $b = New-Object System.Text.StringBuilder
@@ -64,16 +64,12 @@ jobs:
           if ($stagedHash -ne "6f04845f501d3d312220dc55f626d04a2a7cd2b10faa20474c5f2f82ee8df0d6") {
             throw "Staged private build script hash mismatch: $stagedHash"
           }
-          $text = Get-Content -Raw $scriptPath
-          $text = $text.Replace(
-            "7f4909b066a3be91bb3308af3bd81c0c64fe14943ab91194a025516ea4ad9195",
-            "7f4909d8720bc6839ba921e762b81676bc445c18f6b825a29117b9ce7d8b2011"
-          )
-          [IO.File]::WriteAllText($scriptPath, $text, [Text.UTF8Encoding]::new($false))
-          $finalHash = (Get-FileHash -Algorithm SHA256 $scriptPath).Hash.ToLowerInvariant()
-          if ($finalHash -ne "672f4432ff66aa0a1ebd0edc33a3ed9571dcbb4baa477b4ee1136ad2f30f00a6") {
-            throw "Corrected private build script hash mismatch: $finalHash"
+          $hotfixPath = "build-input/v40/v40-msys-runtime-hotfix.ps1"
+          $hotfixHash = (Get-FileHash -Algorithm SHA256 $hotfixPath).Hash.ToLowerInvariant()
+          if ($hotfixHash -ne "1ea0ecdb7698a07bcfd0a8c2110a81d0b5e82d56197fe60706f8f868715ea7b5") {
+            throw "MSYS2 runtime hotfix hash mismatch: $hotfixHash"
           }
+          & $hotfixPath -TargetPath $scriptPath
 
       - name: Build genuine offline synthetic candidate
         shell: pwsh
