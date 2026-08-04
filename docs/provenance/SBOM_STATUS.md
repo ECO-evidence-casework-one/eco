@@ -2,13 +2,13 @@
 
 ECO does not currently have an authoritative SBOM for a released executable.
 
-The former root `SBOM.spdx.json` described the historical V25 N2 P1 source milestone. It used `filesAnalyzed: false`, did not identify an exact current commit or executable hash, and did not inspect PE imports, resources, sections, overlay data, embedded payload or runtime-created files.
+The root `SBOM.spdx.json` is retained only as an explicitly labelled **historical V25 N2 P1 source-level record**. Its document name, namespace and comments state that it is not authoritative for current `main`, a current build, an executable, signing or release.
 
-That exact historical SPDX document is preserved at:
+The exact former root bytes are preserved unchanged at:
 
 `docs/provenance/historical/ECO_V25_N2_P1_SBOM_2026-07-31.spdx.json`
 
-The generic root `SBOM.spdx.json` is intentionally absent until an exact-build SBOM exists. Its absence must not be interpreted as approval to distribute a binary without an SBOM.
+The historical document uses `filesAnalyzed: false`, does not identify an exact current commit or executable hash, and does not inspect PE imports, resources, sections, overlay data, embedded payload or runtime-created files.
 
 P0 issue #15 controls the future authoritative SBOM. Before release, the SBOM must:
 
@@ -19,4 +19,4 @@ P0 issue #15 controls the future authoritative SBOM. Before release, the SBOM mu
 - pass independent SPDX validation and actual-binary inspection;
 - contain no stale build identity, placeholder source location or unexplained component.
 
-No application, evidence-use, signing or release gate is opened by this status record.
+The presence of the historical root SPDX document must not be treated as satisfaction of issue #15. No application, evidence-use, signing or release gate is opened by this status record.
