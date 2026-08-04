@@ -9,9 +9,7 @@ import (
 	"syscall"
 )
 
-type linuxWorkspaceLock struct {
-	file *os.File
-}
+type linuxWorkspaceLock struct{ file *os.File }
 
 func platformAcquireWorkspaceLock(path string) (platformWorkspaceLock, error) {
 	file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0600)
@@ -51,3 +49,5 @@ func platformWorkspaceObjectIdentity(path string) (workspaceObjectIdentity, erro
 	}
 	return workspaceObjectIdentity{Volume: uint64(stat.Dev), File: stat.Ino}, nil
 }
+
+func platformWorkspaceCreationKey(leaf string) string { return leaf }
