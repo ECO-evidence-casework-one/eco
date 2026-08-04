@@ -13,10 +13,14 @@ if ([regex]::Matches($text, [regex]::Escape($oldSourceHash)).Count -ne 1) {
 }
 $text = $text.Replace($oldSourceHash, $newSourceHash)
 
-$pattern = "(?s)\$ocrExePaths\s*=\s*@\(.*?Copy-IfExists 'C:\\msys64\\ucrt64\\share\\licenses' \(Join-Path \$licenseRoot 'MSYS2-UCRT64'\)"
-$matches = [regex]::Matches($text, $pattern)
-if ($matches.Count -ne 1) {
-    throw "Expected exactly one hard-coded MSYS2 runtime block; found $($matches.Count)."
+$startMarker = '$ocrExePaths = @('
+$endMarker = "Write-Step 'Prove OCR/PDF executables load from packaged runtime'"
+$start = $text.IndexOf($startMarker, [StringComparison]::Ordinal)
+if ($start -lt 0) { throw 'Hard-coded MSYS2 runtime block start marker was not found.' }
+$end = $text.IndexOf($endMarker, $start, [StringComparison]::Ordinal)
+if ($end -lt 0) { throw 'OCR/PDF runtime verification marker was not found after the runtime block.' }
+if ($text.IndexOf($startMarker, $start + $startMarker.Length, [StringComparison]::Ordinal) -ge 0) {
+    throw 'More than one hard-coded MSYS2 runtime block start marker was found.'
 }
 
 $replacement = @'
@@ -88,7 +92,7 @@ if ($null -ne $msysLicenses) {
 }
 '@
 
-$text = [regex]::Replace($text, $pattern, [System.Text.RegularExpressions.MatchEvaluator]{ param($m) $replacement }, 1)
+$text = $text.Substring(0, $start) + $replacement + "`r`n`r`n" + $text.Substring($end)
 [IO.File]::WriteAllText($TargetPath, $text, [Text.UTF8Encoding]::new($false))
 
 $hash = (Get-FileHash -Algorithm SHA256 -Path $TargetPath).Hash.ToLowerInvariant()
