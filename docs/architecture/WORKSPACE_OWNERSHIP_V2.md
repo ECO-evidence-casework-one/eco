@@ -1,6 +1,6 @@
 # Workspace ownership V2
 
-**Status:** active bounded P0 repair on current `main`; Slice 1 root-owner and root-creation primitives implemented, but not yet integrated into `OpenVault` or release-approved.
+**Status:** active bounded P0 repair on current `main`; root ownership, owned first creation and object-bound lease retargeting are implemented and qualified as isolated primitives. They are not yet integrated into `OpenVault`, portable restore or public release.
 
 ## Purpose
 
@@ -15,62 +15,79 @@ The complete design must prevent:
 - fixed temporary names allowing one transaction to interfere with another;
 - restore or migration leaving ownership attached to the wrong pre- or post-activation root.
 
-## Slice 1 implemented boundary
+## Implemented primitive boundary
 
-Slice 1 now provides platform ownership primitives behind narrow internal functions:
+The current branch provides:
 
 - `acquireWorkspaceRootOwner`;
 - `acquireWorkspaceCreationOwner`;
 - `acquireOrCreateWorkspaceRootOwner`;
 - `workspaceOwnerLease.revalidate`;
+- `workspaceOwnerLease.retarget`;
 - `workspaceCreationLease.revalidate`.
 
-These primitives are not yet called by `OpenVault`. They are qualified independently before the root-replacing restore transaction is changed.
+These primitives are not yet called by `OpenVault`. They are being qualified independently before the root-replacing restore transaction is changed.
 
-### Root owner lease
+### Existing root owner
 
-For an existing workspace root:
+1. Resolve the supplied route to an absolute path.
+2. Require the routed object to be a directory.
+3. Capture the underlying filesystem object identity.
+4. Acquire non-blocking cross-process ownership for that exact object.
+5. Recapture and compare the root identity.
+6. Retain the owner until explicit close.
 
-1. convert the supplied route to an absolute path;
-2. stat the root and require a directory;
-3. capture the underlying filesystem object identity;
-4. open/create the owner lock file inside that root;
-5. acquire a non-blocking exclusive OS lock;
-6. recapture and compare the root object identity;
-7. retain the lock and object identity until explicit close.
-
-The path string is retained only so the object can be revalidated. It is not treated as the ownership identity.
+The path is routing information used for later identity revalidation. It is not the ownership identity.
 
 ### Missing-root creation claim
 
-For a root that does not yet exist:
-
-1. identify and retain the existing parent object;
-2. derive a bounded creation-lock name from the platform-normalised leaf name;
-3. acquire a non-blocking exclusive lock in the parent;
-4. revalidate the parent object;
-5. create only the named root directory;
-6. acquire and retain the new root's owner lease;
-7. revalidate the parent again;
-8. release the creation claim only after the root lease is secured.
+1. Identify the existing parent object.
+2. Derive a bounded creation identity from the platform-normalised leaf name.
+3. Acquire cross-process ownership for that parent/leaf creation role.
+4. Revalidate the parent object.
+5. Create only the named root directory.
+6. Acquire the new root owner.
+7. Revalidate the parent.
+8. Release the creation claim only after the root owner is secured.
 
 This closes the previously unowned interval before a new workspace root exists at the primitive level.
 
-## Platform identity and locking
+### Object-bound retargeting
+
+A held root owner may be retargeted after the exact owned directory object is renamed:
+
+1. resolve the proposed new route;
+2. capture the object identity at that route;
+3. require it to equal the identity already owned;
+4. update only the lease's routing path;
+5. revalidate the same object at the new route.
+
+Retargeting does not acquire a second owner and does not accept a replacement object. It is required for later active/stage/checkpoint restore handoff.
+
+## Platform controls
 
 ### Linux
 
-- root/parent identity: device and inode;
-- owner exclusion: non-blocking exclusive `flock`;
+- object identity: device and inode;
+- cross-process exclusion: non-blocking exclusive `flock` on `.eco-owner-v2.lock` or the bounded parent creation-lock file;
 - creation leaf identity: case-sensitive leaf bytes;
-- symlink aliases resolve to the same target object and lock file.
+- symlink aliases resolve to the same target object and lock domain;
+- the open lock file does not prevent directory rename on the qualified Linux path.
 
 ### Windows
 
-- root/parent identity: volume serial number and file index from `GetFileInformationByHandle`;
-- owner exclusion: non-blocking exclusive `LockFileEx`;
-- lock handle allows read, write and delete sharing so a later controlled restore transaction can rename owned objects without silently dropping ownership;
-- creation leaf identity is lower-cased with trailing spaces and dots removed, preventing common Win32 path aliases from deriving separate creation claims.
+- object identity: volume serial number and file index from `GetFileInformationByHandle`;
+- cross-process exclusion: named kernel semaphore derived from the exact object identity and bounded lock role;
+- acquisition: `CreateSemaphoreW` plus zero-timeout `WaitForSingleObject`;
+- release: `ReleaseSemaphore` plus `CloseHandle`;
+- no child lock-file handle remains open inside the owned directory, so controlled directory rename is not pinned by the ownership primitive;
+- creation leaf identity is lower-cased with trailing spaces and dots removed, preventing common Win32 aliases from deriving separate creation claims.
+
+#### Rejected Windows design
+
+An earlier Slice 1 attempt used `LockFileEx` on a lock file inside the owned root with read/write/delete sharing. Exact Windows Actions run `30914784651` proved this assumption wrong: `os.Rename(stage, active)` failed with `Access is denied` while the child lock file remained open.
+
+That design is rejected and not controlling. The named-semaphore replacement passed the same Windows rename/retarget tests in exact-head run `30915780542`.
 
 ### Other platforms
 
@@ -80,7 +97,7 @@ Ownership acquisition fails closed until equivalent primitives and tests exist.
 
 The final writable Vault lifecycle remains:
 
-1. acquire or create root under an owned parent transaction;
+1. acquire or create the root under an owned parent transaction;
 2. retain the root owner for the complete writable Vault lifetime;
 3. open or create managed children only after ownership exists;
 4. load authenticated metadata and its persisted revision;
@@ -93,18 +110,19 @@ The final writable Vault lifecycle remains:
 
 ## Restore ownership requirement
 
-Portable restore currently renames the active root to a checkpoint, renames a staged root into the active route and calls ordinary `OpenVault` again. Once root ownership is connected, that flow cannot remain unchanged.
+Portable restore currently renames the active root to a checkpoint, renames a staged root into the active route and calls ordinary `OpenVault` again. Once root ownership is integrated, that flow cannot remain unchanged.
 
 The replacement must:
 
-- keep the old active-root lease through the rollback window;
-- keep the staged-root lease through validation and activation;
-- permit the controlled renames without closing either lease;
-- retarget and revalidate the staged lease at the active route after activation;
-- avoid opening the activated root through a second ordinary acquisition;
-- transfer the staged owner, key and loaded workspace into the existing Vault;
-- release the old lease only after activation is proven;
-- on failure, restore and retarget the old lease and keep the unrelated replacement object untouched.
+- keep the old active-root owner through the rollback window;
+- keep the staged-root owner through validation and activation;
+- rename both exact owned objects without closing ownership;
+- retarget the old owner to the checkpoint route;
+- retarget the staged owner to the active route;
+- avoid a second ordinary acquisition on the activated stage;
+- transfer staged owner, key, objects and workspace into the existing Vault;
+- release the old owner only after activation is proven;
+- on failure, restore and retarget the old owner while preserving unrelated replacement objects.
 
 ## Revision/CAS requirement
 
@@ -121,22 +139,11 @@ The encrypted workspace metadata must carry a monotonic revision. A Vault stores
 
 A revision conflict is a controlled failure and never a last-writer-wins event.
 
-## Temporary-file requirement
+## Temporary-file and rollback requirements
 
 The fixed `workspace.ecodb.tmp` path must be replaced by a unique transaction-owned name created exclusively in the retained root. Cleanup may remove only a file whose identity and transaction nonce it owns.
 
-## Rollback requirement
-
-Every public mutator must preserve the full pre-mutation state needed to undo its change. Persistence failure must restore:
-
-- domain records;
-- selection and settings;
-- audit entries;
-- timestamps and build identity;
-- expected revision;
-- referenced object ownership state where applicable.
-
-A method must not report success when its audit persistence failed.
+Every public mutator must preserve the complete pre-mutation state. Persistence failure must restore domain records, selections, settings, audit entries, timestamps, build identity, expected revision and referenced object state where applicable.
 
 ## Cleanup requirement
 
@@ -146,10 +153,9 @@ Windows cleanup must retain equivalent handle/object continuity and reject repar
 
 ## Required proof
 
-The controlling hostile test plan is [`../testing/WORKSPACE_OWNERSHIP_V2_TEST_PLAN.md`](../testing/WORKSPACE_OWNERSHIP_V2_TEST_PLAN.md).
-
-Slice 1 results are recorded in [`../testing/WORKSPACE_OWNERSHIP_V2_SLICE1_RESULTS.md`](../testing/WORKSPACE_OWNERSHIP_V2_SLICE1_RESULTS.md).
+- hostile plan: [`../testing/WORKSPACE_OWNERSHIP_V2_TEST_PLAN.md`](../testing/WORKSPACE_OWNERSHIP_V2_TEST_PLAN.md);
+- primitive results: [`../testing/WORKSPACE_OWNERSHIP_V2_SLICE1_RESULTS.md`](../testing/WORKSPACE_OWNERSHIP_V2_SLICE1_RESULTS.md).
 
 ## Gate effect
 
-Slice 1 proves only the independent owner and creation primitives. It does not close issue #4, approve a workspace, connect the visible V40 journey, or open any real-evidence, source-release, executable, signing, deployment or public-use gate.
+The current result proves only isolated ownership, creation and retarget primitives. It does not close issue #4, approve ordinary workspace opening, connect the visible V40 journey, or open any real-evidence, source-release, executable, signing, deployment or public-use gate.
