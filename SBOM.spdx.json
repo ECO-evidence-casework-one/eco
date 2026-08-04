@@ -1,0 +1,58 @@
+{
+  "spdxVersion": "SPDX-2.3",
+  "dataLicense": "CC0-1.0",
+  "SPDXID": "SPDXRef-DOCUMENT",
+  "name": "HISTORICAL-ECO-V25-N2-P1-SOURCE-SBOM-NOT-CURRENT",
+  "documentNamespace": "https://github.com/ECO-evidence-casework-one/eco/sbom/historical/ECO-V25-20260731-N2-P1",
+  "documentComment": "Historical V25 N2 P1 source-level SBOM only. This document is not authoritative for current main, a current build, an executable, a release, signing or distribution. The exact former root bytes are preserved at docs/provenance/historical/ECO_V25_N2_P1_SBOM_2026-07-31.spdx.json. P0 issue #15 controls the future exact-build SBOM.",
+  "creationInfo": {
+    "created": "2026-07-31T09:20:00Z",
+    "creators": [
+      "Tool: ECO controlled repository build"
+    ],
+    "comment": "The original V25 creation record is preserved for chronology. Later source and repository-control commits are not represented by this historical document."
+  },
+  "packages": [
+    {
+      "name": "Evidence & Casework One — historical V25 source package",
+      "SPDXID": "SPDXRef-Package-ECO",
+      "versionInfo": "ECO-V25-20260731-N2-P1",
+      "downloadLocation": "https://github.com/ECO-evidence-casework-one/eco",
+      "filesAnalyzed": false,
+      "licenseConcluded": "GPL-3.0-only",
+      "licenseDeclared": "GPL-3.0-only",
+      "copyrightText": "Copyright 2026 Evidence & Casework One contributors",
+      "comment": "Historical source-level package record only. It contains no current executable file entry, executable hash or actual packaged-content reconciliation.",
+      "externalRefs": [
+        {
+          "referenceCategory": "PACKAGE-MANAGER",
+          "referenceType": "purl",
+          "referenceLocator": "pkg:golang/github.com/ECO-evidence-casework-one/eco@ECO-V25-20260731-N2-P1"
+        }
+      ]
+    },
+    {
+      "name": "Go standard library — historical V25 declaration",
+      "SPDXID": "SPDXRef-Package-Go-Stdlib",
+      "versionInfo": "1.23.x",
+      "downloadLocation": "https://go.dev/",
+      "filesAnalyzed": false,
+      "licenseConcluded": "BSD-3-Clause",
+      "licenseDeclared": "BSD-3-Clause",
+      "copyrightText": "Copyright The Go Authors",
+      "comment": "Historical source-level dependency declaration; not an inventory generated from a current executable."
+    }
+  ],
+  "relationships": [
+    {
+      "spdxElementId": "SPDXRef-DOCUMENT",
+      "relationshipType": "DESCRIBES",
+      "relatedSpdxElement": "SPDXRef-Package-ECO"
+    },
+    {
+      "spdxElementId": "SPDXRef-Package-ECO",
+      "relationshipType": "DEPENDS_ON",
+      "relatedSpdxElement": "SPDXRef-Package-Go-Stdlib"
+    }
+  ]
+}
