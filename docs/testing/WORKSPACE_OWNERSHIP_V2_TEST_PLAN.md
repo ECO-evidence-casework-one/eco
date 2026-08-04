@@ -1,6 +1,6 @@
 # Workspace Ownership V2 test plan
 
-**Status:** controlling hostile-path plan. Slice 1 tests are implemented for root ownership, owned root creation, aliases and root/parent substitution. Remaining sections are mandatory before issue #4 can pass.
+**Status:** controlling hostile-path plan. Primitive ownership, owned first creation, aliases, substitution and object-bound retargeting are implemented. Remaining sections are mandatory before issue #4 can pass.
 
 ## Test principles
 
@@ -12,9 +12,9 @@
 - never treat one-process mutex tests as cross-process proof;
 - never treat pathname equality as object-identity proof;
 - preserve unrelated sentinels during every hostile substitution test;
-- fail the test if cleanup or rollback removes an object the transaction did not create or identify.
+- fail if cleanup or rollback removes an object the transaction did not create or identify.
 
-## Slice 1 — implemented primitive tests
+## Slice 1 — qualified ownership primitives
 
 ### Existing root ownership
 
@@ -22,12 +22,11 @@
 - [x] second same-process owner is rejected;
 - [x] second subprocess owner is rejected;
 - [x] owner release allows later acquisition;
-- [x] owner lock exists inside the owned root;
 - [x] root identity revalidation succeeds while unchanged.
 
 ### Alias domain
 
-- [x] Linux symlink alias reaches the same root lock domain;
+- [x] Linux symlink alias reaches the same root domain;
 - [x] Linux parent alias reaches the same creation-claim domain;
 - [x] Windows creation keys normalise case aliases;
 - [x] Windows creation keys normalise trailing dot/space aliases.
@@ -45,6 +44,16 @@
 - [x] Linux replacement-parent sentinel survives;
 - [x] Linux root replacement is detected;
 - [x] Linux replacement-root sentinel survives.
+
+### Retargeting for later restore handoff
+
+- [x] a held owner follows the same directory object after rename;
+- [x] the owner continues blocking another writer at the new route;
+- [x] a different object is rejected;
+- [x] replacement content at the old route survives;
+- [x] a closed owner cannot be retargeted;
+- [x] Windows directory rename works while semaphore ownership remains held;
+- [x] the earlier rename-blocking `LockFileEx` design is preserved as failed evidence and rejected.
 
 ## Slice 2 — Vault integration and retained lifetime
 
@@ -92,8 +101,8 @@ Inject deterministic persistence failures into every mutating path, including:
 For each path prove:
 
 - [ ] returned error is non-nil and bounded;
-- [ ] the in-memory snapshot equals its pre-call snapshot;
-- [ ] the authenticated on-disk workspace equals its pre-call state;
+- [ ] in-memory state equals its pre-call state;
+- [ ] authenticated on-disk state equals its pre-call state;
 - [ ] no success/audit entry remains;
 - [ ] no unowned temporary or object file is removed.
 
@@ -103,7 +112,7 @@ Use a real active Vault and staged restored Vault.
 
 - [ ] active root owner is retained through the rollback window;
 - [ ] staged root owner is retained through validation and activation;
-- [ ] controlled rename succeeds with retained Windows handles and Linux descriptors;
+- [ ] controlled rename succeeds with ownership retained on Windows and Linux;
 - [ ] stage owner is retargeted and revalidated at the active route;
 - [ ] old owner is retargeted at the checkpoint route;
 - [ ] no second ordinary `OpenVault` acquisition is attempted on the activated stage;
@@ -111,7 +120,7 @@ Use a real active Vault and staged restored Vault.
 - [ ] success releases the old checkpoint owner only after activation proof;
 - [ ] failure restores the old root and ownership;
 - [ ] failure preserves unrelated replacement sentinels;
-- [ ] no lock remains attached to the wrong root after success or rollback;
+- [ ] no ownership remains attached to the wrong root after success or rollback;
 - [ ] restored Vault can close and reopen normally.
 
 ## Slice 6 — migration, reset and candidate state
@@ -141,20 +150,18 @@ Use a real active Vault and staged restored Vault.
 
 ## Slice 7 — Linux nested cleanup continuity
 
-Construct a nested directory tree containing transaction-owned cleanup candidates and unrelated sentinels.
-
 - [ ] recursion proceeds through retained descriptors; or
 - [ ] every reopened child is compared to the exact previously inspected object;
 - [ ] substitute a same-mount child after inspection;
 - [ ] cleanup rejects the substituted child;
 - [ ] replacement sentinel survives;
-- [ ] original transaction object remains recoverable or is safely cleaned through its retained identity;
+- [ ] original transaction object remains recoverable or is safely cleaned through retained identity;
 - [ ] symlinks, bind-mount-like aliases and non-directory replacements fail closed.
 
 ## Slice 8 — owner death and recovery
 
 - [ ] subprocess holding a root owner is terminated;
-- [ ] OS releases the lock;
+- [ ] OS releases the ownership primitive;
 - [ ] later opening revalidates the root and authenticated metadata;
 - [ ] abandoned unique transaction files are identified by bounded transaction records;
 - [ ] cleanup never removes a file merely because its name resembles a temporary file;
@@ -185,7 +192,7 @@ On a clean synthetic workspace:
 4. [ ] import synthetic evidence with visible progress;
 5. [ ] observe preserved and verified evidence state;
 6. [ ] close ECO through the ordinary window path;
-7. [ ] verify the owner is released;
+7. [ ] verify ownership is released;
 8. [ ] reopen the same workspace;
 9. [ ] verify the same Matter and evidence state;
 10. [ ] attempt a second process and alias path while the first is open;
@@ -199,8 +206,7 @@ Before issue #4 or public release can pass, preserve:
 - exact changed-file inventory;
 - source hashes or Git blob identities;
 - local ordinary/race/vet results;
-- Linux subprocess raw output;
-- Windows subprocess raw output;
+- Linux and Windows subprocess evidence;
 - exact-head GitHub Actions jobs and conclusions;
 - artifact inventory;
 - temporary binary identity and deletion/containment status;
