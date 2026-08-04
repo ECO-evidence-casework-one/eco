@@ -1,220 +1,212 @@
 # Workspace Ownership V2 test plan
 
-**Issues:** #4, #53 and #69  
-**Status:** mandatory pre-implementation and qualification plan  
-**Date:** 4 August 2026
+**Status:** controlling hostile-path plan. Slice 1 tests are implemented for root ownership, owned root creation, aliases and root/parent substitution. Remaining sections are mandatory before issue #4 can pass.
 
-The tests below must exercise normal public application APIs. Tests that call hidden lock helpers directly are supporting evidence only and cannot replace subprocess proof.
+## Test principles
 
-## Test harness rules
+- use normal public or intended application APIs for integration proofs;
+- use real subprocesses for cross-process behaviour;
+- preserve exact source and test identities;
+- exercise Windows and Linux separately where filesystem semantics differ;
+- use synthetic information only;
+- never treat one-process mutex tests as cross-process proof;
+- never treat pathname equality as object-identity proof;
+- preserve unrelated sentinels during every hostile substitution test;
+- fail the test if cleanup or rollback removes an object the transaction did not create or identify.
 
-- Use synthetic workspace content only.
-- Use separate OS processes for ownership and stale-writer tests.
-- Record exact process roles, paths, object identities, revisions, exit codes and final persisted state.
-- Use deterministic synchronization barriers rather than arbitrary sleeps wherever possible.
-- Preserve a raw event log for each scenario.
-- Verify both the intended workspace and unrelated sentinel objects after every hostile scenario.
-- Run Linux/amd64 and Windows/amd64 platform suites.
-- Unsupported platforms must prove fail-closed behaviour.
+## Slice 1 — implemented primitive tests
 
-## OW-01 — stale writer cannot overwrite newer state
+### Existing root ownership
 
-1. Create a workspace and close it.
-2. Process A opens writable and pauses after reading revision N.
-3. Process B attempts writable open through the same path.
-4. Expected primary result: B is refused while A owns the workspace.
-5. After A closes, B opens revision N.
-6. B pauses with a stale in-memory snapshot.
-7. A reopens, saves a Matter change as revision N+1 and closes.
-8. B attempts to save its older snapshot with expected revision N.
-9. B must receive typed stale-revision failure.
-10. B's complete in-memory mutation must roll back.
-11. Persisted revision N+1 and A's Matter change must remain intact.
+- [x] first owner acquires an existing root;
+- [x] second same-process owner is rejected;
+- [x] second subprocess owner is rejected;
+- [x] owner release allows later acquisition;
+- [x] owner lock exists inside the owned root;
+- [x] root identity revalidation succeeds while unchanged.
 
-## OW-02 — alias cannot split writable ownership
+### Alias domain
 
-Run the scenario for every supported alias available on the platform:
+- [x] Linux symlink alias reaches the same root lock domain;
+- [x] Linux parent alias reaches the same creation-claim domain;
+- [x] Windows creation keys normalise case aliases;
+- [x] Windows creation keys normalise trailing dot/space aliases.
 
-- relative versus absolute path;
-- case variation on Windows;
-- directory symbolic link;
-- Windows junction;
-- renamed parent with retained handle;
-- Linux bind mount where CI capability permits;
-- alternate path spelling that resolves to the same object.
+### First creation
 
-Process A opens through path 1. Process B opens through path 2.
+- [x] a missing root is created only while a parent creation claim is held;
+- [x] root ownership is obtained before the creation claim is released;
+- [x] a second acquisition is rejected after first creation;
+- [x] a real subprocess concurrent-creation attempt is rejected.
 
-Exactly one writable owner may exist. B must be refused or attached as an explicitly read-only view if such a mode is later implemented. It must never receive a second writable domain.
+### Substitution
 
-## OW-03 — parent/root substitution
+- [x] Linux parent replacement is detected;
+- [x] Linux replacement-parent sentinel survives;
+- [x] Linux root replacement is detected;
+- [x] Linux replacement-root sentinel survives.
 
-1. Retain the selected parent and workspace root.
-2. Pause before the first managed write.
-3. Replace or rename the logical parent/root path and place an unrelated directory at the old name.
-4. Resume the transaction.
-5. The operation must fail with object-identity-changed status.
-6. No managed file may be written into the unrelated replacement.
-7. An unrelated sentinel must remain byte-identical.
-8. Cleanup may affect only exact transaction-owned objects under retained identities.
+## Slice 2 — Vault integration and retained lifetime
 
-## OW-04 — Linux nested cleanup substitution
+- [ ] `OpenVault` acquires or creates the root owner before `objects`, key or metadata files are created;
+- [ ] the Vault retains ownership for its complete writable lifetime;
+- [ ] a second same-route `OpenVault` fails with `ErrWorkspaceInUse`;
+- [ ] a second alias-route `OpenVault` fails;
+- [ ] a second subprocess `OpenVault` fails;
+- [ ] `Vault.Close` releases exactly once and erases the key;
+- [ ] all public operations fail after close;
+- [ ] failed opening releases ownership and removes only transaction-owned incomplete children;
+- [ ] existing callers and tests close Vaults explicitly or through test cleanup;
+- [ ] the real application closes the Vault on normal window shutdown.
 
-1. Create a transaction-owned nested recovery directory containing an expected child.
-2. Cause cleanup to inspect the child and pause before recursion.
-3. Rename the inspected child and substitute another same-mount directory containing a sentinel at the original name.
-4. Resume cleanup.
-5. The substituted sentinel must survive.
-6. Cleanup must either recurse through the retained original descriptor or reject the identity mismatch.
-7. Recovery state must remain valid and explain what was retained.
+## Slice 3 — persisted revision and unique metadata transaction
 
-## OW-05 — concurrent new workspace creation
+- [ ] a new workspace begins with a defined persisted revision;
+- [ ] opening records the exact authenticated revision;
+- [ ] each successful save increments exactly once;
+- [ ] a stale expected revision is rejected before file replacement;
+- [ ] rejected stale state does not alter memory, metadata or audit;
+- [ ] temporary metadata filenames are unique and created exclusively;
+- [ ] commit revalidates root identity and temporary-file ownership;
+- [ ] failed write, sync or rename leaves the prior authenticated metadata active;
+- [ ] expected revision advances only after durable success;
+- [ ] abandoned transaction cleanup removes only the owned temporary object.
 
-1. Select one empty parent and one intended workspace name.
-2. Start two normal create-workspace calls at the same barrier.
-3. Exactly one process may create the workspace.
-4. The second must return a clean owned/conflict result.
-5. Final state must contain exactly one:
-   - workspace identity;
-   - key;
-   - metadata file;
-   - object directory;
-   - initial revision.
-6. No process may delete or replace objects created by the other process.
-7. The successful workspace must reopen and pass authentication.
+## Slice 4 — public mutator rollback matrix
 
-## OW-06 — concurrent first candidate launch
+Inject deterministic persistence failures into every mutating path, including:
 
-1. Use an empty candidate-state parent.
-2. Start two normal application first-launch calls simultaneously.
-3. Exactly one candidate identity/state transaction becomes authoritative.
-4. The other process must reopen the completed state or fail cleanly.
-5. No split selection state, duplicate initial workspaces or mixed candidate identity may exist.
-6. Every audit event must form one valid chain.
+- [ ] `Save`;
+- [ ] `AddChange`;
+- [ ] selected page and selected evidence;
+- [ ] low-sensory and reduced-motion settings;
+- [ ] Matter creation and edits;
+- [ ] image rotation;
+- [ ] evidence import preservation stages;
+- [ ] OCR application;
+- [ ] Ask ECO question/audit persistence;
+- [ ] evidence verification success/failure updates;
+- [ ] backup audit changes;
+- [ ] reset, migration and restore state updates.
 
-## OW-07 — fixed temporary name attack eliminated
+For each path prove:
 
-1. Place a hostile file or link at the old fixed `workspace.ecodb.tmp` name.
-2. Perform a normal save.
-3. The new implementation must not use or remove the hostile object.
-4. A unique exclusive transaction temporary object must be used.
-5. The sentinel at the old name remains unchanged.
+- [ ] returned error is non-nil and bounded;
+- [ ] the in-memory snapshot equals its pre-call snapshot;
+- [ ] the authenticated on-disk workspace equals its pre-call state;
+- [ ] no success/audit entry remains;
+- [ ] no unowned temporary or object file is removed.
 
-## OW-08 — persistence failure rollback matrix
+## Slice 5 — restore owner transfer
 
-Inject failure at each durable stage:
+Use a real active Vault and staged restored Vault.
 
-- temporary creation;
-- write;
-- encryption/authentication;
-- temporary flush;
-- pre-replacement revalidation;
-- atomic replacement;
-- parent/root flush;
-- post-replacement retain/reopen;
-- final identity verification.
+- [ ] active root owner is retained through the rollback window;
+- [ ] staged root owner is retained through validation and activation;
+- [ ] controlled rename succeeds with retained Windows handles and Linux descriptors;
+- [ ] stage owner is retargeted and revalidated at the active route;
+- [ ] old owner is retargeted at the checkpoint route;
+- [ ] no second ordinary `OpenVault` acquisition is attempted on the activated stage;
+- [ ] existing Vault receives staged owner, key, objects and workspace atomically;
+- [ ] success releases the old checkpoint owner only after activation proof;
+- [ ] failure restores the old root and ownership;
+- [ ] failure preserves unrelated replacement sentinels;
+- [ ] no lock remains attached to the wrong root after success or rollback;
+- [ ] restored Vault can close and reopen normally.
 
-Repeat for each public mutation family:
+## Slice 6 — migration, reset and candidate state
 
-- Matter create/edit;
-- evidence preservation transition;
-- extracted reading;
-- OCR result;
-- evidence linking;
-- Ask/question record;
-- audit/change record;
-- settings;
-- selected page/item;
-- migration activation;
-- restore activation;
-- reset.
+### Migration
 
-For every failure:
+- [ ] source, stage, checkpoint and recovery roles are object-bound;
+- [ ] concurrent migration/open attempts cannot split ownership;
+- [ ] interruption recovery identifies exact objects, not only names;
+- [ ] rollback preserves unrelated replacements.
 
-- no false completed state;
-- complete in-memory rollback where the old state remains authoritative;
-- exact recoverable record where rollback cannot safely complete;
-- no unrelated cleanup;
-- next reopen produces one explicit valid state.
+### Reset
 
-## OW-09 — owner death and recovery
+- [ ] selected workspace ownership is retained for the full reset;
+- [ ] only referenced or transaction-owned objects are removed;
+- [ ] alias or parent substitution fails closed;
+- [ ] unrelated sentinels survive;
+- [ ] persistence failure restores the pre-reset workspace.
 
-Terminate the owning process at each important phase:
+### Candidate application state
 
-- after owner acquisition;
-- after temporary creation;
-- after partial write;
-- after complete temporary flush;
-- immediately before replacement;
-- immediately after replacement;
-- before parent flush;
-- before in-memory revision update.
+- [ ] parent claim exists before first candidate state is created;
+- [ ] concurrent first launch permits one creator;
+- [ ] candidate-state revision/CAS prevents stale replacement;
+- [ ] selected workspace identity cannot be overwritten by an older process;
+- [ ] aliases cannot create multiple candidate-state domains.
 
-A new process must either:
+## Slice 7 — Linux nested cleanup continuity
 
-- open the last complete authenticated revision; or
-- enter explicit recovery for the exact transaction.
+Construct a nested directory tree containing transaction-owned cleanup candidates and unrelated sentinels.
 
-It must not guess, merge partial metadata or delete unrelated objects.
+- [ ] recursion proceeds through retained descriptors; or
+- [ ] every reopened child is compared to the exact previously inspected object;
+- [ ] substitute a same-mount child after inspection;
+- [ ] cleanup rejects the substituted child;
+- [ ] replacement sentinel survives;
+- [ ] original transaction object remains recoverable or is safely cleaned through its retained identity;
+- [ ] symlinks, bind-mount-like aliases and non-directory replacements fail closed.
 
-## OW-10 — close lifecycle
+## Slice 8 — owner death and recovery
 
-- `Vault.Close` is idempotent.
-- Mutations started after closing fail.
-- Active operations cannot outlive released ownership without a controlled cancellation/finish contract.
-- Sensitive key material owned by the Vault is zeroed before release completes.
-- The OS owner primitive is released last.
-- A second process can acquire writable ownership only after close completes.
+- [ ] subprocess holding a root owner is terminated;
+- [ ] OS releases the lock;
+- [ ] later opening revalidates the root and authenticated metadata;
+- [ ] abandoned unique transaction files are identified by bounded transaction records;
+- [ ] cleanup never removes a file merely because its name resembles a temporary file;
+- [ ] recovery either completes or rolls back deterministically.
 
-## OW-11 — read-only snapshot isolation
+## Slice 9 — preservation and lifecycle regressions
 
-A `Snapshot` returned to UI code must not allow later mutation of nested slices, maps, regions, receipts or settings inside the live workspace.
+Rerun the complete existing suite for:
 
-Add targeted mutation tests for every nested reference type. This test does not replace process ownership but prevents accidental in-process stale or cross-thread mutation.
+- [ ] encrypted import and duplicate handling;
+- [ ] immutable source verification;
+- [ ] preservation interruption and recovery;
+- [ ] OCR provenance and rollback;
+- [ ] portable backup creation;
+- [ ] restore round trip and wrong-passphrase isolation;
+- [ ] migration compatibility and interruption recovery;
+- [ ] reset isolation;
+- [ ] source-policy and offline checks;
+- [ ] Windows failure-stop and deterministic build checks.
 
-## OW-12 — migration, restore and reset regression
+## Slice 10 — actual application journey
 
-Re-run the complete issue #3 suites with V2 ownership active:
+On a clean synthetic workspace:
 
-- preservation interruption and recovery;
-- verified object access;
-- authenticated backup;
-- staged restore;
-- migration checkpoint and rollback;
-- selected workspace reset;
-- unrelated sentinel preservation;
-- source hash and object identity enforcement.
-
-## OW-13 — real UI/application journey
-
-On the exact candidate:
-
-1. launch ECO;
-2. create an empty workspace;
-3. create a Matter;
-4. add synthetic evidence;
-5. close ECO cleanly;
-6. start a second process while the first is still open and prove writable refusal;
-7. close the first process;
-8. reopen the same workspace and Matter;
-9. verify revision, Matter, evidence and audit continuity.
-
-Run on the Acer baseline and in Windows CI where possible.
+1. [ ] launch ECO;
+2. [ ] create a new workspace;
+3. [ ] create a named Matter;
+4. [ ] import synthetic evidence with visible progress;
+5. [ ] observe preserved and verified evidence state;
+6. [ ] close ECO through the ordinary window path;
+7. [ ] verify the owner is released;
+8. [ ] reopen the same workspace;
+9. [ ] verify the same Matter and evidence state;
+10. [ ] attempt a second process and alias path while the first is open;
+11. [ ] verify both are rejected without damaging the active workspace.
 
 ## Qualification outputs
 
-The workspace repair PR must provide:
+Before issue #4 or public release can pass, preserve:
 
 - exact base and head SHAs;
-- changed-file inventory;
-- ordinary and race-test results;
-- raw subprocess event logs;
-- Linux and Windows identity/alias scenario results;
-- failure-injection matrix;
-- preservation/migration/restore/reset regression results;
-- Windows deterministic build receipt;
-- exact run artifact inventory proving no uploaded executable;
+- exact changed-file inventory;
+- source hashes or Git blob identities;
+- local ordinary/race/vet results;
+- Linux subprocess raw output;
+- Windows subprocess raw output;
+- exact-head GitHub Actions jobs and conclusions;
+- artifact inventory;
+- temporary binary identity and deletion/containment status;
 - known limitations;
-- independent delta-first review decision.
+- same-account versus independent-review relationship.
 
-No single green CI check or unit-test percentage may be used to claim these properties without the scenario evidence above.
+## Stop rule
+
+Any failed ownership, revision, rollback, substitution, cleanup or lifecycle property blocks merge and public release. The 9 August target cannot downgrade or waive a failed P0 property.
