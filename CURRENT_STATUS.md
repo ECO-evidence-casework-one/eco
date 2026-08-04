@@ -1,9 +1,9 @@
 # Current ECO project status
 
 **Status date:** 4 August 2026  
-**Latest control update:** 4 August 2026, 06:39 BST  
+**Latest control update:** 4 August 2026, 07:04 BST  
 **Canonical public status record:** this file  
-**Current reviewed `main` commit before this documentation reconciliation:** `4c6929b6b94e4a428ccc69336b50a38ba9fe6271`  
+**Current reviewed `main` commit before this documentation correction:** `c36753f0fff3daef3b94d1e3ae11fd25bea8933e`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Release position:** development only; no approved public binary
 
@@ -46,7 +46,7 @@ Its four current P0 blockers are:
 3. Linux nested cleanup can close an inspected directory and reopen it by name;
 4. workspace creation, first launch and candidate-state writes are not protected by one alias-safe cross-process ownership transaction.
 
-Issue #4 remains open. The branch must be reconciled with current `main` `4c6929b6b94e4a428ccc69336b50a38ba9fe6271` without losing the no-public-artifact workflow, verified fail-fast controls, Windows pointer-safety corrections or the current historical-provenance controls.
+Issue #4 remains open. The branch must be reconciled with current `main` `c36753f0fff3daef3b94d1e3ae11fd25bea8933e` without losing the no-public-artifact workflow, verified fail-fast controls, Windows pointer-safety corrections or the current historical-provenance controls.
 
 ### Windows CI truthfulness — issue #27 closed
 
@@ -93,11 +93,15 @@ The generic root repository manifest and preparation receipt are now explicit po
 
 These corrections prevent the historical files from being mistaken for current release evidence. They do not create an authoritative exact-build manifest, executable SBOM, final notice bundle, signing record or release receipt. P0 issue #15 remains open.
 
-### Intended-purpose and health-input conformance
+### Intended purpose and sensitive-evidence assistance
 
-PR #18 proposes a controlling intended-purpose and public-claims boundary. P0 issue #20 records the implementation gate because the current Ask ECO path does not yet enforce the proposed restriction for health-related or mixed-purpose clinical material.
+PR #18 is closed unmerged and superseded because its whole-vault health-content restriction was overbroad.
 
-Until issue #20 is independently closed, health-related material must not enter Ask ECO or another generated-answer route except synthetic tests designed to prove safe rejection.
+Issue #16 remains open for one authoritative intended-purpose and public-claims record. Corrected P0 issue #20 now controls the actual risk boundary: ECO may assist a user with evidence containing health, legal, benefits, housing, employment or other sensitive subject matter, but it must not diagnose, recommend treatment, perform clinical-risk assessment, undertake reserved legal activity, claim professional representation, profile people, score eligibility or credibility, or make or materially influence official adverse decisions without a fresh assessment.
+
+Permitted assistance may include preservation, OCR and extraction, exact search, source-linked summaries, chronologies, comparisons and user-controlled drafting, provided original text, OCR, generated suggestions, user confirmations and notes remain distinguishable.
+
+Current Ask ECO and future local-model routes are not approved for real or sensitive evidence until exact implementation tests prove this permitted/prohibited boundary, source attribution, offline operation and meaningful user review.
 
 ### Other active grouped work
 
@@ -110,8 +114,9 @@ Until issue #20 is independently closed, health-related material must not enter 
 - Issue #15: actual-build SBOM, licence notices and release provenance.
 - Issue #16: intended purpose, excluded uses and controlled public claims.
 - Issue #17: accountable publisher, response routes and project continuity.
-- Issue #20: gate Ask and generated processing for health-related inputs.
+- Issue #20: gate clinical, diagnostic and high-consequence outputs while permitting evidence assistance.
 - Issue #24: historical executable containment, manual-dispatch proof and branch reconciliation.
+- Issue #42: correct canonical status after the intended-purpose reset.
 
 ## Current stop gates
 
@@ -122,12 +127,14 @@ The following remain blocked:
 - use or redistribution of historical unsigned Actions executables;
 - release-candidate or stable-release status;
 - claims of reliable generative offline AI assistance;
-- claims that the intended-purpose health-input boundary is implemented;
+- claims that the clinical, professional and high-consequence output boundary is implemented;
 - claims of completed production OCR or complete native PDF investigation;
 - claims of accessibility, forensic, legal, medical or regulatory compliance;
 - all public-sector or private-institutional deployment;
 - all healthcare or clinical deployment;
 - all EU availability, including download, supply or deployment.
+
+These stop gates do not prohibit source-linked assistance merely because a document contains health or legal information. They block unverified real-evidence use, prohibited professional or decision outputs, and unassessed deployment contexts.
 
 ## Underlying technical and organisational limits
 
@@ -137,7 +144,7 @@ The following remain blocked:
 - Issue #14 blocks privacy-safe diagnostics and final bundled-runtime network claims.
 - There is no authoritative current exact-build manifest, executable SBOM, final notice bundle, signed receipt or actual packaged-artifact reconciliation required by issue #15.
 - Issue #24 remains open despite successful no-artifact PR evidence.
-- PR #18 and issues #16 and #20 remain unresolved.
+- PR #18 is closed unmerged and superseded; issues #16 and #20 remain unresolved.
 - No accountable established publisher, support operator, complaints handler or continuity owner has accepted the issue #17 duties.
 - Accessibility, responsiveness and page-aware search qualification remains incomplete.
 
@@ -156,7 +163,7 @@ Before the release position can be reconsidered, ECO requires objective evidence
 - keyboard, assistive-technology, DPI and cognitive-accessibility evidence;
 - trusted Authenticode signing with no post-signing file mutation;
 - an authoritative intended-purpose and excluded-use boundary;
-- technical enforcement of the health-related generated-processing boundary recorded in issue #20;
+- technical proof that source-linked sensitive-evidence assistance cannot cross into diagnosis, treatment, professional representation, profiling, eligibility or official adverse-decision outputs;
 - an accountable publisher or steward for security, privacy, complaints, support and continuity;
 - a controlled distribution pipeline that exposes no runnable artifact before approval;
 - independent closure of every release-blocking P0 and P1 finding.
