@@ -2,7 +2,7 @@
 
 **Report ID:** `ECO-PROGRESS-20260804-INSPECTION-001`  
 **Prepared:** 4 August 2026, 10:13 BST / 11:13 CEST  
-**Lane:** independent inspection, repository control and release-gate assurance  
+**Lane:** inspection/control-room, repository control and release-gate assurance  
 **Canonical `main` reviewed:** `f997e1049f8c24ed04848127ec26d55ee784b6f4`  
 **Application PR:** #11 at `61a2004809b341e72f70321843c64c3ff477f549`  
 **Reviewer relationship:** inspection-lane review; the same technical GitHub account posts records across project lanes
@@ -75,7 +75,7 @@ Issues #16, #20 and #46 remain open because governance adoption does not prove i
 The publisher/stewardship gate remains accepted in governance scope:
 
 - no organisation or individual is appointed;
-- Karl or another contributor is not required to form a company, CIC, charity or other entity;
+- the originating developer or another contributor is not required to form a company, CIC, charity or other entity;
 - contribution and repository administration do not automatically assign organisational duties;
 - responsibilities arising from actual publishing, signing, contracting, data processing, claims or law remain preserved;
 - the preferred route is an established compatible organisation;
