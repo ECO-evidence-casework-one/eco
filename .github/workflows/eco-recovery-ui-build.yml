@@ -58,10 +58,15 @@ jobs:
             -p:DebugType=None -p:DebugSymbols=false `
             -o private-recovery-publish
           if ($LASTEXITCODE -ne 0) { throw 'Recovery application publish failed.' }
+
+          $symbolFiles = Get-ChildItem private-recovery-publish -File -Filter '*.pdb'
+          $symbolFiles | Format-Table Name,Length
+          $symbolFiles | Remove-Item -Force
+
           $files = Get-ChildItem private-recovery-publish -File | Sort-Object Name
           $files | Format-Table Name,Length
           if ($files.Count -ne 1 -or $files[0].Extension -ne '.exe') {
-            throw "Expected exactly one internal EXE; found $($files.Count) files."
+            throw "Expected exactly one internal EXE after removing optional symbols; found $($files.Count) files."
           }
           $hash = (Get-FileHash -Algorithm SHA256 $files[0].FullName).Hash.ToLowerInvariant()
           Write-Host "INTERNAL_RECOVERY_SHELL_SIZE=$($files[0].Length)"
