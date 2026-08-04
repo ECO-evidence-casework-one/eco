@@ -19,7 +19,7 @@ Technical repository roles do not appoint a legal publisher, supplier, director,
 
 The official ECO intended purpose, excluded uses and public-claims boundary is defined in [`docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md`](docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md).
 
-That record becomes controlling only when merged into the canonical branch after independent review. Governance adoption must remain separate from:
+That record becomes controlling only when merged into the canonical branch after documented review meeting the applicable review and independence requirements. Governance adoption must remain separate from:
 
 - proof that the application implements the boundary;
 - legal or regulatory classification;
@@ -56,4 +56,4 @@ Priority order:
 
 ## Changes
 
-Substantial architecture, intended-purpose, licence, privacy, publisher, signing or release-policy changes require a documented issue or pull request and explicit owner approval.
+Substantial architecture, intended-purpose, licence, privacy, publisher, signing or release-policy changes require a documented issue or pull request and a recorded approval decision appropriate to the risk and current project structure.
