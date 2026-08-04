@@ -118,3 +118,15 @@ func TestWorkspaceOwnerDetectsRootSubstitution(t *testing.T) {
 		t.Fatalf("replacement root was altered: %q err=%v", data, err)
 	}
 }
+
+func TestWorkspaceOwnerLinuxLockFileIsInsideRoot(t *testing.T) {
+	root := t.TempDir()
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	if _, err := os.Stat(filepath.Join(root, workspaceOwnerFilename)); err != nil {
+		t.Fatal(err)
+	}
+}
