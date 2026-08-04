@@ -21,32 +21,43 @@ jobs:
           persist-credentials: true
           fetch-depth: 1
 
-      - name: Apply exact Avalonia 12 syntax repairs
+      - name: Apply exact visual review repairs
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $path = 'recovery/Eco.Recovery/MainWindow.axaml'
-          $text = [IO.File]::ReadAllText($path)
+          $xamlPath = 'recovery/Eco.Recovery/MainWindow.axaml'
+          $codePath = 'recovery/Eco.Recovery/MainWindow.axaml.cs'
+          $xaml = [IO.File]::ReadAllText($xamlPath)
+          $code = [IO.File]::ReadAllText($codePath)
 
-          $replacements = @(
-            @('Watermark="Ask about this Matter or request a draft…"', 'PlaceholderText="Ask about this Matter or request a draft…"'),
-            @('Checked="OnLowSensoryChanged" Unchecked="OnLowSensoryChanged"', 'Click="OnLowSensoryChanged"'),
-            @('<Border Classes="Card"><TextBlock Text="£1,240" FontSize="28" FontWeight="Bold" /><TextBlock Classes="Muted" Text="Accepted quotation" /></Border>', '<Border Classes="Card"><StackPanel><TextBlock Text="£1,240" FontSize="28" FontWeight="Bold" /><TextBlock Classes="Muted" Text="Accepted quotation" /></StackPanel></Border>'),
-            @('<Border Grid.Column="1" Classes="Card"><TextBlock Text="£620" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" /><TextBlock Classes="Muted" Text="Received and evidenced" /></Border>', '<Border Grid.Column="1" Classes="Card"><StackPanel><TextBlock Text="£620" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource AccentBrush}" /><TextBlock Classes="Muted" Text="Received and evidenced" /></StackPanel></Border>'),
-            @('<Border Grid.Column="2" Classes="Card"><TextBlock Text="£620" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" /><TextBlock Classes="Muted" Text="Conditional / not received" /></Border>', '<Border Grid.Column="2" Classes="Card"><StackPanel><TextBlock Text="£620" FontSize="28" FontWeight="Bold" Foreground="{DynamicResource WarningBrush}" /><TextBlock Classes="Muted" Text="Conditional / not received" /></StackPanel></Border>')
-          )
+          $oldStatus = '<Ellipse Width="9" Height="9" Fill="#47C98B" VerticalAlignment="Center" /><TextBlock x:Name="AIStatusText" Text="Offline engine ready" FontWeight="SemiBold" />'
+          $newStatus = '<Ellipse Width="9" Height="9" Fill="#D97706" VerticalAlignment="Center" /><TextBlock x:Name="AIStatusText" Text="Integration pending" Foreground="{DynamicResource WarningBrush}" FontWeight="SemiBold" />'
+          if (-not $xaml.Contains($oldStatus)) { throw 'Expected conversation AI status source was not found.' }
+          $xaml = $xaml.Replace($oldStatus, $newStatus)
 
-          foreach ($pair in $replacements) {
-            if (-not $text.Contains($pair[0])) {
-              throw "Expected source pattern missing: $($pair[0])"
-            }
-            $text = $text.Replace($pair[0], $pair[1])
+          $oldVisualSetup = "        SetPage(page, persist: false);`r`n    }`r`n`r`n    public void OpenStartForVisuals()"
+          $newVisualSetup = "        SetPage(page, persist: false);`r`n        Toast.IsVisible = false;`r`n    }`r`n`r`n    public void OpenStartForVisuals()"
+          if (-not $code.Contains($oldVisualSetup)) {
+            $oldVisualSetup = "        SetPage(page, persist: false);`n    }`n`n    public void OpenStartForVisuals()"
+            $newVisualSetup = "        SetPage(page, persist: false);`n        Toast.IsVisible = false;`n    }`n`n    public void OpenStartForVisuals()"
           }
+          if (-not $code.Contains($oldVisualSetup)) { throw 'Expected visual setup source was not found.' }
+          $code = $code.Replace($oldVisualSetup, $newVisualSetup)
 
-          [IO.File]::WriteAllText($path, $text, [Text.UTF8Encoding]::new($false))
+          $oldLayout = "        var compact = Bounds.Width < 1050 || _state.InterfaceScale >= 1.9;`r`n        AppRoot.ColumnDefinitions[0].Width = new GridLength(compact ? 196 : 248);`r`n        BrandSubtitle.IsVisible = !compact;"
+          $newLayout = "        var highScale = _state.InterfaceScale >= 1.9;`r`n        var compact = Bounds.Width < 1050 && !highScale;`r`n        AppRoot.ColumnDefinitions[0].Width = new GridLength(highScale ? 280 : compact ? 196 : 248);`r`n        BrandSubtitle.IsVisible = !compact;"
+          if (-not $code.Contains($oldLayout)) {
+            $oldLayout = "        var compact = Bounds.Width < 1050 || _state.InterfaceScale >= 1.9;`n        AppRoot.ColumnDefinitions[0].Width = new GridLength(compact ? 196 : 248);`n        BrandSubtitle.IsVisible = !compact;"
+            $newLayout = "        var highScale = _state.InterfaceScale >= 1.9;`n        var compact = Bounds.Width < 1050 && !highScale;`n        AppRoot.ColumnDefinitions[0].Width = new GridLength(highScale ? 280 : compact ? 196 : 248);`n        BrandSubtitle.IsVisible = !compact;"
+          }
+          if (-not $code.Contains($oldLayout)) { throw 'Expected responsive layout source was not found.' }
+          $code = $code.Replace($oldLayout, $newLayout)
+
+          [IO.File]::WriteAllText($xamlPath, $xaml, [Text.UTF8Encoding]::new($false))
+          [IO.File]::WriteAllText($codePath, $code, [Text.UTF8Encoding]::new($false))
           git diff --check
-          if ($LASTEXITCODE -ne 0) { throw 'Repaired source failed git diff check.' }
-          git diff -- $path
+          if ($LASTEXITCODE -ne 0) { throw 'Visual repair source failed git diff check.' }
+          git diff -- $xamlPath $codePath
 
       - name: Commit repaired source to recovery branch
         shell: pwsh
@@ -54,8 +65,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           git config user.name 'eco-recovery-bot'
           git config user.email 'eco-recovery-bot@users.noreply.github.com'
-          git add recovery/Eco.Recovery/MainWindow.axaml
-          git commit -m 'Recovery: correct Avalonia 12 XAML syntax'
-          if ($LASTEXITCODE -ne 0) { throw 'Source repair commit failed.' }
+          git add recovery/Eco.Recovery/MainWindow.axaml recovery/Eco.Recovery/MainWindow.axaml.cs
+          git commit -m 'Recovery: correct visual truth and high-scale layout'
+          if ($LASTEXITCODE -ne 0) { throw 'Visual repair commit failed.' }
           git push origin HEAD:development/eco-recovery-candidate
-          if ($LASTEXITCODE -ne 0) { throw 'Source repair push failed.' }
+          if ($LASTEXITCODE -ne 0) { throw 'Visual repair push failed.' }
