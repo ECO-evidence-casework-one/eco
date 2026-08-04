@@ -62,7 +62,7 @@ foreach ($line in $lddOutput) {
   $candidate = $null
   if ($line -match '=>\s+(\S+\.dll)(?:\s|$)') { $candidate = $Matches[1] }
   elseif ($line -match '^\s*(\S+\.dll)(?:\s|$)') { $candidate = $Matches[1] }
-  if ($candidate -and $candidate -notmatch '^/[A-Za-z]/Windows/System32/') {
+  if ($candidate -and $candidate -match '/(ucrt64|mingw64)/bin/') {
     [void]$dllUnixPaths.Add($candidate)
   }
 }
