@@ -2,6 +2,7 @@
 
 **Report ID:** `ECO-PROGRESS-20260804-PPK-001`  
 **Prepared:** 4 August 2026, approximately 09:58 BST / 10:58 CEST  
+**Corrected before merge:** 4 August 2026, after raw workflow checkout inspection  
 **Lane:** legal, governance and public-safe organisational exploration  
 **Starting canonical baseline:** `62e00ef5e573605b2a96b445a0dc42b0f4e387bd`  
 **Canonical ending state:** `f997e1049f8c24ed04848127ec26d55ee784b6f4`  
@@ -85,13 +86,19 @@ The template requests only a non-binding written discussion and expressly states
 - prohibited uses of the pack;
 - the rule that completion opens no product, evidence-use, signing, release or deployment gate.
 
-### 5. Exact-head validation completed
+### 5. Tested PR merge-tree validation completed
 
-Draft PR #51 froze exact head:
+Draft PR #51 froze branch head:
 
 `c335733309838b8468a9fd102b456fece4f83ab3`
 
-Workflow run `30893783028` passed:
+Workflow run `30893783028` did **not** check out that branch head directly. The raw checkout log fetched and tested synthetic PR merge commit:
+
+`18a47d0f729d4634a201a7821232f5c264b7775f`
+
+That tested merge combined branch head `c3357333...` with base `62e00ef5...`.
+
+The tested PR merge-tree run passed:
 
 - source policy;
 - Linux tests and vet;
@@ -101,7 +108,7 @@ Workflow run `30893783028` passed:
 
 The run's artifact inventory was exactly empty.
 
-A control-lane review recorded a bounded PASS for the three-document generic pack.
+The original control-lane review called the run `exact-head` evidence. That label was incorrect. The bounded test results remain valid for the identified synthetic PR merge tree. The historical review remains preserved and the correction is recorded expressly rather than silently rewritten.
 
 ### 6. PR #51 merged and verified
 
@@ -114,6 +121,8 @@ Merged-tree comparison confirmed:
 - exactly one squash commit;
 - exactly three new partnership documentation files;
 - no application source, tests, workflow, `VERSION`, executable, model, dependency, SBOM, notices, licence text or evidence fixture changes.
+
+The merged-tree comparison is separate evidence from the tested PR synthetic merge run.
 
 ### 7. Issue #50 closed within its exact scope
 
@@ -128,6 +137,7 @@ Its closing record states that named-organisation research and actual outreach r
 | Generic public-safe partner pack | PASS | Three documentation files only |
 | Plain-English project explanation | PASS | Current intended purpose, boundaries and limitations |
 | Non-binding written outreach template | PASS | Generic use only; no named recipient approved |
+| PR #51 test evidence | PASS, classification corrected | Tested synthetic PR merge `18a47d0f...`, not branch-head CI |
 | Named organisations | NOT ASSESSED | No organisation identified, researched or ranked |
 | Actual outreach | BLOCKED | Requires separate target research and approval |
 | Partnership or publisher appointment | BLOCKED | Issue #17 acceptance process remains incomplete |
@@ -153,7 +163,11 @@ Its closing record states that named-organisation research and actual outreach r
 
 ### Workflow evidence
 
-- PR #51 exact-head run `30893783028` — all jobs passed; artifact inventory empty.
+- PR #51 branch head: `c335733309838b8468a9fd102b456fece4f83ab3`;
+- workflow run: `30893783028`;
+- actual tested checkout: synthetic PR merge `18a47d0f729d4634a201a7821232f5c264b7775f`;
+- all jobs passed;
+- artifact inventory empty.
 
 ## Change inventory
 
@@ -191,6 +205,14 @@ Its closing record states that named-organisation research and actual outreach r
 
 ## Problems and limitations
 
+### Workflow evidence was initially misclassified
+
+The initial report draft and historical PR #51 review described run `30893783028` as exact-head evidence.
+
+Raw log inspection showed that GitHub checked out `refs/remotes/pull/51/merge` at synthetic merge commit `18a47d0f729d4634a201a7821232f5c264b7775f`.
+
+Effect: the PASS remains bounded to the tested PR merge tree. It is not branch-head CI. The merged squash tree was separately compared after merge.
+
 ### Generic material only
 
 The pack describes objective organisation categories but contains no evidence that any named body is interested, suitable or capable.
@@ -211,17 +233,24 @@ Effect: any organisation requesting a live or real-data trial must be referred b
 
 ## Next controlled actions
 
-1. Create a separate named-organisation research issue.
-2. Define objective scoring and exclusion criteria derived from the publisher acceptance checklist.
-3. Research organisations using current public sources without contacting them.
-4. Record evidence for mission fit, governance capability, open-source compatibility and conflicts.
-5. Stop for review before approving any outreach target or sending any message.
-6. Continue issue #46 implementation conformance and issue #24 artifact controls in their appropriate lanes.
+1. Complete and merge the repository-wide audit-classification correction covering affected PR workflow runs.
+2. Create a separate named-organisation research issue only after the correction is controlling.
+3. Define objective scoring and exclusion criteria derived from the publisher acceptance checklist.
+4. Research organisations using current public sources without contacting them.
+5. Record evidence for mission fit, governance capability, open-source compatibility and conflicts.
+6. Stop for review before approving any outreach target or sending any message.
+7. Continue issue #46 implementation conformance and issue #24 artifact controls in their appropriate lanes.
 
 ## Review statement
 
-This report was prepared from repository records, PR #51 exact-head CI, artifact inventory and merged-tree comparison.
+This report was prepared from repository records, PR #51 tested PR merge-tree CI, artifact inventory, raw checkout logs and merged-tree comparison.
 
 The same connected project account performed the work and prepared this report. It is a control-lane record, not an organisationally independent audit, partnership approval or legal opinion.
 
 No organisation, individual, partnership, publisher, contract, release or deployment is created by this report.
+
+## Correction history
+
+- **Initial draft:** described PR #51 workflow run `30893783028` as exact-head evidence.
+- **Correction before merge:** raw checkout log identified tested synthetic PR merge `18a47d0f729d4634a201a7821232f5c264b7775f`; all corresponding wording and evidence classification were corrected.
+- **Decision effect:** no change to the bounded generic-pack PASS or any gate. The correction narrows and accurately identifies the CI evidence.
