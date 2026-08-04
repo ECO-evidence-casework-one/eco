@@ -49,6 +49,7 @@ const (
 	ReasonAdmissionDenied         ReasonCode = "admission_denied"
 	ReasonGenerationFailed        ReasonCode = "generation_failed"
 	ReasonInvalidGeneration       ReasonCode = "invalid_generation"
+	ReasonRunIdentityFailed       ReasonCode = "run_identity_failed"
 	ReasonStreamIdentityMismatch  ReasonCode = "stream_identity_mismatch"
 	ReasonStreamSequenceViolation ReasonCode = "stream_sequence_violation"
 	ReasonChunkTooLarge           ReasonCode = "chunk_too_large"
@@ -114,12 +115,12 @@ type VerificationInput struct {
 
 type VerifiedOutput struct {
 	Accepted       bool
-	Text           string
+	Text           []byte
 	VerificationID string
 }
 
 type FallbackOutput struct {
-	Text          string
+	Text          []byte
 	FallbackID    string
 	Deterministic bool
 }
@@ -228,6 +229,7 @@ type Transient struct {
 	RuntimePrompt    []byte
 	Generated        []byte
 	VerificationCopy []byte
+	Verified         []byte
 }
 
 // Zero overwrites all owned transient byte slices and clears their lengths.
@@ -247,10 +249,14 @@ func (t *Transient) Zero() {
 	for i := range t.VerificationCopy {
 		t.VerificationCopy[i] = 0
 	}
+	for i := range t.Verified {
+		t.Verified[i] = 0
+	}
 	t.Prompt = nil
 	t.RuntimePrompt = nil
 	t.Generated = nil
 	t.VerificationCopy = nil
+	t.Verified = nil
 }
 
 type ZeroEraser struct{}
