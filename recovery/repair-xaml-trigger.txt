@@ -1,2 +1,0 @@
-repair-sequence: 2
-purpose: correct visual review findings for transient toasts, AI truth status and 225 percent sidebar layout
