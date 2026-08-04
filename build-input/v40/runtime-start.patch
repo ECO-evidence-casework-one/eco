@@ -41,3 +41,14 @@
  func setFocus(h HWND) { pSetFocus.Call(uintptr(h)) }
  func enableWindow(h HWND, on bool) {
  	v := uintptr(0)
+--- a/internal/v40/ai.go
++++ b/internal/v40/ai.go
+@@ -297,7 +297,7 @@
+ 	if maxTokens <= 0 {
+ 		maxTokens = 512
+ 	}
+-	args := []string{"-m", w.Config.ModelPath, "-f", promptPath, "--no-display-prompt", "--simple-io", "--no-warmup", "-t", strconv.Itoa(threads), "-c", strconv.Itoa(ctxSize), "-n", strconv.Itoa(maxTokens), "--temp", "0.1", "--top-p", "0.9", "--repeat-penalty", "1.08"}
++	args := []string{"-m", w.Config.ModelPath, "-f", promptPath, "--single-turn", "--no-display-prompt", "--simple-io", "--no-warmup", "--no-show-timings", "--log-disable", "-t", strconv.Itoa(threads), "-c", strconv.Itoa(ctxSize), "-n", strconv.Itoa(maxTokens), "--temp", "0.1", "--top-p", "0.9", "--repeat-penalty", "1.08"}
+ 	cmd := exec.Command(w.Config.LlamaCLIPath, args...)
+ 	cmd.Env = append(os.Environ(), "NO_COLOR=1")
+ 	prepareCommand(cmd)
