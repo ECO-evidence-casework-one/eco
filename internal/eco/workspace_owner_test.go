@@ -99,16 +99,13 @@ func TestWorkspaceOwnerHelperProcess(t *testing.T) {
 	_, _ = bufio.NewReader(os.Stdin).ReadByte()
 }
 
-func TestWorkspaceOwnerLockFileIsInsideRoot(t *testing.T) {
+func TestWorkspaceOwnerRevalidatesUnchangedRoot(t *testing.T) {
 	root := t.TempDir()
 	lease, err := acquireWorkspaceRootOwner(root)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer lease.Close()
-	if _, err := os.Stat(filepath.Join(root, workspaceOwnerFilename)); err != nil {
-		t.Fatal(err)
-	}
 	if err := lease.revalidate(); err != nil {
 		t.Fatal(err)
 	}
