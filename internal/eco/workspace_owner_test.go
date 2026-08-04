@@ -113,3 +113,37 @@ func TestWorkspaceOwnerLockFileIsInsideRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAcquireOrCreateWorkspaceRootOwnerCreatesRootUnderClaim(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "new-workspace")
+	lease, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("root not created safely: info=%v err=%v", info, err)
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConcurrentWorkspaceCreationHasOneWritableOwner(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "new-workspace")
+	first, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := acquireOrCreateWorkspaceRootOwner(root)
+	if second != nil {
+		_ = second.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		t.Fatalf("concurrent create/open error=%v", err)
+	}
+}
