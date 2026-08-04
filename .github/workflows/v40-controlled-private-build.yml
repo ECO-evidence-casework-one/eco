@@ -66,7 +66,7 @@ jobs:
           }
           $hotfixPath = "build-input/v40/v40-msys-runtime-hotfix.ps1"
           $hotfixHash = (Get-FileHash -Algorithm SHA256 $hotfixPath).Hash.ToLowerInvariant()
-          if ($hotfixHash -ne "a9e84d29e2d9909797375a7698b94a5ee89947dc1465a95a5ef386b5280cb58d") {
+          if ($hotfixHash -ne "84435a6d3024224ab03cf1f634d5b9ebd3bac4065367578875370160c750cf50") {
             throw "MSYS2 runtime hotfix hash mismatch: $hotfixHash"
           }
           & $hotfixPath -TargetPath $scriptPath
