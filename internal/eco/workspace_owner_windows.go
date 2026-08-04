@@ -5,30 +5,31 @@ package eco
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"syscall"
 	"unsafe"
 )
 
 const (
-	genericRead               = 0x80000000
-	genericWrite              = 0x40000000
-	fileShareRead             = 0x00000001
-	fileShareWrite            = 0x00000002
-	fileShareDelete           = 0x00000004
-	openAlways                = 4
-	openExisting              = 3
-	fileAttributeHidden       = 0x00000002
-	fileFlagBackupSemantics   = 0x02000000
-	lockfileFailImmediately   = 0x00000001
-	lockfileExclusiveLock     = 0x00000002
-	errorLockViolation        syscall.Errno = 33
-	errorSharingViolation     syscall.Errno = 32
+	genericRead                           = 0x80000000
+	genericWrite                          = 0x40000000
+	fileShareRead                         = 0x00000001
+	fileShareWrite                        = 0x00000002
+	fileShareDelete                       = 0x00000004
+	openAlways                            = 4
+	openExisting                          = 3
+	fileAttributeHidden                   = 0x00000002
+	fileFlagBackupSemantics               = 0x02000000
+	lockfileFailImmediately               = 0x00000001
+	lockfileExclusiveLock                 = 0x00000002
+	errorLockViolation      syscall.Errno = 33
+	errorSharingViolation   syscall.Errno = 32
 )
 
 var (
-	kernel32Workspace                    = syscall.NewLazyDLL("kernel32.dll")
-	procLockFileExWorkspace              = kernel32Workspace.NewProc("LockFileEx")
-	procUnlockFileExWorkspace            = kernel32Workspace.NewProc("UnlockFileEx")
+	kernel32Workspace                       = syscall.NewLazyDLL("kernel32.dll")
+	procLockFileExWorkspace                 = kernel32Workspace.NewProc("LockFileEx")
+	procUnlockFileExWorkspace               = kernel32Workspace.NewProc("UnlockFileEx")
 	procGetFileInformationByHandleWorkspace = kernel32Workspace.NewProc("GetFileInformationByHandle")
 )
 
@@ -105,4 +106,8 @@ func platformWorkspaceObjectIdentity(path string) (workspaceObjectIdentity, erro
 	}
 	file := uint64(info.FileIndexHigh)<<32 | uint64(info.FileIndexLow)
 	return workspaceObjectIdentity{Volume: uint64(info.VolumeSerialNumber), File: file}, nil
+}
+
+func platformWorkspaceCreationKey(leaf string) string {
+	return strings.ToLower(strings.TrimRight(leaf, " ."))
 }
