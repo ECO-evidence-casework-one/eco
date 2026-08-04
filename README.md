@@ -44,7 +44,7 @@ Later public source-development work is tracked through narrow issues and pull r
 
 - PR #10 merged evidence-preservation and source-binding changes, but issue #3 is reopened pending independent closure and follow-up issue #12.
 - PR #11 remains a draft for candidate-specific workspace state, migration, recovery and reset. It contains material progress but remains blocked by exact-head ownership, concurrency and filesystem-object findings recorded in issue #22 and on the PR.
-- Draft PR #18 proposes intended-purpose and public-claims controls; issue #20 records the unresolved health-related generated-processing implementation gate.
+- Issue #16 controls the intended-purpose and public-claims boundary. P0 issue #20 permits source-linked, user-controlled assistance with health, legal and other sensitive evidence in principle while blocking unverified diagnosis, treatment, clinical-risk, professional-representation, profiling, scoring and authority-side adverse-decision outputs.
 - Issues #5–#8 continue to track offline-AI behaviour, responsiveness, accessibility and document navigation.
 - Issues #14–#17 track diagnostic privacy and offline claims, actual-build SBOM/licensing/provenance, intended purpose and excluded uses, and accountable publisher/continuity arrangements.
 - P0 issue #24 tracks public Actions distribution of unsigned executables. New uploads were stopped on `main`, but historical artifacts remain unapproved until deleted or expired and the correction is fully evidenced.
@@ -65,6 +65,7 @@ Issue #27 is closed. Current `main` routes every covered native command in the W
 
 - [Current project status](CURRENT_STATUS.md)
 - [Current release gate](docs/control/CURRENT_RELEASE_GATE.md)
+- [Intended purpose and public claims control](docs/governance/INTENDED_PURPOSE_AND_CLAIMS_CONTROL.md)
 - [Historical provenance records](docs/provenance/HISTORICAL_RECORDS.md)
 - [Known limitations](KNOWN_LIMITATIONS.md)
 - [Privacy and offline operation](PRIVACY.md)
