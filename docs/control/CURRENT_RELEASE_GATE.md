@@ -37,7 +37,7 @@ No branch, workflow, synthetic prototype, runner-built executable, governance re
 | Diagnostic privacy/offline claims | Issue #14 open |
 | Actual-build provenance | P0 issue #15 open |
 | Intended purpose and public claims | Issues #16, #20 and #46 open |
-| Publisher/steward | Issue #17 open; no organisation appointed |
+| Publisher/steward | Issue #17 open; no organisation appointed; official source and binary release blocked |
 | Public runnable artifacts | P0 issue #24 open; four historical artifacts remain live |
 | V40 target | Issue #69 open; 9 August is a target, not a waiver |
 
@@ -136,7 +136,7 @@ A V40 source tag/release remains blocked until one exact candidate passes all ap
 
 Core accessibility failures cannot be converted into a narrowed public preview.
 
-### Source, provenance and claims
+### Source, provenance, claims and accountability
 
 - exact release commit frozen and compared with its reviewed base;
 - correctly classified Linux and Windows evidence;
@@ -145,7 +145,8 @@ Core accessibility failures cannot be converted into a narrowed public preview.
 - exact source manifest, current SBOM and notices;
 - no personal data, real evidence, credentials, private workspace or model file;
 - truthful pre-alpha, synthetic-only, unsigned and limitation wording;
-- issue #14 claims bounded to exact tested evidence.
+- issue #14 claims bounded to exact tested evidence;
+- a named accountable publisher/steward has formally accepted official source publishing, withdrawal, security-response, complaints and continuity duties for the release, satisfying issue #17's controlling organisational gate.
 
 The 9 August target cannot turn an OPEN or FAIL item into a pass.
 
@@ -201,7 +202,7 @@ The preferred future model is one accountable official publisher/steward that ma
 
 No organisation is appointed, shortlisted or authorised for outreach. Open Knowledge Foundation's deeper public-source review remains `HOLD` and creates no relationship, endorsement or contact authority. A fragmented arrangement with no accountable lead publisher is rejected.
 
-Issue #17 remains open until a named legal organisation formally accepts and proves release, withdrawal, security, signing, continuity, complaints, data-role, contracting, liability, insurance and regulatory duties.
+Issue #17 remains open and blocks an official source or binary release until a named legal organisation formally accepts and proves release, withdrawal, security, signing where applicable, continuity, complaints, data-role, contracting, liability, insurance and regulatory duties.
 
 ## Evidence classification
 
