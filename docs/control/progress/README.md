@@ -23,3 +23,4 @@ The reports supplement, but do not replace:
 ## Reports
 
 - [`2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md`](2026-08-04_LEGAL_STANDARDS_GOVERNANCE_PROGRESS_REPORT.md) — intended-purpose reset, provenance controls, release containment continuity and audit-reporting restoration.
+- [`2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md`](2026-08-04_PUBLISHER_STEWARDSHIP_PROGRESS_REPORT.md) — clean publisher/stewardship gate, contributor-role protection, future partner checklist and retirement of stale PR #19.
