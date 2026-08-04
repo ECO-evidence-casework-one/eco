@@ -1,9 +1,9 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260803-006`  
-**Updated:** 3 August 2026, 22:00 BST  
+**Gate record:** `ECO-RELEASE-GATE-20260804-007`  
+**Updated:** 4 August 2026, 06:39 BST  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Current reviewed `main` commit before this gate reconciliation:** `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`  
+**Current reviewed `main` commit before this gate reconciliation:** `4c6929b6b94e4a428ccc69336b50a38ba9fe6271`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Signed end-user release:** None
 
@@ -33,14 +33,14 @@ Issue #27 is closed and the covered Windows native-command CI gate is now indepe
 | Ask verification and restore concurrency | Blocked by open issue #12 |
 | Ask health-related input boundary | Blocked by P0 issue #20; current Ask source does not yet enforce the proposed restriction |
 | Candidate workspace identity | PR #11 contains material candidate-binding improvements but remains draft and blocked by current ownership/concurrency findings |
-| Workspace creation and first launch | Blocked by PR #11 exact-head finding: creation and candidate state are not yet protected by one alias-safe cross-process ownership transaction |
-| Ordinary workspace writers | Blocked by PR #11 exact-head finding: stale independently opened writers can still erase newer metadata without revision/CAS conflict detection |
-| Alias and retained-parent ownership | Blocked by PR #11 exact-head finding: lock, recovery controls and workspace participants are not all derived from one retained object identity |
-| Linux nested cleanup | Blocked by PR #11 exact-head finding: an inspected directory can be closed and reopened by name during recursive cleanup |
-| Windows native-command CI truthfulness | Issue #27 closed; fail-fast helper, controlled failure test, six-stage matrix, static wrapper assertions and merged-tree validation passed at current `main` |
-| Public Actions executable distribution | New uploads stopped; multiple PR routes prove zero artifacts, but issue #24 remains open for historical artifacts, manual-dispatch proof and branch reconciliation |
+| Workspace creation and first launch | Blocked by PR #11 finding: creation and candidate state are not protected by one alias-safe cross-process ownership transaction |
+| Ordinary workspace writers | Blocked by PR #11 finding: stale independently opened writers can erase newer metadata without revision/CAS conflict detection |
+| Alias and retained-parent ownership | Blocked by PR #11 finding: lock, recovery controls and workspace participants are not all derived from one retained object identity |
+| Linux nested cleanup | Blocked by PR #11 finding: an inspected directory can be closed and reopened by name during recursive cleanup |
+| Windows native-command CI truthfulness | Issue #27 closed; fail-fast helper, controlled failure test, six-stage matrix, static wrapper assertions and merged-tree validation passed |
+| Public Actions executable distribution | New uploads stopped and affected open branches have exact-head zero-artifact evidence, but issue #24 remains open for historical artifacts and manual-dispatch proof |
 | Diagnostic privacy and offline claims | Blocked by issue #14 |
-| Runtime, model, SBOM and licensing | Blocked by issue #15 until the exact packaged artefact is reconciled |
+| Runtime, model, SBOM and licensing | Blocked by issue #15; generic V25 provenance records are now explicitly historical/source-level, but no current exact-build package exists |
 | One-file packaging | Blocked until the actual final embedded executable is supplied and independently inspected |
 | Signing order and authenticity | Blocked until the final file is assembled, hashed and Authenticode-signed with no later mutation |
 | OCR and local AI | Not approved as reliable production functionality |
@@ -63,18 +63,30 @@ Issue #12 requires bounded verification cost, safe cache invalidation or source-
 
 ### PR #11 and issue #4
 
-PR #11 remains draft and unmerged at the last independently inspected head `73689717bb08bb8cec0fc1233b92f843b449484a`.
+PR #11 remains draft, unmerged and non-mergeable.
 
-The current exact-head blockers are:
+- Last independently inspected workspace implementation head: `73689717bb08bb8cec0fc1233b92f843b449484a`.
+- Current PR head: `61a2004809b341e72f70321843c64c3ff477f549`.
+- The later branch commits alter only `.github/workflows/ci.yml` to contain public executable upload; they do not correct the workspace findings.
+
+The current workspace blockers are:
 
 1. stale concurrent writers without exact revision/CAS conflict protection;
 2. alias-bypassable path-derived locking and split pathname resolution instead of one retained-parent transaction;
 3. Linux nested cleanup reopening an inspected directory by name;
 4. unowned workspace creation, first launch and candidate-state writes.
 
-Object-bound reset/migration operations, authenticated restore phases and issue #3 regression coverage at that head are material progress, but they do not close these four blockers.
+Object-bound reset/migration operations, authenticated restore phases and issue #3 regression coverage at the reviewed implementation head are material progress, but they do not close these four blockers.
 
-PR #11 must preserve the issue #24 no-upload control and the issue #27 fail-fast/matrix controls when it is eventually reconciled with current `main`. It must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, current `main` is reconciled, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
+PR #11 must reconcile current `main` `4c6929b6b94e4a428ccc69336b50a38ba9fe6271` and preserve:
+
+- issue #24 no-upload controls;
+- issue #27 fail-fast helper, controlled failure test and six-stage matrix;
+- Windows pointer-safety corrections;
+- current canonical status and release-gate records;
+- the historical provenance pointer, SBOM and source-notice structure.
+
+It must not be marked ready, merged or used to close issue #4 until one coherent ownership/concurrency correction is pushed, raw Windows/Linux evidence is inspected and the merged exact SHA is independently verified.
 
 ### Issue #27 — Windows native-command CI truthfulness
 
@@ -88,7 +100,7 @@ The evidence chain included:
 - successful ordinary Linux and Windows validation;
 - a six-stage synthetic failure matrix covering test, vet, policy, first build, second build and `go version`;
 - static assertions that every real native stage remains wrapped by `Invoke-NativeChecked`;
-- final merge to `main` at `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`;
+- final issue #27 control merge to `main` at `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`;
 - final merged-tree verification run `30852039542`, with an empty artifact inventory.
 
 This closure permits reliance on the covered CI command results. It does not approve the unsigned runner-built executable or satisfy any application, packaging, signing or release gate.
@@ -99,21 +111,25 @@ Independent inspection confirmed that the public workflow uploaded unsigned runn
 
 Emergency source containment at `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a` removed the `upload-artifact` step while retaining internal Windows compilation and testing.
 
-Successful and failed pull-request routes, including final issue #27 merged-main verification, have been inspected and exposed exactly zero Actions artifacts.
+Successful and failed pull-request routes, including exact-head containment checks for PRs #11, #18 and #19, have since exposed exactly zero Actions artifacts.
 
 Issue #24 remains open until:
 
 - the four identified historical executable artifacts are deleted by an authorised repository administrator or have expired;
 - a controlled manual-dispatch run produces no downloadable executable, DLL, installer or runnable archive;
-- affected branches are reconciled with the corrected workflow;
 - no later automation reintroduces public binary upload without issue #15, signing and publisher approval.
 
 The identified historical executables are unapproved and must not be tested, used or redistributed.
 
-### Issues #14–#17 and #20
+### Issue #15 — actual-build provenance
+
+The generic root repository manifest and preparation receipt are explicit historical pointers. The root SPDX document is explicitly labelled as a historical V25 source-level SBOM, with the exact former bytes preserved under a versioned historical path. Root third-party notices describe current source-level declarations only.
+
+These records cannot support a current executable, signing or release claim. Issue #15 remains open until one exact final executable is reconciled with its source tree, content manifest, actual-build SBOM, complete notices, corresponding source, build receipt and signing record.
+
+### Issues #14, #16, #17 and #20
 
 - Issue #14 blocks unsafe diagnostic sharing and inaccurate offline/network claims.
-- Issue #15 blocks distribution without actual-build SBOM, licensing, provenance and signing evidence.
 - Issue #16 blocks unsupported intended-purpose, legal, medical, forensic, high-risk-decision and compliance claims.
 - Issue #17 blocks public or institutional release without an accountable publisher, operational response routes and continuity ownership.
 - P0 issue #20 blocks generated processing of health-related or mixed-purpose clinical material before a tested input gate and safe fallback exist.
@@ -121,11 +137,11 @@ The identified historical executables are unapproved and must not be tested, use
 ## Underlying release-blocking limits
 
 - Current `main` portable restore still uses pathname-based activation and best-effort rollback.
-- PR #11 retains the four exact-head ownership/concurrency blockers above.
+- PR #11 retains the four ownership/concurrency blockers above.
 - Issue #12 still blocks Ask verification and restore concurrency.
 - Issue #14 still blocks diagnostic and final network qualification.
 - Issue #15 still requires actual packaged-artifact SBOM, licence and provenance reconciliation.
-- Issue #24 still requires historical artifact removal/expiry, manual-dispatch evidence and branch reconciliation.
+- Issue #24 still requires historical artifact removal/expiry and manual-dispatch evidence.
 - Issues #16, #17 and #20 remain open, and PRs #18 and #19 remain governance drafts.
 - Accessibility, responsiveness and page-aware search qualification remains incomplete.
 
