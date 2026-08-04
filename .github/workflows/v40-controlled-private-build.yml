@@ -66,8 +66,8 @@ jobs:
           }
           $hotfixPath = "build-input/v40/v40-msys-runtime-hotfix.ps1"
           $hotfixHash = (Get-FileHash -Algorithm SHA256 $hotfixPath).Hash.ToLowerInvariant()
-          if ($hotfixHash -ne "84435a6d3024224ab03cf1f634d5b9ebd3bac4065367578875370160c750cf50") {
-            throw "MSYS2 runtime hotfix hash mismatch: $hotfixHash"
+          if ($hotfixHash -ne "3ae9ba4aee404ba29ca045daf3b4bf9046f8775a9949ae2546cdfa73e5cb8ead") {
+            throw "Runtime and llama hotfix hash mismatch: $hotfixHash"
           }
           & $hotfixPath -TargetPath $scriptPath
 
@@ -75,12 +75,15 @@ jobs:
         shell: pwsh
         run: ./build-input/v40/private-build.ps1
 
-      - name: Upload private controlled handoff
+      - name: Upload private controlled handoff and diagnostics
+        if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF
-          path: v40-private-build/handoff
-          if-no-files-found: error
+          path: |
+            v40-private-build/handoff
+            v40-private-build/logs
+          if-no-files-found: warn
           retention-days: 1
           compression-level: 0
           include-hidden-files: false
