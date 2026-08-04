@@ -1,9 +1,9 @@
 # Current ECO project status
 
-**Status date:** 3 August 2026  
-**Latest control update:** 3 August 2026, 21:58 BST  
+**Status date:** 4 August 2026  
+**Latest control update:** 4 August 2026, 06:39 BST  
 **Canonical public status record:** this file  
-**Current reviewed `main` commit before this documentation reconciliation:** `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`  
+**Current reviewed `main` commit before this documentation reconciliation:** `4c6929b6b94e4a428ccc69336b50a38ba9fe6271`  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Release position:** development only; no approved public binary
 
@@ -33,7 +33,11 @@ Issue #3 remains open. Its implementation is materially improved, but independen
 
 ### Workspace identity, migration and reset
 
-PR #11 remains draft, unmerged and independently blocked at head `73689717bb08bb8cec0fc1233b92f843b449484a`.
+PR #11 remains draft, unmerged, non-mergeable and independently blocked.
+
+- Last independently reviewed workspace implementation head: `73689717bb08bb8cec0fc1233b92f843b449484a`.
+- Current PR head: `61a2004809b341e72f70321843c64c3ff477f549`.
+- The commits after the reviewed workspace implementation change only `.github/workflows/ci.yml` to stop public executable upload; they do not correct workspace ownership or concurrency.
 
 Its four current P0 blockers are:
 
@@ -42,7 +46,7 @@ Its four current P0 blockers are:
 3. Linux nested cleanup can close an inspected directory and reopen it by name;
 4. workspace creation, first launch and candidate-state writes are not protected by one alias-safe cross-process ownership transaction.
 
-Issue #4 remains open. The branch must be reconciled with current `main` without losing the no-public-artifact workflow or the verified fail-fast controls.
+Issue #4 remains open. The branch must be reconciled with current `main` `4c6929b6b94e4a428ccc69336b50a38ba9fe6271` without losing the no-public-artifact workflow, verified fail-fast controls, Windows pointer-safety corrections or the current historical-provenance controls.
 
 ### Windows CI truthfulness — issue #27 closed
 
@@ -50,7 +54,7 @@ The former Windows false-green defect was reproduced: a non-zero native `go vet`
 
 PR #28 isolated and merged the fail-fast correction and the three resulting Windows unsafe-pointer corrections. PR #31 then added a six-stage failure matrix and static assertions for every real native stage in `scripts/build-windows.ps1`.
 
-Final merged `main` control commit:
+Final merged issue #27 control commit:
 
 `9b7f3d60b14ff67fbf9dc4e0047ceeb498725e79`
 
@@ -72,16 +76,22 @@ Independent inspection found that the public GitHub Actions workflow uploaded un
 
 Emergency containment commit `bdc05df444d21d739abf83fa9cf768fc4ab5dd9a` removed the public `upload-artifact` step while preserving internal Windows compilation and testing on the hosted runner.
 
-Multiple independently inspected pull-request routes—including failed native validation, successful builds and final merged-main verification—have since produced exactly zero Actions artifacts.
+Multiple independently inspected pull-request routes—including failed native validation, successful builds, affected-branch containment checks and final merged-main verification—have since produced exactly zero Actions artifacts.
 
 Issue #24 remains open because:
 
 - the four historical executable artifacts must be deleted by an authorised repository administrator or expire;
 - a controlled manual-dispatch run still requires explicit no-artifact evidence;
-- affected development branches, including PR #11, must preserve the corrected no-upload workflow when reconciled;
+- affected development branches must preserve the corrected no-upload workflow when reconciled;
 - no later automation may reintroduce public runnable uploads before signing, provenance and publisher gates pass.
 
 No listed Actions executable is approved for testing, use or redistribution.
+
+### Actual-build provenance — issue #15 remains open
+
+The generic root repository manifest and preparation receipt are now explicit pointers to preserved historical V25 records. The root SPDX document is explicitly labelled as a historical V25 source-level SBOM, and the exact former bytes are preserved under a versioned historical path. Root third-party notices now describe current source-level declarations only.
+
+These corrections prevent the historical files from being mistaken for current release evidence. They do not create an authoritative exact-build manifest, executable SBOM, final notice bundle, signing record or release receipt. P0 issue #15 remains open.
 
 ### Intended-purpose and health-input conformance
 
@@ -125,7 +135,7 @@ The following remain blocked:
 - PR #11 retains four workspace ownership/concurrency P0 blockers.
 - Issue #12 blocks safe Ask verification cost and Ask/restore serialisation.
 - Issue #14 blocks privacy-safe diagnostics and final bundled-runtime network claims.
-- The root V25 SBOM and notices remain historical/source-level records rather than the actual packaged-artifact provenance required by issue #15.
+- There is no authoritative current exact-build manifest, executable SBOM, final notice bundle, signed receipt or actual packaged-artifact reconciliation required by issue #15.
 - Issue #24 remains open despite successful no-artifact PR evidence.
 - PR #18 and issues #16 and #20 remain unresolved.
 - No accountable established publisher, support operator, complaints handler or continuity owner has accepted the issue #17 duties.
