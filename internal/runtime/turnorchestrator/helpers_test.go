@@ -94,10 +94,10 @@ func baseDeps(t *testing.T) (Dependencies, *testLease) {
 			if string(in.Generated) != "draft answer" {
 				t.Fatalf("unexpected generated: %q", in.Generated)
 			}
-			return VerifiedOutput{Accepted: true, Text: "accepted answer", VerificationID: "verify-1"}, nil
+			return VerifiedOutput{Accepted: true, Text: []byte("accepted answer"), VerificationID: "verify-1"}, nil
 		}),
 		Fallback: fallbackFunc(func(_ context.Context, _ Request, _ Stage, _ ReasonCode) (FallbackOutput, error) {
-			return FallbackOutput{Text: "deterministic fallback", FallbackID: "fallback-1", Deterministic: true}, nil
+			return FallbackOutput{Text: []byte("deterministic fallback"), FallbackID: "fallback-1", Deterministic: true}, nil
 		}),
 		Eraser: ZeroEraser{},
 		Clock:  &fixedClock{t: time.Date(2026, 8, 4, 9, 5, 0, 0, time.UTC)},
