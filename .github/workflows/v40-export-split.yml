@@ -6,6 +6,11 @@ on:
       - development/v40-integrated-synthetic-ai-candidate
     paths:
       - '.github/workflows/v40-export-split.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/v40-export-split.yml'
   workflow_dispatch:
 
 permissions:
