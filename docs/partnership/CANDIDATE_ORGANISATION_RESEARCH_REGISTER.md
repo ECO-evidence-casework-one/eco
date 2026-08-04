@@ -1,220 +1,155 @@
 # ECO candidate organisation research register
 
 **Issue:** #62  
-**Status:** template; no organisation is approved, appointed or authorised for outreach  
-**Method:** [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md)
+**Status:** four public-source assessments completed; no organisation is approved, appointed, shortlisted or authorised for outreach  
+**Method:** [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md)  
+**First assessment batch:** [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md)  
+**First full/near-full assessment:** [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md)
 
 ## 1. Register rules
 
-- One candidate record must assess one legal organisation and one proposed role.
+- One candidate record assesses one legal organisation and one exact proposed role.
+- A limited-role finding is not a finding that the organisation can act as full ECO publisher or steward.
+- A full/near-full assessment tests the complete issue #17 responsibility set; mission fit or broad capability does not produce a positive result where operational duties remain unproven.
 - A brand, programme or project must be linked to its legal organisation.
-- Inclusion means only that research is warranted.
-- Do not infer interest, endorsement or consent.
+- Inclusion means only that public-source research was warranted.
+- Do not infer interest, endorsement, consent, capacity or availability.
 - Use current public sources and record access dates.
 - Distinguish fact, inference and unknown information.
 - Do not publish private contact details or confidential evidence.
-- Missing material evidence produces HOLD or NOT ASSESSED, not a positive score.
-- No contact may occur under this register.
+- Missing material evidence produces `HOLD` or `NOT ASSESSED`, not a positive score.
+- No contact may occur under this register or issue #62.
 
 ## 2. Status vocabulary
 
 | Status | Meaning |
 |---|---|
-| `POTENTIAL FIT` | Suitable for deeper due diligence only; no outreach or appointment implied |
+| `POTENTIAL FIT` | Current public evidence justifies deeper due diligence for the exact limited role only; no outreach or appointment implied |
 | `HOLD` | Material evidence is absent, stale, ambiguous or conflicting |
-| `UNSUITABLE` | Reliable evidence supports a fatal exclusion or material incompatibility |
+| `UNSUITABLE` | Reliable evidence supports a fatal exclusion or material incompatibility for the exact role assessed |
 | `NOT ASSESSED` | Research has not progressed far enough for a decision |
+
+`POTENTIAL FIT` is not currently used for a full/near-full publisher role. The first such assessment remains `HOLD` because several mandatory operational domains are unproven.
 
 ## 3. Candidate index
 
-Do not add a candidate to this index until a corresponding record exists below.
-
-| Candidate legal name | Proposed role | Assessment date | Provisional status | Record anchor |
+| Candidate legal name | Proposed role assessed | Assessment date | Provisional status | Record |
 |---|---|---|---|---|
-| _No named candidates assessed_ | | | `NOT ASSESSED` | |
+| Software Freedom Conservancy, Inc. | Limited FOSS fiscal and legal host | 2026-08-04 | `POTENTIAL FIT` | [`Batch 1 — Candidate 1`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md#candidate-1--software-freedom-conservancy-inc) |
+| mySociety | Civic-technology and public-interest software collaborator | 2026-08-04 | `HOLD` | [`Batch 1 — Candidate 2`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md#candidate-2--mysociety) |
+| AbilityNet | Specialist accessibility assessment and assurance partner | 2026-08-04 | `POTENTIAL FIT` | [`Batch 1 — Candidate 3`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md#candidate-3--abilitynet) |
+| Open Knowledge Foundation | Full or near-full accountable ECO publisher/steward | 2026-08-04 | `HOLD` | [`Full/near-full assessment`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md) |
 
-## 4. Candidate record template
+## 4. Register interpretation
 
-Copy this section for each candidate.
+The current entries do **not** form a shortlist.
 
----
+### Limited-role findings
 
-### Candidate: `[legal name]`
+- Software Freedom Conservancy is not assessed as ECO's complete product publisher, security operator, accessibility assurer or UK/EU responsible organisation.
+- AbilityNet is not assessed as a FOSS steward, repository owner, software publisher, signing authority or security operator.
+- The mySociety `HOLD` is not a negative reputation finding. It records material uncertainty about whether a hosted civic-service and data-custody operating model could be ring-fenced from ECO's fully offline, no-account, no-telemetry and no-user-evidence-custody requirements.
 
-**Proposed role assessed:** `[full steward / FOSS host / technical collaborator / accessibility partner / research partner / other]`  
-**Assessment date:** `[YYYY-MM-DD]`  
-**Research workstream:** `[description]`  
-**Reviewer relationship:** `[self-review / control review / inspection-lane review / independent review]`  
-**Overall provisional status:** `NOT ASSESSED`  
-**No-interest statement:** this status does not imply the organisation's interest, endorsement, approval or appointment.
+### Full/near-full finding
 
-#### A. Identity
+Open Knowledge Foundation has the broadest relevant public capability identified so far: UK governance, operations/finance, technical staff, open-source infrastructure, institutional contracting, end-user desktop software, offline/local-first experience and local AI.
 
-| Field | Finding | Evidence | Decision |
-|---|---|---|---|
-| Legal name | | | `NOT ASSESSED` |
-| Legal form | | | `NOT ASSESSED` |
-| Registration number | | | `NOT ASSESSED` |
-| Jurisdiction | | | `NOT ASSESSED` |
-| Active status | | | `NOT ASSESSED` |
-| Governing body | | | `NOT ASSESSED` |
-| Public website | | | `NOT ASSESSED` |
-| Public organisational enquiry route | | | `NOT ASSESSED` |
+Its `HOLD` records that public evidence does not yet prove the complete issue #17 duties, including:
 
-#### B. Proposed role and reason for inclusion
+- private vulnerability intake and security response;
+- supported versions, release withdrawal and ordinary-user support;
+- Authenticode/signing governance and key recovery;
+- final-artifact SBOM/provenance control;
+- separated privacy, accessibility and product complaints;
+- insurance, product liability and high-consequence regulatory ownership;
+- strict no-custody and synthetic-only pre-gate operation;
+- separation from hosted, government or authority-side decision uses;
+- current legal/tax evidence where the public NGOsource wording expired in December 2025.
 
-State:
+No entry shows that an organisation:
 
-- the exact role being examined;
-- why the organisation entered the longlist;
-- which ECO need might align;
-- which capabilities are not assumed.
+- has seen ECO;
+- knows it is being researched;
+- is interested;
+- has capacity;
+- would accept the stated role;
+- would accept ECO's legal, technical or financial conditions;
+- should be contacted.
 
-#### C. Source register
+## 5. Candidate record requirements
 
-| ID | Source owner | Title or record | Source date | Access date | Tier | Proposition supported | Limitations |
-|---|---|---|---|---|---|---|---|
-| S1 | | | | | | | |
+Each future record must contain:
 
-#### D. Fatal exclusion screen
+1. exact legal identity and proposed role;
+2. authoritative source register with access dates;
+3. fatal-exclusion screen;
+4. assessment of mission, governance, FOSS, privacy/offline compatibility, security, accessibility, complaints, release/signing, continuity, sustainability, contracts and regulation;
+5. mandatory ECO boundary compatibility;
+6. contrary evidence, conflicts and dependencies;
+7. material unknowns and due-diligence questions;
+8. reasoned provisional decision;
+9. permitted and prohibited next actions;
+10. control review confirming that missing evidence was not scored positively.
 
-| Exclusion | Decision | Evidence and reason |
-|---|---|---|
-| Proprietary relicensing or closed official fork required | `NOT ASSESSED` | |
-| Mandatory cloud processing of user evidence | `NOT ASSESSED` | |
-| Mandatory accounts, telemetry, analytics or advertising | `NOT ASSESSED` | |
-| Routine access to users' case files | `NOT ASSESSED` | |
-| Premature real-data pilot required | `NOT ASSESSED` | |
-| Unsupported professional/compliance claims required | `NOT ASSESSED` | |
-| Prohibited medical/legal/forensic/scoring/decision use | `NOT ASSESSED` | |
-| Individual contributor must accept personal duties/liability | `NOT ASSESSED` | |
-| Single-person or personal-account continuity dependency | `NOT ASSESSED` | |
-| Cannot operate security/complaint/withdrawal/signing duties | `NOT ASSESSED` | |
-| No suitable legal identity for proposed role | `NOT ASSESSED` | |
-| Governance or control incompatible with ECO boundaries | `NOT ASSESSED` | |
+For a full or near-full role, the record must also map every issue #17 publisher/steward duty and identify which legal organisation would remain accountable when specialist suppliers are used.
 
-**Fatal exclusion result:** `NOT ASSESSED`
-
-#### E. Assessment domains
-
-| Domain | Decision | Evidence | Missing information / limitations |
-|---|---|---|---|
-| Mission and public-interest fit | `NOT ASSESSED` | | |
-| Legal identity and governing authority | `NOT ASSESSED` | | |
-| FOSS and software stewardship | `NOT ASSESSED` | | |
-| Offline/privacy/no-custody compatibility | `NOT ASSESSED` | | |
-| Security and vulnerability response | `NOT ASSESSED` | | |
-| Accessibility capability | `NOT ASSESSED` | | |
-| Complaints, support and harmful-output response | `NOT ASSESSED` | | |
-| Release, signing and supply-chain governance | `NOT ASSESSED` | | |
-| Repository and organisational continuity | `NOT ASSESSED` | | |
-| Financial and operational sustainability | `NOT ASSESSED` | | |
-| Contracts, liability and institutional capability | `NOT ASSESSED` | | |
-| Legal and regulatory capability | `NOT ASSESSED` | | |
-
-#### F. Mandatory-boundary compatibility
-
-| ECO boundary | Decision | Evidence / reason |
-|---|---|---|
-| Free and open source | `NOT ASSESSED` | |
-| Fully offline normal operation | `NOT ASSESSED` | |
-| No required account/cloud/telemetry/advertising | `NOT ASSESSED` | |
-| No routine access to user evidence | `NOT ASSESSED` | |
-| One-file Windows objective | `NOT ASSESSED` | |
-| Low-spec Windows objective | `NOT ASSESSED` | |
-| Source-linked user-controlled assistance | `NOT ASSESSED` | |
-| Output-status separation | `NOT ASSESSED` | |
-| Medical/legal/forensic/scoring/decision boundaries | `NOT ASSESSED` | |
-| Truthful provenance, licensing and claims | `NOT ASSESSED` | |
-| No automatic individual-contributor duties | `NOT ASSESSED` | |
-
-#### G. Conflicts and dependencies
-
-Record evidence concerning:
-
-- funders and restricted programmes;
-- government or commercial dependencies;
-- proprietary-platform commitments;
-- cloud-first or data-access operating models;
-- political or institutional conflicts;
-- licence, brand or governance-control requirements;
-- time-limited grants or single-person dependency;
-- other matters that could affect independence, sustainability or user trust.
-
-Do not record speculation as fact.
-
-#### H. Missing evidence and due-diligence questions
-
-List each material unknown. Examples:
-
-- Does the governing body have authority to accept stewardship?
-- Is the vulnerability route monitored and tested?
-- Can the organisation maintain a Windows application and signing process?
-- Would it preserve offline/no-custody requirements?
-- Can it fund accessibility, security and legal review?
-- What role, if any, would fit its mission and capacity?
-
-#### I. Provisional decision
-
-**Status:** `[POTENTIAL FIT / HOLD / UNSUITABLE / NOT ASSESSED]`
-
-**Reasoned conclusion:**
-
-`[State the evidence-based conclusion and limitations. Do not imply interest.]`
-
-**Permitted next action:**
-
-- `[deeper public-source research / hold for missing evidence / remove from shortlist / propose separate outreach-target review]`
-
-**Prohibited next action:**
-
-- no contact;
-- no partnership or publisher announcement;
-- no real-data or institutional pilot;
-- no contract, repository transfer or signing authority;
-- no representation that the organisation approved ECO.
-
-#### J. Review
-
-| Review question | Decision | Notes |
-|---|---|---|
-| Legal identity verified from authoritative source | `NOT ASSESSED` | |
-| Evidence is current enough for each conclusion | `NOT ASSESSED` | |
-| Fact, inference and unknown are separated | `NOT ASSESSED` | |
-| Contrary evidence is included | `NOT ASSESSED` | |
-| Missing evidence was not scored positively | `NOT ASSESSED` | |
-| No wording implies interest or endorsement | `NOT ASSESSED` | |
-| No private/confidential information appears | `NOT ASSESSED` | |
-| Provisional status follows the approved method | `NOT ASSESSED` | |
-
----
-
-## 5. Shortlist control
+## 6. Shortlist control
 
 No organisation may enter a shortlist unless:
 
 - its legal identity is verified;
-- no fatal exclusion is supported;
+- no fatal exclusion is supported for the exact role;
 - mission fit is evidenced;
 - FOSS and offline/no-custody compatibility are adequate for the proposed role;
 - material security and continuity concerns are identified;
-- conflicts and missing evidence are recorded;
-- a control review confirms the provisional status.
+- conflicts, funding dependencies and missing evidence are recorded;
+- the difference between a limited role and full publisher duties is explicit;
+- a separate control review confirms the provisional status.
+
+A full/near-full candidate cannot be shortlisted while private security response, release/signing, complaints/support, insurance/liability and regulatory ownership remain materially unproven.
 
 A shortlist is not an outreach list.
 
-## 6. Outreach boundary
+The current register contains **no shortlist**.
 
-Before contact, create a separate outreach-target decision recording:
+## 7. Full-stewardship control
 
-- the approved organisation and legal identity;
-- the limited role being explored;
+A combination of limited-role organisations does not automatically satisfy issue #17.
+
+Before distributed roles could be treated as an alternative to one full steward, the project would need a documented responsibility model showing:
+
+- which legal organisation is the accountable official publisher;
+- who owns release, signing, withdrawal and supported-version decisions;
+- who operates security, privacy, accessibility, product-complaint and general-support routes;
+- who contracts with institutions and holds relevant insurance;
+- who owns regulatory classification and reporting;
+- how disagreements and incidents are resolved;
+- how users receive one clear accountable route;
+- how continuity survives the failure or withdrawal of one specialist provider;
+- how duties are prevented from falling back onto an individual contributor.
+
+No such distributed-responsibility model is approved.
+
+## 8. Outreach boundary
+
+Before any contact, create a separate outreach-target decision recording:
+
+- the approved organisation and exact legal identity;
+- the role being explored;
 - the evidence justifying contact;
-- unresolved concerns;
-- approved public contact route;
-- approved sender role;
-- exact message and partner-pack commit;
+- unresolved concerns and stop conditions;
+- the approved public organisational contact route;
+- the approved sender role;
+- the exact message and partner-pack commit;
 - non-binding wording;
-- stop and escalation conditions.
+- evidence that no real case material will be requested or supplied.
 
-Issue #62 and this register do not authorise contact.
+Issue #62, the longlist, this register and all current assessments do not authorise contact.
+
+## 9. Current next research step
+
+1. Review all four records for factual accuracy, source freshness and role inflation.
+2. Deepen Open Knowledge Foundation's current legal/tax, accounts, repository, security, release/signing, complaints, insurance and accessibility evidence.
+3. Deepen the Software Freedom Conservancy and AbilityNet limited-role records and the mySociety `HOLD` questions.
+4. Compare a single accountable-steward model with a steward-plus-specialists model without allocating duties by assumption.
+5. Stop for control review before creating any shortlist or outreach-target proposal.
