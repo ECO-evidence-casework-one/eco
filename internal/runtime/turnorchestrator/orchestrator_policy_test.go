@@ -69,3 +69,42 @@ func TestRequestTimeoutIsCappedByPolicy(t *testing.T) {
 		t.Fatalf("timeout not capped: %v", remaining)
 	}
 }
+
+type panicClock struct {
+	calls int
+	after int
+}
+
+func (c *panicClock) Now() time.Time {
+	c.calls++
+	if c.calls > c.after {
+		panic("clock secret")
+	}
+	return time.Date(2026, 8, 4, 9, 5, c.calls, 0, time.UTC)
+}
+
+func TestNilParentContextIsHandled(t *testing.T) {
+	d, _ := baseDeps(t)
+	r := newTestOrchestrator(t, d).Run(nil, Request{TurnID: "turn-nil-context", Text: "q"})
+	if r.Outcome != OutcomeAccepted {
+		t.Fatalf("unexpected: %+v", r)
+	}
+}
+
+func TestClockPanicAtStartIsContained(t *testing.T) {
+	d, _ := baseDeps(t)
+	d.Clock = &panicClock{after: 0}
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-clock-start", Text: "q"})
+	if r.Outcome != OutcomeFailed || r.Text != "" || r.Receipt.Reason != ReasonDependencyPanic {
+		t.Fatalf("unexpected: %+v", r)
+	}
+}
+
+func TestClockPanicAtCompletionSuppressesAcceptedOutput(t *testing.T) {
+	d, _ := baseDeps(t)
+	d.Clock = &panicClock{after: 1}
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-clock-end", Text: "q"})
+	if r.Outcome != OutcomeFailed || r.Text != "" || r.Receipt.Reason != ReasonDependencyPanic {
+		t.Fatalf("unexpected: %+v", r)
+	}
+}
