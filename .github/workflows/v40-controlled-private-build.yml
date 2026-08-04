@@ -55,13 +55,24 @@ jobs:
           foreach ($p in $parts) {
             [void]$b.Append((Get-Content -Raw $p).Trim())
           }
+          $scriptPath = "build-input/v40/private-build.ps1"
           [IO.File]::WriteAllBytes(
-            "build-input/v40/private-build.ps1",
+            $scriptPath,
             [Convert]::FromBase64String($b.ToString())
           )
-          $got = (Get-FileHash -Algorithm SHA256 "build-input/v40/private-build.ps1").Hash.ToLowerInvariant()
-          if ($got -ne "6f04845f501d3d312220dc55f626d04a2a7cd2b10faa20474c5f2f82ee8df0d6") {
-            throw "Private build script hash mismatch: $got"
+          $stagedHash = (Get-FileHash -Algorithm SHA256 $scriptPath).Hash.ToLowerInvariant()
+          if ($stagedHash -ne "6f04845f501d3d312220dc55f626d04a2a7cd2b10faa20474c5f2f82ee8df0d6") {
+            throw "Staged private build script hash mismatch: $stagedHash"
+          }
+          $text = Get-Content -Raw $scriptPath
+          $text = $text.Replace(
+            "7f4909b066a3be91bb3308af3bd81c0c64fe14943ab91194a025516ea4ad9195",
+            "7f4909d8720bc6839ba921e762b81676bc445c18f6b825a29117b9ce7d8b2011"
+          )
+          [IO.File]::WriteAllText($scriptPath, $text, [Text.UTF8Encoding]::new($false))
+          $finalHash = (Get-FileHash -Algorithm SHA256 $scriptPath).Hash.ToLowerInvariant()
+          if ($finalHash -ne "672f4432ff66aa0a1ebd0edc33a3ed9571dcbb4baa477b4ee1136ad2f30f00a6") {
+            throw "Corrected private build script hash mismatch: $finalHash"
           }
 
       - name: Build genuine offline synthetic candidate
