@@ -128,6 +128,44 @@ func TestAcquireOrCreateWorkspaceRootOwnerCreatesRootUnderClaim(t *testing.T) {
 	}
 }
 
+func TestNestedWorkspaceCreationBuildsOwnedHierarchy(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "application", "candidate", "workspace")
+	lease, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	for _, path := range []string{filepath.Join(base, "application"), filepath.Join(base, "application", "candidate"), root} {
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			t.Fatalf("unsafe created hierarchy at %s: info=%v err=%v", path, info, err)
+		}
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNestedWorkspaceCreationRejectsNonDirectoryComponent(t *testing.T) {
+	base := t.TempDir()
+	block := filepath.Join(base, "application")
+	if err := os.WriteFile(block, []byte("sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireOrCreateWorkspaceRootOwner(filepath.Join(block, "candidate", "workspace"))
+	if lease != nil {
+		_ = lease.Close()
+	}
+	if err == nil {
+		t.Fatal("non-directory creation component was accepted")
+	}
+	data, readErr := os.ReadFile(block)
+	if readErr != nil || string(data) != "sentinel" {
+		t.Fatalf("non-directory sentinel was changed: %q err=%v", data, readErr)
+	}
+}
+
 func TestConcurrentWorkspaceCreationHasOneWritableOwner(t *testing.T) {
 	parent := t.TempDir()
 	root := filepath.Join(parent, "new-workspace")
@@ -150,7 +188,7 @@ func TestConcurrentWorkspaceCreationAcrossProcesses(t *testing.T) {
 		t.Skip("parent-only test")
 	}
 	parent := t.TempDir()
-	root := filepath.Join(parent, "created-by-child")
+	root := filepath.Join(parent, "application", "candidate", "created-by-child")
 	cmd := exec.Command(os.Args[0], "-test.run=TestWorkspaceCreationHelperProcess")
 	cmd.Env = append(os.Environ(), "ECO_WORKSPACE_CREATE_HELPER=1", "ECO_WORKSPACE_OWNER_ROOT="+root)
 	stdout, err := cmd.StdoutPipe()
