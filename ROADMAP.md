@@ -6,7 +6,7 @@ The roadmap describes intended development direction, not approved functionality
 
 - close issue #4 and accept clean, explicit, concurrency-safe workspace creation, reopen, migration, reset and restore;
 - close issue #3 and issue #12 with preserved-object source binding and safe Ask/restore serialisation;
-- qualify privacy-safe diagnostics, actual-build provenance, intended purpose, publisher continuity and health-related generated-processing restrictions under issues #14–#17 and #20;
+- qualify privacy-safe diagnostics, actual-build provenance, intended purpose, publisher continuity and issue #20's targeted clinical, professional, profiling, scoring and high-consequence output boundary under issues #14–#17 and #20;
 - complete accessibility, responsiveness and page-aware navigation evidence under issues #6–#8;
 - preserve fully offline, free and open-source operation on the controlling 8 GB Windows baseline.
 
@@ -61,7 +61,7 @@ These source foundations are not an approval for real evidence or a claim that a
 - matter-scoped source-constrained answers;
 - claim-level support checking;
 - model identity and receipt controls;
-- restricted-input gates, including the issue #20 health-related boundary;
+- issue #20 tests that preserve source-linked assistance with sensitive evidence while preventing diagnosis, treatment, clinical-risk, professional-representation, profiling, scoring and authority-side adverse-decision outputs;
 - laptop, standard and workstation profiles;
 - hostile-evidence and prompt-injection test programme.
 
