@@ -30,6 +30,6 @@ P0 issue #15 controls the future actual-build provenance requirement. Any future
 
 The generic root files `REPOSITORY_MANIFEST.csv` and `REPOSITORY_PREPARATION_RECEIPT.json` are retained only as explicit pointers to their historical records. They are not current integrity evidence.
 
-The generic root `SBOM.spdx.json` is intentionally absent until an exact-build SBOM exists. Current SBOM authority and requirements are recorded in `../SBOM_STATUS.md`.
+The root `SBOM.spdx.json` is retained only as an explicitly labelled historical V25 source-level SPDX record. The exact former root bytes remain preserved under the versioned historical path above. Current SBOM authority and requirements are recorded in `../SBOM_STATUS.md`.
 
 The root `THIRD_PARTY_NOTICES.md` now records current source-level notice status only. It is not the final notice bundle for a released executable.
