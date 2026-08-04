@@ -1,16 +1,17 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260804-010`  
-**Updated:** 4 August 2026, approximately 13:49 BST / 14:49 CEST  
+**Gate record:** `ECO-RELEASE-GATE-20260804-011`  
+**Updated:** 4 August 2026, approximately 14:28 BST / 15:28 CEST  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Canonical `main`:** `3c7c69586cac195d146188e6b914db12f6391815`  
+**Baseline `main` reviewed for this record:** `9c98588387f5aed6f33371fefbf1eacbc514a5e9`  
+**Live canonical source:** the repository's current `main` ref  
 **Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
 **Approved public V40 source release:** none  
 **Approved signed end-user executable:** none
 
 ## Controlling decision
 
-ECO remains a source-development project only.
+ECO remains a source-development project only. The baseline SHA identifies the exact tree reviewed when this gate record was prepared; it is not intended to self-reference a future squash commit.
 
 No branch, workflow, synthetic prototype, runner-built executable, governance record, deadline or audit pack currently authorises:
 
@@ -61,7 +62,7 @@ Required corrections:
 3. distinguish safe retained-object continuation from forbidden pathname redirection;
 4. correct workflow and reviewer evidence terminology.
 
-No issue #4 property is implemented or proved by this PR.
+No issue #4 property is implemented or proved by PR #72.
 
 ### PR #71 — V40 Matter journey
 
@@ -79,7 +80,7 @@ Required corrections:
 - correct modal focus management and focus return;
 - accessible progress/live-status semantics and narrow/high-zoom resilience;
 - exact page/region-aware citations with OCR provenance and navigation;
-- issue #65 as a hard prerequisite for M1.18 integration;
+- issue #65 as a hard prerequisite for M1.18;
 - core accessibility failures treated as release blockers;
 - qualified offline wording until issue #14 passes.
 
@@ -146,7 +147,7 @@ Core accessibility failures cannot be converted into a narrowed public preview.
 - no personal data, real evidence, credentials, private workspace or model file;
 - truthful pre-alpha, synthetic-only, unsigned and limitation wording;
 - issue #14 claims bounded to exact tested evidence;
-- a named accountable publisher/steward has formally accepted official source publishing, withdrawal, security-response, complaints and continuity duties for the release, satisfying issue #17's controlling organisational gate.
+- a named accountable publisher/steward has formally accepted official source publishing, withdrawal, security-response, complaints and continuity duties, satisfying issue #17.
 
 The 9 August target cannot turn an OPEN or FAIL item into a pass.
 
@@ -209,8 +210,7 @@ Issue #17 remains open and blocks an official source or binary release until a n
 Every relevant decision must record:
 
 - branch head and base;
-- actual tested checkout;
-- whether it is a synthetic PR merge;
+- actual tested checkout and whether it is a synthetic PR merge;
 - workflow run and jobs;
 - artifact inventory;
 - final merge/squash identity;
@@ -221,8 +221,8 @@ Do not use **exact-head**, **post-merge** or **independent** unless the evidence
 
 ## Next gate actions
 
-1. Correct PR #72 at a new frozen head and re-review its contract.
-2. Correct PR #71 at a new frozen head and re-review its controls, citations and accessibility rules.
+1. Correct PR #72 at a new frozen head and re-review it.
+2. Correct PR #71 at a new frozen head and re-review it.
 3. Implement workspace ownership in small current-main slices with real subprocess evidence.
 4. Implement the native Matter journey without M1.18.
 5. Correct issue #65 before assistance integration.
