@@ -162,7 +162,7 @@ func TestNonDeterministicFallbackIsRejected(t *testing.T) {
 	d, _ := baseDeps(t)
 	d.Compiler = compilerFunc(func(context.Context, Request) (CompiledContext, error) { return CompiledContext{}, errors.New("x") })
 	d.Fallback = fallbackFunc(func(context.Context, Request, Stage, ReasonCode) (FallbackOutput, error) {
-		return FallbackOutput{Text: "maybe", FallbackID: "fb", Deterministic: false}, nil
+		return FallbackOutput{Text: []byte("maybe"), FallbackID: "fb", Deterministic: false}, nil
 	})
 	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-10", Text: "q"})
 	if r.Outcome != OutcomeFailed || r.Receipt.Reason != ReasonInvalidFallback {
@@ -270,5 +270,101 @@ func TestRunnerAndVerifierPanicsNeverEscape(t *testing.T) {
 				t.Fatalf("unexpected: %+v", r)
 			}
 		})
+	}
+}
+
+func TestPartialCompilerPromptIsErasedOnError(t *testing.T) {
+	d, _ := baseDeps(t)
+	secret := []byte("partial-sensitive-prompt")
+	d.Compiler = compilerFunc(func(context.Context, Request) (CompiledContext, error) {
+		return CompiledContext{TurnID: "turn-partial", ContextID: "ctx-partial", Prompt: secret}, errors.New("compile failed")
+	})
+	d.Eraser = eraserFunc(func(_ context.Context, x *Transient) error {
+		if string(x.Prompt) != "partial-sensitive-prompt" {
+			t.Fatalf("partial prompt not transferred to cleanup: %q", x.Prompt)
+		}
+		x.Zero()
+		return nil
+	})
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-partial", Text: "q"})
+	if r.Outcome != OutcomeFallback || r.Receipt.Reason != ReasonCompileFailed {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range secret {
+		if b != 0 {
+			t.Fatalf("secret byte %d not erased", i)
+		}
+	}
+}
+
+func TestInvalidContextPromptIsErased(t *testing.T) {
+	d, _ := baseDeps(t)
+	secret := []byte("invalid-context-secret")
+	d.Compiler = compilerFunc(func(context.Context, Request) (CompiledContext, error) {
+		return CompiledContext{TurnID: "wrong", ContextID: "ctx-invalid", Prompt: secret}, nil
+	})
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-context", Text: "q"})
+	if r.Outcome != OutcomeFallback || r.Receipt.Reason != ReasonInvalidContext {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range secret {
+		if b != 0 {
+			t.Fatalf("secret byte %d not erased", i)
+		}
+	}
+}
+
+func TestUnapprovedFinishReasonCannotEnterReceipt(t *testing.T) {
+	d, _ := baseDeps(t)
+	d.Runner = runnerFunc(func(_ context.Context, in GenerationInput, emit func(Chunk) error) (GenerationResult, error) {
+		if err := emit(Chunk{TurnID: in.TurnID, RunID: in.RunID, Sequence: 0, Data: []byte("draft")}); err != nil {
+			return GenerationResult{}, err
+		}
+		return GenerationResult{TurnID: in.TurnID, RunID: in.RunID, Completed: true, TokenCount: 1, FinishReason: "patient-name-secret"}, nil
+	})
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-finish", Text: "q"})
+	if r.Outcome != OutcomeFallback || r.Receipt.Reason != ReasonInvalidGeneration || r.Receipt.FinishReason != "" {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	raw, _ := json.Marshal(r.Receipt)
+	if strings.Contains(string(raw), "patient-name-secret") {
+		t.Fatal("unapproved finish text leaked")
+	}
+}
+
+func TestRejectedVerifierBufferIsErased(t *testing.T) {
+	d, _ := baseDeps(t)
+	secret := []byte("rejected-verifier-secret")
+	d.Verifier = verifierFunc(func(context.Context, VerificationInput) (VerifiedOutput, error) {
+		return VerifiedOutput{Accepted: false, Text: secret}, nil
+	})
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-reject-secret", Text: "q"})
+	if r.Outcome != OutcomeFallback || r.Receipt.Reason != ReasonVerificationRejected {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range secret {
+		if b != 0 {
+			t.Fatalf("verifier byte %d not erased", i)
+		}
+	}
+}
+
+func TestFallbackBufferIsZeroedAfterCopy(t *testing.T) {
+	d, _ := baseDeps(t)
+	d.Compiler = compilerFunc(func(context.Context, Request) (CompiledContext, error) {
+		return CompiledContext{}, errors.New("compile failed")
+	})
+	buf := []byte("bounded fallback")
+	d.Fallback = fallbackFunc(func(context.Context, Request, Stage, ReasonCode) (FallbackOutput, error) {
+		return FallbackOutput{Text: buf, FallbackID: "fallback-zero", Deterministic: true}, nil
+	})
+	r := newTestOrchestrator(t, d).Run(context.Background(), Request{TurnID: "turn-fb-zero", Text: "q"})
+	if r.Outcome != OutcomeFallback || r.Text != "bounded fallback" {
+		t.Fatalf("unexpected: %+v", r)
+	}
+	for i, b := range buf {
+		if b != 0 {
+			t.Fatalf("fallback byte %d not zeroed", i)
+		}
 	}
 }
