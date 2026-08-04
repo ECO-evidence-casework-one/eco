@@ -1,10 +1,11 @@
 # ECO candidate organisation research register
 
 **Issue:** #62  
-**Status:** four public-source assessments completed; no organisation is approved, appointed, shortlisted or authorised for outreach  
+**Status:** four public-source assessments completed; OKFN deep evidence review completed; no organisation is approved, appointed, shortlisted or authorised for outreach  
 **Method:** [`NAMED_ORGANISATION_RESEARCH_METHOD.md`](NAMED_ORGANISATION_RESEARCH_METHOD.md)  
 **First assessment batch:** [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md)  
 **First full/near-full assessment:** [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md)  
+**OKFN deep review:** [`OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md`](OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md)  
 **Responsibility model:** [`PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md`](PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md)
 
 ## 1. Register rules
@@ -19,6 +20,7 @@
 - Distinguish fact, inference and unknown information.
 - Do not publish private contact details or confidential evidence.
 - Missing material evidence produces `HOLD` or `NOT ASSESSED`, not a positive score.
+- Corporate filing warnings, charges or other dependencies must be described accurately and must not be inflated into allegations of insolvency, misconduct or incapacity.
 - No contact may occur under this register or issue #62.
 
 ## 2. Status vocabulary
@@ -39,7 +41,7 @@
 | Software Freedom Conservancy, Inc. | Limited FOSS fiscal and legal host | 2026-08-04 | `POTENTIAL FIT` | [`Batch 1 — Candidate 1`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md#candidate-1--software-freedom-conservancy-inc) |
 | mySociety | Civic-technology and public-interest software collaborator | 2026-08-04 | `HOLD` | [`Batch 1 — Candidate 2`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md#candidate-2--mysociety) |
 | AbilityNet | Specialist accessibility assessment and assurance partner | 2026-08-04 | `POTENTIAL FIT` | [`Batch 1 — Candidate 3`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md#candidate-3--abilitynet) |
-| Open Knowledge Foundation | Full or near-full accountable ECO publisher/steward | 2026-08-04 | `HOLD` | [`Full/near-full assessment`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md) |
+| Open Knowledge Foundation | Full or near-full accountable ECO publisher/steward | 2026-08-04 | `HOLD` | [`Assessment`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md); [`deep review`](OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md) |
 
 ## 4. Register interpretation
 
@@ -55,17 +57,19 @@ The current entries do **not** form a shortlist.
 
 Open Knowledge Foundation has the broadest relevant public capability identified so far: UK governance, operations/finance, technical staff, open-source infrastructure, institutional contracting, end-user desktop software, offline/local-first experience and local AI.
 
-Its `HOLD` records that public evidence does not yet prove the complete issue #17 duties, including:
+Its deep review preserves the `HOLD` and records current evidence that:
 
-- private vulnerability intake and security response;
-- supported versions, release withdrawal and ordinary-user support;
-- Authenticode/signing governance and key recovery;
-- final-artifact SBOM/provenance control;
-- separated privacy, accessibility and product complaints;
-- insurance, product liability and high-consequence regulatory ownership;
-- strict no-custody and synthetic-only pre-gate operation;
-- separation from hosted, government or authority-side decision uses;
-- current legal/tax evidence where the public NGOsource wording expired in December 2025.
+- Companies House shows an active UK company and 2025 accounts filed in May 2026;
+- the confirmation statement due in June 2026 was displayed as overdue on 4 August 2026;
+- Companies House displays one outstanding registered fixed charge created in March 2025;
+- the public NGOsource equivalency wording expired in December 2025;
+- the public privacy policy remains dated May 2018 and is not ECO-product specific;
+- the Open Data Editor GitHub Security page says no security policy is detected;
+- Open Data Editor has current public desktop releases and GitHub-verified source/release commits;
+- GitHub commit verification is not proof of Windows Authenticode signing or exact binary provenance;
+- supported versions, withdrawal, private vulnerability intake, complaint separation, insurance, liability, regulatory ownership and strict ECO no-custody acceptance remain unproven.
+
+The overdue confirmation statement and registered charge are due-diligence facts. They are not described as proof of insolvency, default, misconduct or incapacity.
 
 No entry shows that an organisation:
 
@@ -120,7 +124,10 @@ For a full or near-full role, the record must also:
 - map every issue #17 publisher/steward duty;
 - test whether the organisation can retain final accountability while using specialists;
 - identify procurement, contract, data, incident, signing, complaints and exit capabilities;
-- identify which legal organisation would remain accountable when a specialist fails or withdraws.
+- identify which legal organisation would remain accountable when a specialist fails or withdraws;
+- distinguish source-control signatures from Windows executable-signing evidence;
+- identify current filing, charge, funding or asset-control dependencies without making unsupported conclusions;
+- record where underlying PDFs or instruments were not audibly inspected.
 
 ## 7. Shortlist control
 
@@ -136,6 +143,8 @@ No organisation may enter a shortlist unless:
 - a separate control review confirms the provisional status.
 
 A full/near-full candidate cannot be shortlisted while private security response, release/signing, complaints/support, insurance/liability, regulatory ownership or specialist-governance capability remain materially unproven.
+
+Open Knowledge Foundation cannot presently enter a shortlist while the deep-review gaps remain unresolved, including current corporate-filing clarification, charge/financial review, private vulnerability response, Windows signing, release withdrawal, support lifecycle, complaint separation, insurance/liability and no-custody acceptance.
 
 A limited-role candidate cannot be shortlisted as a specialist unless a plausible accountable steward model exists and can contract, supervise and replace that function.
 
@@ -180,9 +189,9 @@ Issue #62, the longlist, this register, the responsibility-model decision and al
 
 ## 10. Current next research step
 
-1. Review the responsibility-model comparison against the issue #17 gate and acceptance checklist.
-2. Review all four candidate records for factual accuracy, source freshness and role inflation.
-3. Deepen Open Knowledge Foundation's current legal/tax, accounts, repository, security, release/signing, complaints, insurance and accessibility evidence.
-4. Deepen the Software Freedom Conservancy and AbilityNet limited-role records and the mySociety `HOLD` questions.
-5. Test whether OKFN or another full-role candidate could govern the preferred steward-plus-specialists model.
+1. Review and preserve the OKFN deep-evidence supplement without changing the `HOLD` status.
+2. Recheck public corporate status later only when a genuine new filing or status change occurs; do not repeatedly poll without a defined purpose.
+3. Inspect current accounts and charge documents only through a valid auditable PDF process, without inventing figures or conclusions.
+4. Compare one further full-role organisation using the same issue #17 matrix, so OKFN is not treated as the default merely because it was examined first.
+5. Deepen the Software Freedom Conservancy and AbilityNet limited-role records and the mySociety `HOLD` questions where evidence can change a decision.
 6. Stop for control review before creating any shortlist or outreach-target proposal.

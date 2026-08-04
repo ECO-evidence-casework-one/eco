@@ -11,8 +11,9 @@ This directory contains public-safe material for research and non-binding explor
   - Software Freedom Conservancy, Inc. — `POTENTIAL FIT` for a limited FOSS fiscal/legal-host role;
   - mySociety — `HOLD` for a civic-tech/public-interest software collaborator role;
   - AbilityNet — `POTENTIAL FIT` for an accessibility assessment/assurance role.
-- Open Knowledge Foundation has the first full/near-full publisher/steward assessment and remains `HOLD`.
-- The preferred future operating model is now recorded as **one accountable official publisher/steward with controlled, replaceable specialist suppliers**.
+- Open Knowledge Foundation has the first full/near-full publisher/steward assessment and remains `HOLD` after a deeper current-evidence review.
+- The OKFN deep review records current corporate-filing, registered-charge, security-policy, signing, support, complaints, privacy and liability gaps without converting them into allegations.
+- The preferred future operating model is **one accountable official publisher/steward with controlled, replaceable specialist suppliers**.
 - Fragmented responsibility without one accountable publisher is rejected.
 - None of these findings forms a shortlist or establishes an organisation as interested, available, endorsed or approved for contact.
 - A research finding must not be described as consent, appointment, organisational acceptance or a transfer of duty.
@@ -28,6 +29,7 @@ This directory contains public-safe material for research and non-binding explor
 - [`PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md`](PUBLIC_SOURCE_ORGANISATION_LONGLIST_2026-08-04.md) — ten named organisations for possible deeper research, separated by possible role. The longlist is not a shortlist or contact list.
 - [`CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md`](CANDIDATE_ASSESSMENTS_BATCH_1_2026-08-04.md) — full public-source limited-role assessments for Software Freedom Conservancy, mySociety and AbilityNet, including contrary evidence, fatal-exclusion screens, material unknowns and prohibited next actions.
 - [`CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md`](CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04.md) — first assessment against the complete or near-complete issue #17 role; `HOLD` pending current legal/tax, security, signing, support, liability, regulatory and no-custody evidence.
+- [`OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md`](OKFN_DEEP_EVIDENCE_REVIEW_2026-08-04.md) — current authoritative-source supplement covering Companies House status, accounts filing, overdue confirmation statement, registered charge, stale policy evidence, ODE security-policy absence, release/signing distinctions and the unchanged `HOLD` decision.
 - [`PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md`](PUBLISHER_RESPONSIBILITY_MODEL_COMPARISON_2026-08-04.md) — comparison of one-organisation, accountable-steward-plus-specialists and fragmented-responsibility models; retains one official accountable publisher and rejects unowned fragmentation.
 
 ## Controlling records
@@ -56,11 +58,12 @@ Where wording conflicts or implementation evidence is incomplete, the more restr
 7. Review all records for source freshness, role inflation, contrary evidence and missing duties.
 8. Deepen public-source due diligence where a record remains `POTENTIAL FIT` or `HOLD`.
 9. Test whether a full-role candidate could govern the preferred specialist model.
-10. Stop for control review before creating any shortlist.
-11. Create a separate outreach-target decision only where justified.
-12. Approve the exact public contact route, sender role, message and pack version.
-13. Send only a non-binding written introduction.
-14. Return any formal interest to issue #17 due diligence and governing-body acceptance.
+10. Compare a further full-role candidate before treating any organisation as the default.
+11. Stop for control review before creating any shortlist.
+12. Create a separate outreach-target decision only where justified.
+13. Approve the exact public contact route, sender role, message and pack version.
+14. Send only a non-binding written introduction.
+15. Return any formal interest to issue #17 due diligence and governing-body acceptance.
 
 ## Responsibility-model rules
 
@@ -78,6 +81,9 @@ Where wording conflicts or implementation evidence is incomplete, the more restr
 - Record source and access dates.
 - Separate facts, inferences and unknowns.
 - Do not score missing evidence positively.
+- Do not convert an overdue filing, registered charge or other dependency into an unsupported claim of insolvency, misconduct or inability.
+- Do not describe a source-control signature as proof that a Windows executable is Authenticode-signed.
+- Record when a PDF or underlying instrument was not inspected through a valid auditable process.
 - Reputation, size, mission language, Digital Public Good status or previous partnerships are not proof of full publisher capability or interest.
 - Longlist inclusion is not a positive assessment.
 - A limited-role `POTENTIAL FIT` is not full-stewardship evidence.
