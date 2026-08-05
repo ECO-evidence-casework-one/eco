@@ -1,0 +1,92 @@
+name: ECO recovery verified llama runtime acquisition
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/eco-recovery-runtime-acquisition.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact tested ref
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Download and verify official llama.cpp b10259 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            'User-Agent' = 'ECO-recovery-runtime-acquisition'
+          }
+          $tag = 'b10259'
+          $expectedCommit = '1269cb1ff1598751f846241be90083ae9ad036fb'
+          $expectedArchiveHash = '6613d8d56263233ef800fb8f8135231adb5eb851b40558281190242b0b20556b'
+          $assetName = 'llama-b10259-bin-win-cpu-x64.zip'
+
+          $ref = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/ggml-org/llama.cpp/git/ref/tags/$tag"
+          $object = $ref.object
+          if ($object.type -eq 'tag') {
+            $annotated = Invoke-RestMethod -Headers $headers -Uri $object.url
+            $commit = $annotated.object.sha
+          } else {
+            $commit = $object.sha
+          }
+          if ($commit -ne $expectedCommit) { throw "llama.cpp tag commit mismatch: $commit" }
+
+          $release = Invoke-RestMethod -Headers $headers -Uri "https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/$tag"
+          $asset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
+          if ($null -eq $asset) { throw "Missing release asset $assetName" }
+          $archive = Join-Path $PWD $assetName
+          & curl.exe -L --fail --retry 5 --retry-delay 4 --output $archive $asset.browser_download_url
+          if ($LASTEXITCODE -ne 0) { throw 'Runtime download failed.' }
+          $got = (Get-FileHash -Algorithm SHA256 $archive).Hash.ToLowerInvariant()
+          if ($got -ne $expectedArchiveHash) { throw "Runtime archive SHA-256 mismatch: $got" }
+
+          New-Item -ItemType Directory -Force verified-runtime | Out-Null
+          Expand-Archive -Path $archive -DestinationPath verified-runtime -Force
+          $server = Get-ChildItem verified-runtime -Recurse -File -Filter llama-server.exe | Select-Object -First 1
+          $cli = Get-ChildItem verified-runtime -Recurse -File -Filter llama-cli.exe | Select-Object -First 1
+          if ($null -eq $server -or $null -eq $cli) { throw 'Verified release did not contain both llama-server.exe and llama-cli.exe.' }
+          $root = $server.Directory.FullName
+          if ($cli.Directory.FullName -ne $root) { throw 'CLI and server were not in one runtime directory.' }
+          Copy-Item "$root\*" verified-runtime-flat -Recurse -Force
+          $files = Get-ChildItem verified-runtime-flat -Recurse -File | Sort-Object FullName
+          $inventory = foreach ($file in $files) {
+            [ordered]@{
+              path = [IO.Path]::GetRelativePath((Resolve-Path verified-runtime-flat), $file.FullName).Replace('\','/')
+              size_bytes = $file.Length
+              sha256 = (Get-FileHash -Algorithm SHA256 $file.FullName).Hash.ToLowerInvariant()
+            }
+          }
+          $identity = [ordered]@{
+            llama_tag = $tag
+            llama_commit = $commit
+            archive = $assetName
+            archive_sha256 = $got
+            server_sha256 = (Get-FileHash -Algorithm SHA256 (Join-Path verified-runtime-flat 'llama-server.exe')).Hash.ToLowerInvariant()
+            cli_sha256 = (Get-FileHash -Algorithm SHA256 (Join-Path verified-runtime-flat 'llama-cli.exe')).Hash.ToLowerInvariant()
+            files = $inventory
+          }
+          $identity | ConvertTo-Json -Depth 8 | Set-Content verified-runtime-flat/ECO_RUNTIME_IDENTITY.json -Encoding utf8
+          Compress-Archive -Path verified-runtime-flat/* -DestinationPath ECO_LLAMA_B10259_VERIFIED_RUNTIME.zip -CompressionLevel Optimal
+          Get-FileHash -Algorithm SHA256 ECO_LLAMA_B10259_VERIFIED_RUNTIME.zip
+
+      - name: Upload verified runtime only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_LLAMA_B10259_VERIFIED_RUNTIME
+          path: ECO_LLAMA_B10259_VERIFIED_RUNTIME.zip
+          retention-days: 1
+          compression-level: 0
+          if-no-files-found: error
