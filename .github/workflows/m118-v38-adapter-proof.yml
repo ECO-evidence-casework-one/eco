@@ -1,0 +1,47 @@
+name: M1.18 V38 worker adapter proof
+
+on:
+  pull_request:
+    branches:
+      - repair/m118-issue65-hardening
+    paths:
+      - 'repairs/issue65/v38adapterproof/**'
+      - '.github/workflows/m118-v38-adapter-proof.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-v38-worker-proof:
+    name: Windows V38 real-process termination proof
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact tested head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Run exact recovered V38 worker proof
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host "EXACT_HEAD=$(git rev-parse HEAD)"
+          go test ./repairs/issue65/v38adapterproof -count=20 -v
+          if ($LASTEXITCODE -ne 0) { throw 'Recovered V38 worker proof failed.' }
+          go vet ./repairs/issue65/v38adapterproof
+          if ($LASTEXITCODE -ne 0) { throw 'Recovered V38 worker proof vet failed.' }
+
+      - name: Confirm no executable or artifact publication
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem repairs/issue65/v38adapterproof -Recurse -File | Select-Object FullName,Length
+          Write-Host 'No artifact, executable, model or runtime upload step exists.'
