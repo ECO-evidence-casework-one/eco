@@ -60,6 +60,7 @@ jobs:
           if ($null -eq $server -or $null -eq $cli) { throw 'Verified release did not contain both llama-server.exe and llama-cli.exe.' }
           $root = $server.Directory.FullName
           if ($cli.Directory.FullName -ne $root) { throw 'CLI and server were not in one runtime directory.' }
+          New-Item -ItemType Directory -Force verified-runtime-flat | Out-Null
           Copy-Item "$root\*" verified-runtime-flat -Recurse -Force
           $files = Get-ChildItem verified-runtime-flat -Recurse -File | Sort-Object FullName
           $inventory = foreach ($file in $files) {
