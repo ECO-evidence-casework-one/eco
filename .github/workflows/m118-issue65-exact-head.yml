@@ -1,0 +1,129 @@
+name: M1.18 issue 65 exact-head qualification
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'repairs/issue65/**'
+      - '.github/workflows/m118-issue65-exact-head.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: m118-issue65-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-hostile:
+    name: Linux race and hostile qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.x'
+          check-latest: false
+          cache: false
+
+      - name: Reconstruct and apply frozen repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+          test "$(sha256sum repairs/issue65/repair.patch.gz.b64 | cut -d' ' -f1)" = "ce64da58bc7fc7e3ef258877b613b21005bd5d4645c25df6639c706aee485b24"
+          base64 -d repairs/issue65/repair.patch.gz.b64 | gzip -d > /tmp/m118-issue65.patch
+          test "$(sha256sum /tmp/m118-issue65.patch | cut -d' ' -f1)" = "68ad7817a0069e5c17c0ab770146800dc0213bfb9cdc77a7d85bd88c771359cd"
+          git apply --check /tmp/m118-issue65.patch
+          git apply /tmp/m118-issue65.patch
+          test "$(sha256sum internal/runtime/turnorchestrator/orchestrator.go | cut -d' ' -f1)" = "acefa7452f7115facb3d097055eb00f4efe45c7bababc1ab888d07743bcbc7f4"
+          test "$(sha256sum internal/runtime/turnorchestrator/types.go | cut -d' ' -f1)" = "8e11bb2945bea42be22a63a5f08c4c2956c204297d694fbf5826c8d8b0e5f9b3"
+
+      - name: Ordinary tests
+        run: go test ./internal/runtime/turnorchestrator -count=1
+
+      - name: Race detector
+        run: go test -race ./internal/runtime/turnorchestrator -count=1
+
+      - name: Repeat hostile cases fifty times
+        run: go test ./internal/runtime/turnorchestrator -run 'Issue65|NoOp|Stuck|Retained|Ignored|Subprocess|Cancellation' -count=50
+
+      - name: Vet and formatting
+        shell: bash
+        run: |
+          set -euo pipefail
+          go vet ./internal/runtime/turnorchestrator
+          test -z "$(gofmt -l internal/runtime/turnorchestrator)"
+
+      - name: Confirm no executable artifact
+        if: always()
+        shell: bash
+        run: |
+          find . -type f \( -iname '*.exe' -o -iname '*.dll' -o -iname '*.gguf' \) -print
+          echo 'No workflow artifact or release upload step exists.'
+
+  windows-process:
+    name: Windows process-termination qualification
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.x'
+          check-latest: false
+          cache: false
+
+      - name: Reconstruct and apply frozen repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "EXACT_HEAD=$(git rev-parse HEAD)"
+          test "$(sha256sum repairs/issue65/repair.patch.gz.b64 | cut -d' ' -f1)" = "ce64da58bc7fc7e3ef258877b613b21005bd5d4645c25df6639c706aee485b24"
+          base64 -d repairs/issue65/repair.patch.gz.b64 | gzip -d > "$RUNNER_TEMP/m118-issue65.patch"
+          test "$(sha256sum "$RUNNER_TEMP/m118-issue65.patch" | cut -d' ' -f1)" = "68ad7817a0069e5c17c0ab770146800dc0213bfb9cdc77a7d85bd88c771359cd"
+          git apply --check "$RUNNER_TEMP/m118-issue65.patch"
+          git apply "$RUNNER_TEMP/m118-issue65.patch"
+          test "$(sha256sum internal/runtime/turnorchestrator/orchestrator.go | cut -d' ' -f1)" = "acefa7452f7115facb3d097055eb00f4efe45c7bababc1ab888d07743bcbc7f4"
+
+      - name: Run complete package on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go test ./internal/runtime/turnorchestrator -count=1
+          if ($LASTEXITCODE -ne 0) { throw 'Windows ordinary tests failed.' }
+
+      - name: Repeat Windows hostile process cases
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go test ./internal/runtime/turnorchestrator -run 'Issue65|NoOp|Stuck|Retained|Ignored|Subprocess|Cancellation' -count=20
+          if ($LASTEXITCODE -ne 0) { throw 'Windows hostile tests failed.' }
+
+      - name: Vet on Windows
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go vet ./internal/runtime/turnorchestrator
+          if ($LASTEXITCODE -ne 0) { throw 'Windows vet failed.' }
+
+      - name: Confirm no executable artifact
+        if: always()
+        shell: pwsh
+        run: |
+          Get-ChildItem -Recurse -File -Include *.exe,*.dll,*.gguf | Select-Object FullName,Length
+          Write-Host 'No workflow artifact or release upload step exists.'
