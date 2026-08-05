@@ -39,7 +39,25 @@ jobs:
         run: |
           set -euo pipefail
           echo "EXACT_HEAD=$(git rev-parse HEAD)"
-          tr -d '\r\n\t ' < repairs/issue65/repair.patch.gz.b64 | base64 -d | gzip -d > /tmp/m118-issue65.patch
+          expected=(
+            2033ac2314d96fcd56a1cad1a0fba87e48d0cb8d039f59a226f331376e701ac7
+            e40f5515361b370c809a99b90f1008bb8a74d39cdabf5ae5da40ec9a55293d4f
+            dda168c4fedb305bb0ff882aff761ea8ac94c4d4df60c74871fed77c5d46b70e
+            52e1e0aa954f4590ddf6f8665d8b8ca1582bb3ab32c2bb5cdb74b609b61de88a
+            66d75dd6d825524cf044f986f82db13e2fe1e012d7ccad4029883d411a563ccf
+          )
+          : > /tmp/m118-repair.b64
+          for i in 0 1 2 3 4; do
+            src="repairs/issue65/repair.v2.part0${i}"
+            clean="/tmp/repair-part-${i}"
+            tr -d '\r\n\t ' < "$src" > "$clean"
+            got="$(sha256sum "$clean" | cut -d' ' -f1)"
+            echo "PART_${i}_SHA256=${got}"
+            test "$got" = "${expected[$i]}"
+            cat "$clean" >> /tmp/m118-repair.b64
+          done
+          test "$(wc -c < /tmp/m118-repair.b64 | tr -d ' ')" = "14696"
+          base64 -d /tmp/m118-repair.b64 | gzip -d > /tmp/m118-issue65.patch
           patch_hash="$(sha256sum /tmp/m118-issue65.patch | cut -d' ' -f1)"
           echo "DECODED_PATCH_SHA256=${patch_hash}"
           test "${patch_hash}" = "68ad7817a0069e5c17c0ab770146800dc0213bfb9cdc77a7d85bd88c771359cd"
@@ -94,7 +112,25 @@ jobs:
         run: |
           set -euo pipefail
           echo "EXACT_HEAD=$(git rev-parse HEAD)"
-          tr -d '\r\n\t ' < repairs/issue65/repair.patch.gz.b64 | base64 -d | gzip -d > "$RUNNER_TEMP/m118-issue65.patch"
+          expected=(
+            2033ac2314d96fcd56a1cad1a0fba87e48d0cb8d039f59a226f331376e701ac7
+            e40f5515361b370c809a99b90f1008bb8a74d39cdabf5ae5da40ec9a55293d4f
+            dda168c4fedb305bb0ff882aff761ea8ac94c4d4df60c74871fed77c5d46b70e
+            52e1e0aa954f4590ddf6f8665d8b8ca1582bb3ab32c2bb5cdb74b609b61de88a
+            66d75dd6d825524cf044f986f82db13e2fe1e012d7ccad4029883d411a563ccf
+          )
+          : > "$RUNNER_TEMP/m118-repair.b64"
+          for i in 0 1 2 3 4; do
+            src="repairs/issue65/repair.v2.part0${i}"
+            clean="$RUNNER_TEMP/repair-part-${i}"
+            tr -d '\r\n\t ' < "$src" > "$clean"
+            got="$(sha256sum "$clean" | cut -d' ' -f1)"
+            echo "PART_${i}_SHA256=${got}"
+            test "$got" = "${expected[$i]}"
+            cat "$clean" >> "$RUNNER_TEMP/m118-repair.b64"
+          done
+          test "$(wc -c < "$RUNNER_TEMP/m118-repair.b64" | tr -d ' ')" = "14696"
+          base64 -d "$RUNNER_TEMP/m118-repair.b64" | gzip -d > "$RUNNER_TEMP/m118-issue65.patch"
           patch_hash="$(sha256sum "$RUNNER_TEMP/m118-issue65.patch" | cut -d' ' -f1)"
           echo "DECODED_PATCH_SHA256=${patch_hash}"
           test "${patch_hash}" = "68ad7817a0069e5c17c0ab770146800dc0213bfb9cdc77a7d85bd88c771359cd"
