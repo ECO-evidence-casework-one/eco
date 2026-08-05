@@ -22,7 +22,7 @@ done
 
 total_length="$(wc -c < "$base64_path" | tr -d ' ')"
 echo "RECONSTRUCTED_BASE64_LENGTH=${total_length}"
-test "$total_length" = "16716"
+test "$total_length" = "16672"
 base64 -d "$base64_path" | gzip -d > "$patch_path"
 patch_hash="$(hash_file "$patch_path")"
 echo "DECODED_PATCH_SHA256=${patch_hash}"
