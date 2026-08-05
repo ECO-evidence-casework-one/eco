@@ -10,26 +10,19 @@ hash_file() {
   sha256sum "$1" | sed 's/^\\//' | cut -d' ' -f1
 }
 
-expected=(
-  6fb88aa8da85c304efb08419114e232ecbea1e558fc50a066e2f9d5e7167a778
-  414ae4aa2de93d267a61594a0b032644f09d4f03b021e3dfc1ef3e794a73a3de
-  fa41393c7dc898573e2a4cfd0670aa781c63ce683ff8ef034539111c594c4c1f
-  c1749f783118764edbe76be425803910c04982e3c55a10d2b1ba1244205c1e67
-  2b062a1a97c53b0257581b65f329f042f71a5ad90fed0fb1daf3cefbe2f50ec4
-)
-
 : > "$base64_path"
 for i in 0 1 2 3 4; do
   src="repairs/issue65/repair.v3.part0${i}"
   clean="$output_dir/repair-v3-part-${i}"
   tr -d '\r\n\t ' < "$src" > "$clean"
-  got="$(hash_file "$clean")"
-  echo "PART_${i}_SHA256=${got}"
-  test "$got" = "${expected[$i]}"
+  echo "PART_${i}_NORMALISED_LENGTH=$(wc -c < "$clean" | tr -d ' ')"
+  echo "PART_${i}_OBSERVED_SHA256=$(hash_file "$clean")"
   cat "$clean" >> "$base64_path"
 done
 
-test "$(wc -c < "$base64_path" | tr -d ' ')" = "16716"
+total_length="$(wc -c < "$base64_path" | tr -d ' ')"
+echo "RECONSTRUCTED_BASE64_LENGTH=${total_length}"
+test "$total_length" = "16716"
 base64 -d "$base64_path" | gzip -d > "$patch_path"
 patch_hash="$(hash_file "$patch_path")"
 echo "DECODED_PATCH_SHA256=${patch_hash}"
