@@ -1,0 +1,81 @@
+name: UI-0 framework gate
+
+on:
+  pull_request:
+    paths:
+      - 'prototypes/ui0/**'
+      - '.github/workflows/ui0-framework-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-ui0-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qt-windows:
+    name: Qt 6 / QML Windows build
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+      - name: Configure and build Qt UI-0
+        shell: msys2 {0}
+        run: |
+          cmake -S prototypes/ui0/qt -B build/ui0-qt -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/ui0-qt --config Release
+      - name: Deploy Qt UI-0 runtime folder
+        shell: msys2 {0}
+        run: |
+          mkdir -p dist/ui0-qt
+          cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
+          windeployqt --release --qmldir prototypes/ui0/qt dist/ui0-qt/ECO_UI0_QT.exe
+          sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO_UI0_QT_WINDOWS
+          path: dist/ui0-qt
+          if-no-files-found: error
+          retention-days: 7
+
+  slint-windows:
+    name: Slint 1.17 Windows build
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Toolchain identity
+        shell: pwsh
+        run: |
+          rustc --version
+          cargo --version
+      - name: Build Slint UI-0
+        shell: pwsh
+        env:
+          SLINT_BACKEND: winit-software
+        run: cargo build --release --locked --manifest-path prototypes/ui0/slint/Cargo.toml
+      - name: Stage Slint UI-0
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist/ui0-slint | Out-Null
+          Copy-Item prototypes/ui0/slint/target/release/eco-ui0-slint.exe dist/ui0-slint/ECO_UI0_SLINT.exe
+          (Get-FileHash dist/ui0-slint/ECO_UI0_SLINT.exe -Algorithm SHA256).Hash.ToLower() + '  ECO_UI0_SLINT.exe' | Set-Content dist/ui0-slint/SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO_UI0_SLINT_WINDOWS
+          path: dist/ui0-slint
+          if-no-files-found: error
+          retention-days: 7
