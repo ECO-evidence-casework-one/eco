@@ -15,8 +15,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  qt-windows:
-    name: Qt 6 / QML Windows build
+  qt-build:
+    name: Qt 6 / QML Windows build + package
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
@@ -45,16 +45,14 @@ jobs:
           cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
           windeployqt --release --no-translations dist/ui0-qt/ECO_UI0_QT.exe
 
-          # Main.qml is compiled into the executable, while Qt Quick Controls and style
-          # modules are dynamic in this proof. Preserve the required QML module trees.
+          # Main.qml is compiled into the executable. Qt Quick Controls and style modules
+          # remain dynamic in this architecture proof, so preserve the required module trees.
           cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
           cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
 
-          # windeployqt handles Qt libraries but not the complete MinGW/MSYS2 transitive
-          # dependency graph. Compute the recursive dependency closure for every EXE/DLL
-          # already staged and copy any matching UCRT64 runtime DLL into the app root.
-          # This catches dependencies such as libpng, md4c, freetype and harfbuzz rather
-          # than assuming that a successful link means a clean Windows machine can launch.
+          # windeployqt does not close the complete MinGW/MSYS2 transitive dependency graph.
+          # Recursively copy every dependency that is supplied by UCRT64. This is the class
+          # of failure the Acer exposed (libpng, md4c, freetype, harfbuzz).
           for pass in 1 2 3 4 5 6 7 8; do
             added=0
             while IFS= read -r bin; do
@@ -74,8 +72,6 @@ jobs:
             [ "$added" -eq 1 ] || break
           done
 
-          # Fail if any staged binary still names a UCRT64-provided dependency that has
-          # not been copied. Windows system DLLs are intentionally not bundled.
           missing=0
           while IFS= read -r bin; do
             while IFS= read -r dep; do
@@ -91,23 +87,6 @@ jobs:
 
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
           find dist/ui0-qt -type f -printf '%P\n' | sort > dist/ui0-qt/PACKAGE_CONTENTS.txt
-      - name: Clean-Windows launch smoke — Qt
-        shell: pwsh
-        run: |
-          $savedPath = $env:PATH
-          try {
-            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-            $exe = (Resolve-Path 'dist/ui0-qt/ECO_UI0_QT.exe').Path
-            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
-            Start-Sleep -Seconds 5
-            if ($p.HasExited) {
-              throw "Packaged Qt UI-0 exited during clean-runtime launch smoke. Exit code: $($p.ExitCode)"
-            }
-            Stop-Process -Id $p.Id -Force
-          }
-          finally {
-            $env:PATH = $savedPath
-          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ECO_UI0_QT_WINDOWS
@@ -115,8 +94,52 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  slint-windows:
-    name: Slint 1.17 Windows build
+  qt-clean-launch:
+    name: Qt clean Windows consumer launch
+    needs: qt-build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      # Deliberately no checkout, compiler, Qt or MSYS2 setup in this job. It receives only
+      # the packaged artifact produced on the separate build VM.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ECO_UI0_QT_WINDOWS
+          path: consumer/qt
+      - name: Verify expected Acer-regression DLLs are present
+        shell: pwsh
+        run: |
+          $required = @('libpng16-16.dll','libmd4c.dll','libfreetype-6.dll','libharfbuzz-0.dll')
+          foreach ($dll in $required) {
+            if (-not (Get-ChildItem -Path consumer/qt -Recurse -File -Filter $dll -ErrorAction SilentlyContinue)) {
+              throw "Packaged Qt artifact is missing Acer regression dependency: $dll"
+            }
+          }
+      - name: Launch packaged Qt with clean consumer PATH
+        shell: pwsh
+        run: |
+          $savedPath = $env:PATH
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $exe = (Resolve-Path 'consumer/qt/ECO_UI0_QT.exe').Path
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 8
+            if ($p.HasExited) {
+              throw "Packaged Qt UI-0 exited on the separate consumer VM. Exit code: $($p.ExitCode)"
+            }
+            $proc = Get-Process -Id $p.Id -ErrorAction Stop
+            if (-not $proc.MainWindowHandle) {
+              throw "Packaged Qt UI-0 process stayed alive but did not expose a main window on the consumer VM."
+            }
+            "PASS: Qt package launched on separate Windows consumer VM; PID=$($p.Id); HWND=$($proc.MainWindowHandle)"
+            Stop-Process -Id $p.Id -Force
+          }
+          finally {
+            $env:PATH = $savedPath
+          }
+
+  slint-build:
+    name: Slint 1.17 Windows build + package
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
@@ -142,26 +165,43 @@ jobs:
           Copy-Item prototypes/ui0/slint/target/release/eco-ui0-slint.exe dist/ui0-slint/ECO_UI0_SLINT.exe
           Copy-Item prototypes/ui0/slint/Cargo.lock.resolved dist/ui0-slint/Cargo.lock.resolved
           (Get-FileHash dist/ui0-slint/ECO_UI0_SLINT.exe -Algorithm SHA256).Hash.ToLower() + '  ECO_UI0_SLINT.exe' | Set-Content dist/ui0-slint/SHA256SUMS.txt -Encoding ascii
-      - name: Clean-Windows launch smoke — Slint
-        shell: pwsh
-        run: |
-          $savedPath = $env:PATH
-          try {
-            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-            $exe = (Resolve-Path 'dist/ui0-slint/ECO_UI0_SLINT.exe').Path
-            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
-            Start-Sleep -Seconds 5
-            if ($p.HasExited) {
-              throw "Packaged Slint UI-0 exited during clean-runtime launch smoke. Exit code: $($p.ExitCode)"
-            }
-            Stop-Process -Id $p.Id -Force
-          }
-          finally {
-            $env:PATH = $savedPath
-          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ECO_UI0_SLINT_WINDOWS
           path: dist/ui0-slint
           if-no-files-found: error
           retention-days: 7
+
+  slint-clean-launch:
+    name: Slint clean Windows consumer launch
+    needs: slint-build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      # Deliberately separate consumer VM: no checkout, Rust or build setup.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ECO_UI0_SLINT_WINDOWS
+          path: consumer/slint
+      - name: Launch packaged Slint with clean consumer PATH
+        shell: pwsh
+        run: |
+          $savedPath = $env:PATH
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $exe = (Resolve-Path 'consumer/slint/ECO_UI0_SLINT.exe').Path
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 8
+            if ($p.HasExited) {
+              throw "Packaged Slint UI-0 exited on the separate consumer VM. Exit code: $($p.ExitCode)"
+            }
+            $proc = Get-Process -Id $p.Id -ErrorAction Stop
+            if (-not $proc.MainWindowHandle) {
+              throw "Packaged Slint UI-0 process stayed alive but did not expose a main window on the consumer VM."
+            }
+            "PASS: Slint package launched on separate Windows consumer VM; PID=$($p.Id); HWND=$($proc.MainWindowHandle)"
+            Stop-Process -Id $p.Id -Force
+          }
+          finally {
+            $env:PATH = $savedPath
+          }
