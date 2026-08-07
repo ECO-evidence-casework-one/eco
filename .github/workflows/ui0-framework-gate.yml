@@ -66,12 +66,16 @@ jobs:
         shell: pwsh
         env:
           SLINT_BACKEND: winit-software
-        run: cargo build --release --locked --manifest-path prototypes/ui0/slint/Cargo.toml
+        run: cargo build --release --manifest-path prototypes/ui0/slint/Cargo.toml
+      - name: Preserve resolved Slint dependency lock
+        shell: pwsh
+        run: Copy-Item prototypes/ui0/slint/Cargo.lock prototypes/ui0/slint/Cargo.lock.resolved
       - name: Stage Slint UI-0
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force dist/ui0-slint | Out-Null
           Copy-Item prototypes/ui0/slint/target/release/eco-ui0-slint.exe dist/ui0-slint/ECO_UI0_SLINT.exe
+          Copy-Item prototypes/ui0/slint/Cargo.lock.resolved dist/ui0-slint/Cargo.lock.resolved
           (Get-FileHash dist/ui0-slint/ECO_UI0_SLINT.exe -Algorithm SHA256).Hash.ToLower() + '  ECO_UI0_SLINT.exe' | Set-Content dist/ui0-slint/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
