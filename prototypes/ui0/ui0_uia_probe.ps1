@@ -61,8 +61,13 @@ try {
     $exe = (Resolve-Path $ExePath).Path
     $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 
+    # MainWindowHandle is an IntPtr. In PowerShell, an IntPtr.Zero object is not safely
+    # testable with `-not`: the object itself can be truthy even though its numeric handle
+    # is zero. Track and compare the numeric handle explicitly so we do not call UIA with
+    # IntPtr.Zero before the framework has created its real top-level window.
     $deadline = (Get-Date).AddSeconds(15)
     $proc = $null
+    [IntPtr]$hwnd = [IntPtr]::Zero
     do {
         Start-Sleep -Milliseconds 250
         if ($p.HasExited) {
@@ -70,11 +75,19 @@ try {
             throw "UI-0 exited before exposing a window. Exit code: $($p.ExitCode)"
         }
         $proc = Get-Process -Id $p.Id -ErrorAction Stop
-    } while (-not $proc.MainWindowHandle -and (Get-Date) -lt $deadline)
+        $proc.Refresh()
+        [IntPtr]$candidate = $proc.MainWindowHandle
+        if ($candidate.ToInt64() -ne 0) {
+            $hwnd = $candidate
+        }
+    } while ($hwnd.ToInt64() -eq 0 -and (Get-Date) -lt $deadline)
 
-    if (-not $proc.MainWindowHandle) { throw 'UI-0 did not expose a main window within 15 seconds.' }
+    if ($hwnd.ToInt64() -eq 0) { throw 'UI-0 did not expose a main window within 15 seconds.' }
 
-    $root = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
+    # Give the framework a short settling interval after HWND creation so its accessible
+    # child tree can be populated before UI Automation takes its first snapshot.
+    Start-Sleep -Milliseconds 750
+    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
     if ($null -eq $root) { throw 'UI Automation could not obtain the main window root.' }
     $elements = Get-AllElements $root
     if ($elements.Count -lt 8) { throw "Accessibility tree is unexpectedly small: $($elements.Count) descendants." }
@@ -112,8 +125,8 @@ try {
     }
 
     # Locate transcript by accessible name first; otherwise locate a text/edit control whose
-    # exposed value contains the synthetic answer. This is a hard test that the answer is in
-    # the accessibility/text system rather than only painted pixels.
+    # exposed value contains the synthetic answer. This proves the answer exists in the
+    # Windows accessibility/text system rather than only as painted pixels.
     $transcript = $null
     foreach ($e in (Get-AllElements $root)) {
         $name = Element-Name $e
@@ -135,7 +148,7 @@ try {
     $valueAvailable = [bool]$transcript.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty)
     if (-not $textAvailable -and -not $valueAvailable) { throw 'AI transcript exposes neither TextPattern nor ValuePattern.' }
 
-    # Where TextPattern is available, prove that text can be selected through Windows UIA.
+    # Where TextPattern is available, prove that Windows can select the transcript through UIA.
     $selectionProbe = 'value-only'
     if ($textAvailable) {
         $tp = $transcript.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
@@ -151,7 +164,7 @@ try {
         "framework=$Framework",
         'status=PASS',
         "pid=$($p.Id)",
-        "hwnd=$($proc.MainWindowHandle)",
+        "hwnd=$($hwnd.ToInt64())",
         "accessible_descendants=$($elements.Count)",
         "buttons=$($buttons.Count)",
         "keyboard_focusable=$($focusable.Count)",
