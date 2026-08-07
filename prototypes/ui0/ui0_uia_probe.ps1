@@ -53,6 +53,15 @@ function Names-Snapshot($elements) {
     return $names
 }
 
+function Find-TopLevelUIAForProcess([int]$processId) {
+    $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ProcessIdProperty,
+        $processId
+    )
+    return $desktop.FindFirst([System.Windows.Automation.TreeScope]::Children, $condition)
+}
+
 $savedPath = $env:PATH
 $p = $null
 try {
@@ -61,34 +70,29 @@ try {
     $exe = (Resolve-Path $ExePath).Path
     $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
 
-    # MainWindowHandle is an IntPtr. In PowerShell, an IntPtr.Zero object is not safely
-    # testable with `-not`: the object itself can be truthy even though its numeric handle
-    # is zero. Track and compare the numeric handle explicitly so we do not call UIA with
-    # IntPtr.Zero before the framework has created its real top-level window.
+    # Discover the real top-level application window through Windows UI Automation itself,
+    # keyed to the process ID. Process.MainWindowHandle is framework/session-dependent and
+    # is not a sufficiently strong accessibility gate. Requiring a UIA top-level element
+    # proves Windows can actually see the application as an accessible desktop surface.
     $deadline = (Get-Date).AddSeconds(15)
-    $proc = $null
-    [IntPtr]$hwnd = [IntPtr]::Zero
+    $root = $null
     do {
         Start-Sleep -Milliseconds 250
         if ($p.HasExited) {
             if (Test-Path $stderr) { Get-Content $stderr | Write-Host }
-            throw "UI-0 exited before exposing a window. Exit code: $($p.ExitCode)"
+            throw "UI-0 exited before exposing an accessible top-level window. Exit code: $($p.ExitCode)"
         }
-        $proc = Get-Process -Id $p.Id -ErrorAction Stop
-        $proc.Refresh()
-        [IntPtr]$candidate = $proc.MainWindowHandle
-        if ($candidate.ToInt64() -ne 0) {
-            $hwnd = $candidate
-        }
-    } while ($hwnd.ToInt64() -eq 0 -and (Get-Date) -lt $deadline)
+        $root = Find-TopLevelUIAForProcess $p.Id
+    } while ($null -eq $root -and (Get-Date) -lt $deadline)
 
-    if ($hwnd.ToInt64() -eq 0) { throw 'UI-0 did not expose a main window within 15 seconds.' }
+    if ($null -eq $root) { throw 'UI-0 did not expose a top-level Windows UI Automation element within 15 seconds.' }
 
-    # Give the framework a short settling interval after HWND creation so its accessible
-    # child tree can be populated before UI Automation takes its first snapshot.
     Start-Sleep -Milliseconds 750
-    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
-    if ($null -eq $root) { throw 'UI Automation could not obtain the main window root.' }
+    # Refresh the top-level element once after the framework has settled.
+    $refreshedRoot = Find-TopLevelUIAForProcess $p.Id
+    if ($null -ne $refreshedRoot) { $root = $refreshedRoot }
+
+    $nativeHandle = [int]$root.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NativeWindowHandleProperty)
     $elements = Get-AllElements $root
     if ($elements.Count -lt 8) { throw "Accessibility tree is unexpectedly small: $($elements.Count) descendants." }
 
@@ -107,8 +111,14 @@ try {
     if ($null -eq $search) { throw 'Could not locate an accessible search text field with ValuePattern.' }
     $search.SetFocus()
     $valuePattern = $search.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)
-    $valuePattern.SetValue('war')
-    Start-Sleep -Milliseconds 750
+
+    # Exercise incremental values rather than only the final term. Each update must be
+    # accepted by the control without requiring a Search button or Enter key.
+    foreach ($query in @('w','wa','war')) {
+        $valuePattern.SetValue($query)
+        Start-Sleep -Milliseconds 300
+    }
+    Start-Sleep -Milliseconds 500
 
     $filteredElements = Get-AllElements $root
     $filteredNames = Names-Snapshot $filteredElements
@@ -148,7 +158,6 @@ try {
     $valueAvailable = [bool]$transcript.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsValuePatternAvailableProperty)
     if (-not $textAvailable -and -not $valueAvailable) { throw 'AI transcript exposes neither TextPattern nor ValuePattern.' }
 
-    # Where TextPattern is available, prove that Windows can select the transcript through UIA.
     $selectionProbe = 'value-only'
     if ($textAvailable) {
         $tp = $transcript.GetCurrentPattern([System.Windows.Automation.TextPattern]::Pattern)
@@ -164,11 +173,11 @@ try {
         "framework=$Framework",
         'status=PASS',
         "pid=$($p.Id)",
-        "hwnd=$($hwnd.ToInt64())",
+        "uia_native_window_handle=$nativeHandle",
         "accessible_descendants=$($elements.Count)",
         "buttons=$($buttons.Count)",
         "keyboard_focusable=$($focusable.Count)",
-        'live_search=PASS',
+        'live_search_incremental=PASS',
         'search_clear_reset=PASS',
         'transcript_accessible=PASS',
         "transcript_selection_probe=$selectionProbe"
