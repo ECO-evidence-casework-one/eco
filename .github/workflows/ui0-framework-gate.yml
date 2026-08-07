@@ -37,22 +37,77 @@ jobs:
         run: |
           cmake -S prototypes/ui0/qt -B build/ui0-qt -G Ninja -DCMAKE_BUILD_TYPE=Release
           cmake --build build/ui0-qt --config Release
-      - name: Deploy Qt UI-0 runtime folder
+      - name: Deploy complete Qt UI-0 runtime closure
         shell: msys2 {0}
         run: |
+          set -euo pipefail
           mkdir -p dist/ui0-qt/qml
           cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
           windeployqt --release --no-translations dist/ui0-qt/ECO_UI0_QT.exe
-          # windeployqt does not deploy the MinGW compiler runtime. Keep this architecture
-          # artifact runnable on a clean Windows machine rather than assuming MSYS2 is installed.
-          cp /ucrt64/bin/libgcc_s_seh-1.dll dist/ui0-qt/
-          cp /ucrt64/bin/libstdc++-6.dll dist/ui0-qt/
-          cp /ucrt64/bin/libwinpthread-1.dll dist/ui0-qt/
-          # Main.qml is compiled into the executable, but Qt Quick Controls and its style
-          # are QML modules. Preserve the needed runtime modules for the dynamic UI-0 gate.
+
+          # Main.qml is compiled into the executable, while Qt Quick Controls and style
+          # modules are dynamic in this proof. Preserve the required QML module trees.
           cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
           cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
+
+          # windeployqt handles Qt libraries but not the complete MinGW/MSYS2 transitive
+          # dependency graph. Compute the recursive dependency closure for every EXE/DLL
+          # already staged and copy any matching UCRT64 runtime DLL into the app root.
+          # This catches dependencies such as libpng, md4c, freetype and harfbuzz rather
+          # than assuming that a successful link means a clean Windows machine can launch.
+          for pass in 1 2 3 4 5 6 7 8; do
+            added=0
+            while IFS= read -r bin; do
+              while IFS= read -r dep; do
+                [ -n "$dep" ] || continue
+                if find dist/ui0-qt -type f -iname "$dep" -print -quit | grep -q .; then
+                  continue
+                fi
+                src=$(find /ucrt64/bin -maxdepth 1 -type f -iname "$dep" -print -quit || true)
+                if [ -n "$src" ]; then
+                  echo "Deploying transitive runtime: $dep"
+                  cp "$src" dist/ui0-qt/
+                  added=1
+                fi
+              done < <(objdump -p "$bin" 2>/dev/null | sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p' | tr -d '\r')
+            done < <(find dist/ui0-qt -type f \( -iname '*.exe' -o -iname '*.dll' \) -print)
+            [ "$added" -eq 1 ] || break
+          done
+
+          # Fail if any staged binary still names a UCRT64-provided dependency that has
+          # not been copied. Windows system DLLs are intentionally not bundled.
+          missing=0
+          while IFS= read -r bin; do
+            while IFS= read -r dep; do
+              [ -n "$dep" ] || continue
+              src=$(find /ucrt64/bin -maxdepth 1 -type f -iname "$dep" -print -quit || true)
+              if [ -n "$src" ] && ! find dist/ui0-qt -type f -iname "$dep" -print -quit | grep -q .; then
+                echo "ERROR: packaged runtime missing $dep required by $bin"
+                missing=1
+              fi
+            done < <(objdump -p "$bin" 2>/dev/null | sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p' | tr -d '\r')
+          done < <(find dist/ui0-qt -type f \( -iname '*.exe' -o -iname '*.dll' \) -print)
+          [ "$missing" -eq 0 ]
+
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
+          find dist/ui0-qt -type f -printf '%P\n' | sort > dist/ui0-qt/PACKAGE_CONTENTS.txt
+      - name: Clean-Windows launch smoke — Qt
+        shell: pwsh
+        run: |
+          $savedPath = $env:PATH
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $exe = (Resolve-Path 'dist/ui0-qt/ECO_UI0_QT.exe').Path
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 5
+            if ($p.HasExited) {
+              throw "Packaged Qt UI-0 exited during clean-runtime launch smoke. Exit code: $($p.ExitCode)"
+            }
+            Stop-Process -Id $p.Id -Force
+          }
+          finally {
+            $env:PATH = $savedPath
+          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ECO_UI0_QT_WINDOWS
@@ -87,6 +142,23 @@ jobs:
           Copy-Item prototypes/ui0/slint/target/release/eco-ui0-slint.exe dist/ui0-slint/ECO_UI0_SLINT.exe
           Copy-Item prototypes/ui0/slint/Cargo.lock.resolved dist/ui0-slint/Cargo.lock.resolved
           (Get-FileHash dist/ui0-slint/ECO_UI0_SLINT.exe -Algorithm SHA256).Hash.ToLower() + '  ECO_UI0_SLINT.exe' | Set-Content dist/ui0-slint/SHA256SUMS.txt -Encoding ascii
+      - name: Clean-Windows launch smoke — Slint
+        shell: pwsh
+        run: |
+          $savedPath = $env:PATH
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $exe = (Resolve-Path 'dist/ui0-slint/ECO_UI0_SLINT.exe').Path
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            Start-Sleep -Seconds 5
+            if ($p.HasExited) {
+              throw "Packaged Slint UI-0 exited during clean-runtime launch smoke. Exit code: $($p.ExitCode)"
+            }
+            Stop-Process -Id $p.Id -Force
+          }
+          finally {
+            $env:PATH = $savedPath
+          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ECO_UI0_SLINT_WINDOWS
