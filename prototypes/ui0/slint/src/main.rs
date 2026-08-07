@@ -1,3 +1,5 @@
+#![cfg_attr(target_os = "windows", windows_subsystem = "windows")]
+
 use slint::{ModelRc, SharedString, VecModel};
 
 slint::include_modules!();
