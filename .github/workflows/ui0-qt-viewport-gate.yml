@@ -48,6 +48,25 @@ jobs:
             $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$name)
             return $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
           }
+          function Scroll-VerticalBarsToBottom($root) {
+            $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+            $changed = 0
+            foreach ($e in $all) {
+              if ($e.Current.ControlType -ne [System.Windows.Automation.ControlType]::ScrollBar) { continue }
+              $rangeAvailable=[bool]$e.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsRangeValuePatternAvailableProperty)
+              if (-not $rangeAvailable) { continue }
+              try {
+                $orientation=$e.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::OrientationProperty)
+                if ($orientation -ne [System.Windows.Automation.OrientationType]::Vertical) { continue }
+                $rv=$e.GetCurrentPattern([System.Windows.Automation.RangeValuePattern]::Pattern)
+                if (-not $rv.Current.IsReadOnly) {
+                  $rv.SetValue($rv.Current.Maximum)
+                  $changed++
+                }
+              } catch {}
+            }
+            return $changed
+          }
 
           $savedPath = $env:PATH
           $p = $null
@@ -66,8 +85,7 @@ jobs:
             $hwnd=[IntPtr][int]$root.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NativeWindowHandleProperty)
             if ($hwnd.ToInt64() -eq 0) { throw 'Qt UIA root has no native window handle.' }
 
-            # Test the minimum supported viewport. A pass here is stricter than the Acer
-            # baseline and proves the central workflow still has a reachable scroll path.
+            # Test the minimum supported viewport. A pass here is stricter than the Acer baseline.
             if (-not [EcoWindowProbe]::SetWindowPos($hwnd,[IntPtr]::Zero,20,20,1024,640,0x0040)) { throw 'SetWindowPos failed.' }
             Start-Sleep -Seconds 1
             $root=Find-Root $p.Id
@@ -79,31 +97,44 @@ jobs:
             if ($null -eq $composer) { throw 'AI composer is missing from the accessibility tree at 1024x640.' }
             $initialOffscreen=[bool]$composer.Current.IsOffscreen
 
+            # First use ScrollItemPattern if the framework exposes it. If not (or if focus
+            # alone does not scroll), exercise the actual accessible vertical scrollbar to
+            # its maximum. This models the user's real scrolling path rather than assuming
+            # focus-autoscroll is mandatory.
             $scrollItemAvailable=[bool]$composer.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsScrollItemPatternAvailableProperty)
             if ($scrollItemAvailable) {
-              $sp=$composer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
-              $sp.ScrollIntoView()
-            } else {
-              $composer.SetFocus()
+              try {
+                $sp=$composer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
+                $sp.ScrollIntoView()
+              } catch {}
             }
-            Start-Sleep -Seconds 1
+            Start-Sleep -Milliseconds 500
             $root=Find-Root $p.Id
             $composer=Find-ByName $root 'AI message'
+
+            $verticalBarsChanged=0
+            if ($null -ne $composer -and $composer.Current.IsOffscreen) {
+              $verticalBarsChanged=Scroll-VerticalBarsToBottom $root
+              Start-Sleep -Seconds 1
+              $root=Find-Root $p.Id
+              $composer=Find-ByName $root 'AI message'
+            }
             if ($null -eq $composer -or $composer.Current.IsOffscreen) {
-              throw 'AI composer could not be brought on-screen at 1024x640.'
+              throw "AI composer could not be reached by the accessible vertical scroll path at 1024x640. Vertical scrollbars changed: $verticalBarsChanged"
             }
 
             $composer.SetFocus()
             Start-Sleep -Milliseconds 250
             $focused=[System.Windows.Automation.AutomationElement]::FocusedElement
-            if ($null -eq $focused -or $focused.Current.Name -ne 'AI message') { throw 'AI composer did not accept keyboard focus.' }
+            if ($null -eq $focused -or $focused.Current.Name -ne 'AI message') { throw 'AI composer did not accept keyboard focus after scrolling into view.' }
 
             "PASS: Qt constrained viewport"
             "window=1024x640"
             "search_reachable=PASS"
             "composer_exists=PASS"
             "composer_initially_offscreen=$initialOffscreen"
-            "composer_scroll_or_focus_into_view=PASS"
+            "vertical_scrollbars_changed=$verticalBarsChanged"
+            "composer_reachable_by_scroll=PASS"
             "composer_keyboard_focus=PASS"
           }
           finally {
