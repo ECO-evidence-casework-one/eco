@@ -1,0 +1,113 @@
+name: UI-0 Qt viewport consumer gate
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ui0-qt-viewport-gate.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qt-viewport-consumer:
+    name: Qt clean consumer viewport + composer reachability
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      # Reuse the exact Qt artifact from UI-0 run 31195663465 that already passed
+      # clean packaging + UIA search/text checks. This job does not rebuild Qt.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ECO_UI0_QT_WINDOWS
+          path: consumer/qt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 31195663465
+      - name: Test constrained viewport and composer reachability
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class EcoWindowProbe {
+              [DllImport("user32.dll", SetLastError=true)]
+              public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+          }
+          '@
+
+          function Find-Root([int]$pid) {
+            $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+            $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$pid)
+            return $desktop.FindFirst([System.Windows.Automation.TreeScope]::Children,$condition)
+          }
+          function Find-ByName($root,[string]$name) {
+            $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$name)
+            return $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
+          }
+
+          $savedPath = $env:PATH
+          $p = $null
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $exe = (Resolve-Path 'consumer/qt/ECO_UI0_QT.exe').Path
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            $deadline=(Get-Date).AddSeconds(15); $root=$null
+            do {
+              Start-Sleep -Milliseconds 250
+              if ($p.HasExited) { throw "Qt exited early: $($p.ExitCode)" }
+              $root=Find-Root $p.Id
+            } while ($null -eq $root -and (Get-Date) -lt $deadline)
+            if ($null -eq $root) { throw 'No accessible Qt top-level window.' }
+
+            $hwnd=[IntPtr][int]$root.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NativeWindowHandleProperty)
+            if ($hwnd.ToInt64() -eq 0) { throw 'Qt UIA root has no native window handle.' }
+
+            # Test the minimum supported viewport. A pass here is stricter than the Acer
+            # baseline and proves the central workflow still has a reachable scroll path.
+            if (-not [EcoWindowProbe]::SetWindowPos($hwnd,[IntPtr]::Zero,20,20,1024,640,0x0040)) { throw 'SetWindowPos failed.' }
+            Start-Sleep -Seconds 1
+            $root=Find-Root $p.Id
+
+            $search=Find-ByName $root 'Search this Matter or ask ECO'
+            if ($null -eq $search -or $search.Current.IsOffscreen) { throw 'Search field is not reachable at 1024x640.' }
+
+            $composer=Find-ByName $root 'AI message'
+            if ($null -eq $composer) { throw 'AI composer is missing from the accessibility tree at 1024x640.' }
+            $initialOffscreen=[bool]$composer.Current.IsOffscreen
+
+            # Scroll/focus the composer into view using the accessibility contract first.
+            $scrollItemAvailable=[bool]$composer.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsScrollItemPatternAvailableProperty)
+            if ($scrollItemAvailable) {
+              $sp=$composer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
+              $sp.ScrollIntoView()
+            } else {
+              $composer.SetFocus()
+            }
+            Start-Sleep -Seconds 1
+            $root=Find-Root $p.Id
+            $composer=Find-ByName $root 'AI message'
+            if ($null -eq $composer -or $composer.Current.IsOffscreen) {
+              throw 'AI composer could not be brought on-screen at 1024x640.'
+            }
+
+            $composer.SetFocus()
+            Start-Sleep -Milliseconds 250
+            $focused=[System.Windows.Automation.AutomationElement]::FocusedElement
+            if ($null -eq $focused -or $focused.Current.Name -ne 'AI message') { throw 'AI composer did not accept keyboard focus.' }
+
+            "PASS: Qt constrained viewport"
+            "window=1024x640"
+            "search_reachable=PASS"
+            "composer_exists=PASS"
+            "composer_initially_offscreen=$initialOffscreen"
+            "composer_scroll_or_focus_into_view=PASS"
+            "composer_keyboard_focus=PASS"
+          }
+          finally {
+            if ($null -ne $p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+            $env:PATH=$savedPath
+          }
