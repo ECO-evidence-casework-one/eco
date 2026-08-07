@@ -39,9 +39,9 @@ jobs:
           }
           '@
 
-          function Find-Root([int]$pid) {
+          function Find-Root([int]$processId) {
             $desktop = [System.Windows.Automation.AutomationElement]::RootElement
-            $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$pid)
+            $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$processId)
             return $desktop.FindFirst([System.Windows.Automation.TreeScope]::Children,$condition)
           }
           function Find-ByName($root,[string]$name) {
@@ -79,7 +79,6 @@ jobs:
             if ($null -eq $composer) { throw 'AI composer is missing from the accessibility tree at 1024x640.' }
             $initialOffscreen=[bool]$composer.Current.IsOffscreen
 
-            # Scroll/focus the composer into view using the accessibility contract first.
             $scrollItemAvailable=[bool]$composer.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsScrollItemPatternAvailableProperty)
             if ($scrollItemAvailable) {
               $sp=$composer.GetCurrentPattern([System.Windows.Automation.ScrollItemPattern]::Pattern)
