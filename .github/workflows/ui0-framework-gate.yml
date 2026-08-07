@@ -50,40 +50,10 @@ jobs:
           cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
           cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
 
-          # windeployqt does not close the complete MinGW/MSYS2 transitive dependency graph.
-          # Recursively copy every dependency that is supplied by UCRT64. This is the class
-          # of failure the Acer exposed (libpng, md4c, freetype, harfbuzz).
-          for pass in 1 2 3 4 5 6 7 8; do
-            added=0
-            while IFS= read -r bin; do
-              while IFS= read -r dep; do
-                [ -n "$dep" ] || continue
-                if find dist/ui0-qt -type f -iname "$dep" -print -quit | grep -q .; then
-                  continue
-                fi
-                src=$(find /ucrt64/bin -maxdepth 1 -type f -iname "$dep" -print -quit || true)
-                if [ -n "$src" ]; then
-                  echo "Deploying transitive runtime: $dep"
-                  cp "$src" dist/ui0-qt/
-                  added=1
-                fi
-              done < <(objdump -p "$bin" 2>/dev/null | sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p' | tr -d '\r')
-            done < <(find dist/ui0-qt -type f \( -iname '*.exe' -o -iname '*.dll' \) -print)
-            [ "$added" -eq 1 ] || break
-          done
-
-          missing=0
-          while IFS= read -r bin; do
-            while IFS= read -r dep; do
-              [ -n "$dep" ] || continue
-              src=$(find /ucrt64/bin -maxdepth 1 -type f -iname "$dep" -print -quit || true)
-              if [ -n "$src" ] && ! find dist/ui0-qt -type f -iname "$dep" -print -quit | grep -q .; then
-                echo "ERROR: packaged runtime missing $dep required by $bin"
-                missing=1
-              fi
-            done < <(objdump -p "$bin" 2>/dev/null | sed -n 's/^[[:space:]]*DLL Name:[[:space:]]*//p' | tr -d '\r')
-          done < <(find dist/ui0-qt -type f \( -iname '*.exe' -o -iname '*.dll' \) -print)
-          [ "$missing" -eq 0 ]
+          # Close the full MinGW/UCRT64 transitive dependency graph once, using a queue,
+          # rather than repeated filesystem scans. This permanently covers the Acer failure
+          # class (libpng, md4c, freetype, harfbuzz and any dependencies they themselves need).
+          python prototypes/ui0/qt/close_runtime.py dist/ui0-qt /ucrt64/bin
 
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
           find dist/ui0-qt -type f -printf '%P\n' | sort > dist/ui0-qt/PACKAGE_CONTENTS.txt
