@@ -43,15 +43,12 @@ jobs:
           set -euo pipefail
           mkdir -p dist/ui0-qt/qml
           cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
+          cp prototypes/ui0/ui0_uia_probe.ps1 dist/ui0-qt/UI0_UIA_PROBE.ps1
           windeployqt --release --no-translations dist/ui0-qt/ECO_UI0_QT.exe
 
-          # Main.qml is compiled into the executable. Qt Quick Controls and style modules
-          # remain dynamic in this architecture proof, so preserve the required module trees.
           cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
           cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
 
-          # Force the deployed Qt runtime to use the package itself, not hard-coded paths
-          # from the MSYS2 build machine. In particular QmlImports must resolve to ./qml.
           cat > dist/ui0-qt/qt.conf <<'QTCONF'
           [Paths]
           Prefix=.
@@ -59,7 +56,6 @@ jobs:
           QmlImports=qml
           QTCONF
 
-          # Close the full MinGW/UCRT64 transitive dependency graph once, using a queue.
           python prototypes/ui0/qt/close_runtime.py dist/ui0-qt /ucrt64/bin
 
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
@@ -71,17 +67,18 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  qt-clean-launch:
-    name: Qt clean Windows consumer launch
+  qt-clean-consumer:
+    name: Qt clean Windows consumer + UIA baseline
     needs: qt-build
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
+      # Separate consumer VM. No checkout, compiler, Qt or MSYS2 setup occurs here.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ECO_UI0_QT_WINDOWS
           path: consumer/qt
-      - name: Verify expected Acer-regression DLLs and package paths are present
+      - name: Verify Acer/runtime regression dependencies and package paths
         shell: pwsh
         run: |
           $required = @('libpng16-16.dll','libmd4c.dll','libfreetype-6.dll','libharfbuzz-0.dll','qt.conf')
@@ -92,43 +89,15 @@ jobs:
           }
           if (-not (Test-Path 'consumer/qt/qml/QtQuick')) { throw 'Packaged Qt artifact is missing qml/QtQuick' }
           if (-not (Test-Path 'consumer/qt/qml/QtQml')) { throw 'Packaged Qt artifact is missing qml/QtQml' }
-      - name: Launch packaged Qt on separate clean consumer VM
+      - name: Clean launch + Windows UI Automation baseline — Qt
         shell: pwsh
         run: |
-          $savedPath = $env:PATH
-          $stdout = (Resolve-Path 'consumer/qt').Path + '\qt.stdout.txt'
-          $stderr = (Resolve-Path 'consumer/qt').Path + '\qt.stderr.txt'
-          try {
-            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-            $exe = (Resolve-Path 'consumer/qt/ECO_UI0_QT.exe').Path
-            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
-            Start-Sleep -Seconds 8
-            if ($p.HasExited) {
-              Write-Host '--- Qt stdout ---'
-              if (Test-Path $stdout) { Get-Content $stdout }
-              Write-Host '--- Qt stderr ---'
-              if (Test-Path $stderr) { Get-Content $stderr }
-              throw "Packaged Qt UI-0 exited on the separate consumer VM. Exit code: $($p.ExitCode)"
-            }
-            $proc = Get-Process -Id $p.Id -ErrorAction Stop
-            if (-not $proc.MainWindowHandle) {
-              Write-Host '--- Qt stderr ---'
-              if (Test-Path $stderr) { Get-Content $stderr }
-              throw "Packaged Qt UI-0 process stayed alive but did not expose a main window on the consumer VM."
-            }
-            "PASS: Qt package launched on separate Windows consumer VM; PID=$($p.Id); HWND=$($proc.MainWindowHandle)"
-            Stop-Process -Id $p.Id -Force
-          }
-          finally {
-            $env:PATH = $savedPath
-          }
+          ./consumer/qt/UI0_UIA_PROBE.ps1 -ExePath ./consumer/qt/ECO_UI0_QT.exe -OutputDir ./consumer/qt/consumer-diagnostics -Framework qt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: ECO_UI0_QT_CONSUMER_DIAGNOSTICS
-          path: |
-            consumer/qt/qt.stdout.txt
-            consumer/qt/qt.stderr.txt
+          path: consumer/qt/consumer-diagnostics
           if-no-files-found: ignore
           retention-days: 7
 
@@ -158,6 +127,7 @@ jobs:
           New-Item -ItemType Directory -Force dist/ui0-slint | Out-Null
           Copy-Item prototypes/ui0/slint/target/release/eco-ui0-slint.exe dist/ui0-slint/ECO_UI0_SLINT.exe
           Copy-Item prototypes/ui0/slint/Cargo.lock.resolved dist/ui0-slint/Cargo.lock.resolved
+          Copy-Item prototypes/ui0/ui0_uia_probe.ps1 dist/ui0-slint/UI0_UIA_PROBE.ps1
           (Get-FileHash dist/ui0-slint/ECO_UI0_SLINT.exe -Algorithm SHA256).Hash.ToLower() + '  ECO_UI0_SLINT.exe' | Set-Content dist/ui0-slint/SHA256SUMS.txt -Encoding ascii
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -166,35 +136,25 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  slint-clean-launch:
-    name: Slint clean Windows consumer launch
+  slint-clean-consumer:
+    name: Slint clean Windows consumer + UIA baseline
     needs: slint-build
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
+      # Separate consumer VM. No checkout, Rust or build setup occurs here.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ECO_UI0_SLINT_WINDOWS
           path: consumer/slint
-      - name: Launch packaged Slint on separate clean consumer VM
+      - name: Clean launch + Windows UI Automation baseline — Slint
         shell: pwsh
         run: |
-          $savedPath = $env:PATH
-          try {
-            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
-            $exe = (Resolve-Path 'consumer/slint/ECO_UI0_SLINT.exe').Path
-            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
-            Start-Sleep -Seconds 8
-            if ($p.HasExited) {
-              throw "Packaged Slint UI-0 exited on the separate consumer VM. Exit code: $($p.ExitCode)"
-            }
-            $proc = Get-Process -Id $p.Id -ErrorAction Stop
-            if (-not $proc.MainWindowHandle) {
-              throw "Packaged Slint UI-0 process stayed alive but did not expose a main window on the consumer VM."
-            }
-            "PASS: Slint package launched on separate Windows consumer VM; PID=$($p.Id); HWND=$($proc.MainWindowHandle)"
-            Stop-Process -Id $p.Id -Force
-          }
-          finally {
-            $env:PATH = $savedPath
-          }
+          ./consumer/slint/UI0_UIA_PROBE.ps1 -ExePath ./consumer/slint/ECO_UI0_SLINT.exe -OutputDir ./consumer/slint/consumer-diagnostics -Framework slint
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ECO_UI0_SLINT_CONSUMER_DIAGNOSTICS
+          path: consumer/slint/consumer-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7
