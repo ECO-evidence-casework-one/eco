@@ -50,9 +50,16 @@ jobs:
           cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
           cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
 
-          # Close the full MinGW/UCRT64 transitive dependency graph once, using a queue,
-          # rather than repeated filesystem scans. This permanently covers the Acer failure
-          # class (libpng, md4c, freetype, harfbuzz and any dependencies they themselves need).
+          # Force the deployed Qt runtime to use the package itself, not hard-coded paths
+          # from the MSYS2 build machine. In particular QmlImports must resolve to ./qml.
+          cat > dist/ui0-qt/qt.conf <<'QTCONF'
+          [Paths]
+          Prefix=.
+          Plugins=.
+          QmlImports=qml
+          QTCONF
+
+          # Close the full MinGW/UCRT64 transitive dependency graph once, using a queue.
           python prototypes/ui0/qt/close_runtime.py dist/ui0-qt /ucrt64/bin
 
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
@@ -70,35 +77,43 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      # Deliberately no checkout, compiler, Qt or MSYS2 setup in this job. It receives only
-      # the packaged artifact produced on the separate build VM.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ECO_UI0_QT_WINDOWS
           path: consumer/qt
-      - name: Verify expected Acer-regression DLLs are present
+      - name: Verify expected Acer-regression DLLs and package paths are present
         shell: pwsh
         run: |
-          $required = @('libpng16-16.dll','libmd4c.dll','libfreetype-6.dll','libharfbuzz-0.dll')
-          foreach ($dll in $required) {
-            if (-not (Get-ChildItem -Path consumer/qt -Recurse -File -Filter $dll -ErrorAction SilentlyContinue)) {
-              throw "Packaged Qt artifact is missing Acer regression dependency: $dll"
+          $required = @('libpng16-16.dll','libmd4c.dll','libfreetype-6.dll','libharfbuzz-0.dll','qt.conf')
+          foreach ($name in $required) {
+            if (-not (Get-ChildItem -Path consumer/qt -Recurse -File -Filter $name -ErrorAction SilentlyContinue)) {
+              throw "Packaged Qt artifact is missing Acer/runtime regression dependency: $name"
             }
           }
-      - name: Launch packaged Qt with clean consumer PATH
+          if (-not (Test-Path 'consumer/qt/qml/QtQuick')) { throw 'Packaged Qt artifact is missing qml/QtQuick' }
+          if (-not (Test-Path 'consumer/qt/qml/QtQml')) { throw 'Packaged Qt artifact is missing qml/QtQml' }
+      - name: Launch packaged Qt on separate clean consumer VM
         shell: pwsh
         run: |
           $savedPath = $env:PATH
+          $stdout = (Resolve-Path 'consumer/qt').Path + '\qt.stdout.txt'
+          $stderr = (Resolve-Path 'consumer/qt').Path + '\qt.stderr.txt'
           try {
             $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
             $exe = (Resolve-Path 'consumer/qt/ECO_UI0_QT.exe').Path
-            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
             Start-Sleep -Seconds 8
             if ($p.HasExited) {
+              Write-Host '--- Qt stdout ---'
+              if (Test-Path $stdout) { Get-Content $stdout }
+              Write-Host '--- Qt stderr ---'
+              if (Test-Path $stderr) { Get-Content $stderr }
               throw "Packaged Qt UI-0 exited on the separate consumer VM. Exit code: $($p.ExitCode)"
             }
             $proc = Get-Process -Id $p.Id -ErrorAction Stop
             if (-not $proc.MainWindowHandle) {
+              Write-Host '--- Qt stderr ---'
+              if (Test-Path $stderr) { Get-Content $stderr }
               throw "Packaged Qt UI-0 process stayed alive but did not expose a main window on the consumer VM."
             }
             "PASS: Qt package launched on separate Windows consumer VM; PID=$($p.Id); HWND=$($proc.MainWindowHandle)"
@@ -107,6 +122,15 @@ jobs:
           finally {
             $env:PATH = $savedPath
           }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ECO_UI0_QT_CONSUMER_DIAGNOSTICS
+          path: |
+            consumer/qt/qt.stdout.txt
+            consumer/qt/qt.stderr.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
   slint-build:
     name: Slint 1.17 Windows build + package
@@ -148,12 +172,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
-      # Deliberately separate consumer VM: no checkout, Rust or build setup.
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: ECO_UI0_SLINT_WINDOWS
           path: consumer/slint
-      - name: Launch packaged Slint with clean consumer PATH
+      - name: Launch packaged Slint on separate clean consumer VM
         shell: pwsh
         run: |
           $savedPath = $env:PATH
