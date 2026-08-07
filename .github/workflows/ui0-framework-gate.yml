@@ -42,7 +42,9 @@ jobs:
         run: |
           mkdir -p dist/ui0-qt
           cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
-          windeployqt --release --qmldir prototypes/ui0/qt dist/ui0-qt/ECO_UI0_QT.exe
+          # QML is embedded by qt_add_qml_module; do not rescan the source tree here.
+          # The previous --qmldir invocation caused qmlimportscanner to fail under the MSYS runner.
+          windeployqt --release --no-translations dist/ui0-qt/ECO_UI0_QT.exe
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
