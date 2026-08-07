@@ -40,11 +40,18 @@ jobs:
       - name: Deploy Qt UI-0 runtime folder
         shell: msys2 {0}
         run: |
-          mkdir -p dist/ui0-qt
+          mkdir -p dist/ui0-qt/qml
           cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
-          # QML is embedded by qt_add_qml_module; do not rescan the source tree here.
-          # The previous --qmldir invocation caused qmlimportscanner to fail under the MSYS runner.
           windeployqt --release --no-translations dist/ui0-qt/ECO_UI0_QT.exe
+          # windeployqt does not deploy the MinGW compiler runtime. Keep this architecture
+          # artifact runnable on a clean Windows machine rather than assuming MSYS2 is installed.
+          cp /ucrt64/bin/libgcc_s_seh-1.dll dist/ui0-qt/
+          cp /ucrt64/bin/libstdc++-6.dll dist/ui0-qt/
+          cp /ucrt64/bin/libwinpthread-1.dll dist/ui0-qt/
+          # Main.qml is compiled into the executable, but Qt Quick Controls and its style
+          # are QML modules. Preserve the needed runtime modules for the dynamic UI-0 gate.
+          cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
+          cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
           sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -68,6 +75,7 @@ jobs:
         shell: pwsh
         env:
           SLINT_BACKEND: winit-software
+          RUSTFLAGS: -C target-feature=+crt-static
         run: cargo build --release --manifest-path prototypes/ui0/slint/Cargo.toml
       - name: Preserve resolved Slint dependency lock
         shell: pwsh
