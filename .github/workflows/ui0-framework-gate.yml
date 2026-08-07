@@ -1,9 +1,10 @@
-name: UI-0 framework gate
+name: UI-0 Qt presentation gate
 
 on:
   pull_request:
     paths:
-      - 'prototypes/ui0/**'
+      - 'prototypes/ui0/qt/**'
+      - 'prototypes/ui0/ui0_uia_probe.ps1'
       - '.github/workflows/ui0-framework-gate.yml'
   workflow_dispatch:
 
@@ -11,8 +12,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: eco-ui0-${{ github.workflow }}-${{ github.ref }}
+  group: eco-ui0-qt-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+# Slint is intentionally no longer rebuilt here. The equal UI-0 comparison proved that
+# its clean Windows accessibility tree exposed only 6 descendants for a screen containing
+# many more interactive controls, while Qt passed the hard accessibility/search/text gate.
+# Slint source remains in the PR for audit/history, but Qt is the provisional winner.
 
 jobs:
   qt-build:
@@ -98,63 +104,5 @@ jobs:
         with:
           name: ECO_UI0_QT_CONSUMER_DIAGNOSTICS
           path: consumer/qt/consumer-diagnostics
-          if-no-files-found: ignore
-          retention-days: 7
-
-  slint-build:
-    name: Slint 1.17 Windows build + package
-    runs-on: windows-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Toolchain identity
-        shell: pwsh
-        run: |
-          rustc --version
-          cargo --version
-      - name: Build Slint UI-0
-        shell: pwsh
-        env:
-          SLINT_BACKEND: winit-software
-          RUSTFLAGS: -C target-feature=+crt-static
-        run: cargo build --release --manifest-path prototypes/ui0/slint/Cargo.toml
-      - name: Preserve resolved Slint dependency lock
-        shell: pwsh
-        run: Copy-Item prototypes/ui0/slint/Cargo.lock prototypes/ui0/slint/Cargo.lock.resolved
-      - name: Stage Slint UI-0
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist/ui0-slint | Out-Null
-          Copy-Item prototypes/ui0/slint/target/release/eco-ui0-slint.exe dist/ui0-slint/ECO_UI0_SLINT.exe
-          Copy-Item prototypes/ui0/slint/Cargo.lock.resolved dist/ui0-slint/Cargo.lock.resolved
-          Copy-Item prototypes/ui0/ui0_uia_probe.ps1 dist/ui0-slint/UI0_UIA_PROBE.ps1
-          (Get-FileHash dist/ui0-slint/ECO_UI0_SLINT.exe -Algorithm SHA256).Hash.ToLower() + '  ECO_UI0_SLINT.exe' | Set-Content dist/ui0-slint/SHA256SUMS.txt -Encoding ascii
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: ECO_UI0_SLINT_WINDOWS
-          path: dist/ui0-slint
-          if-no-files-found: error
-          retention-days: 7
-
-  slint-clean-consumer:
-    name: Slint clean Windows consumer + UIA baseline
-    needs: slint-build
-    runs-on: windows-latest
-    timeout-minutes: 10
-    steps:
-      # Separate consumer VM. No checkout, Rust or build setup occurs here.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: ECO_UI0_SLINT_WINDOWS
-          path: consumer/slint
-      - name: Clean launch + Windows UI Automation baseline — Slint
-        shell: pwsh
-        run: |
-          ./consumer/slint/UI0_UIA_PROBE.ps1 -ExePath ./consumer/slint/ECO_UI0_SLINT.exe -OutputDir ./consumer/slint/consumer-diagnostics -Framework slint
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: always()
-        with:
-          name: ECO_UI0_SLINT_CONSUMER_DIAGNOSTICS
-          path: consumer/slint/consumer-diagnostics
           if-no-files-found: ignore
           retention-days: 7
