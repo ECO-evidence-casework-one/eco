@@ -1,0 +1,108 @@
+name: UI-0 Qt presentation gate
+
+on:
+  pull_request:
+    paths:
+      - 'prototypes/ui0/qt/**'
+      - 'prototypes/ui0/ui0_uia_probe.ps1'
+      - '.github/workflows/ui0-framework-gate.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-ui0-qt-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Slint is intentionally no longer rebuilt here. The equal UI-0 comparison proved that
+# its clean Windows accessibility tree exposed only 6 descendants for a screen containing
+# many more interactive controls, while Qt passed the hard accessibility/search/text gate.
+# Slint source remains in the PR for audit/history, but Qt is the provisional winner.
+
+jobs:
+  qt-build:
+    name: Qt 6 / QML Windows build + package
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-toolchain
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-qt6-base
+            mingw-w64-ucrt-x86_64-qt6-declarative
+      - name: Configure and build Qt UI-0
+        shell: msys2 {0}
+        run: |
+          cmake -S prototypes/ui0/qt -B build/ui0-qt -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/ui0-qt --config Release
+      - name: Deploy complete Qt UI-0 runtime closure
+        shell: msys2 {0}
+        run: |
+          set -euo pipefail
+          mkdir -p dist/ui0-qt/qml
+          cp build/ui0-qt/ECO_UI0_QT.exe dist/ui0-qt/
+          cp prototypes/ui0/ui0_uia_probe.ps1 dist/ui0-qt/UI0_UIA_PROBE.ps1
+          windeployqt --release --no-translations dist/ui0-qt/ECO_UI0_QT.exe
+
+          cp -R /ucrt64/share/qt6/qml/QtQuick dist/ui0-qt/qml/
+          cp -R /ucrt64/share/qt6/qml/QtQml dist/ui0-qt/qml/
+
+          cat > dist/ui0-qt/qt.conf <<'QTCONF'
+          [Paths]
+          Prefix=.
+          Plugins=.
+          QmlImports=qml
+          QTCONF
+
+          python prototypes/ui0/qt/close_runtime.py dist/ui0-qt /ucrt64/bin
+
+          sha256sum dist/ui0-qt/ECO_UI0_QT.exe > dist/ui0-qt/SHA256SUMS.txt
+          find dist/ui0-qt -type f -printf '%P\n' | sort > dist/ui0-qt/PACKAGE_CONTENTS.txt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO_UI0_QT_WINDOWS
+          path: dist/ui0-qt
+          if-no-files-found: error
+          retention-days: 7
+
+  qt-clean-consumer:
+    name: Qt clean Windows consumer + UIA baseline
+    needs: qt-build
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      # Separate consumer VM. No checkout, compiler, Qt or MSYS2 setup occurs here.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ECO_UI0_QT_WINDOWS
+          path: consumer/qt
+      - name: Verify Acer/runtime regression dependencies and package paths
+        shell: pwsh
+        run: |
+          $required = @('libpng16-16.dll','libmd4c.dll','libfreetype-6.dll','libharfbuzz-0.dll','qt.conf')
+          foreach ($name in $required) {
+            if (-not (Get-ChildItem -Path consumer/qt -Recurse -File -Filter $name -ErrorAction SilentlyContinue)) {
+              throw "Packaged Qt artifact is missing Acer/runtime regression dependency: $name"
+            }
+          }
+          if (-not (Test-Path 'consumer/qt/qml/QtQuick')) { throw 'Packaged Qt artifact is missing qml/QtQuick' }
+          if (-not (Test-Path 'consumer/qt/qml/QtQml')) { throw 'Packaged Qt artifact is missing qml/QtQml' }
+      - name: Clean launch + Windows UI Automation baseline — Qt
+        shell: pwsh
+        run: |
+          ./consumer/qt/UI0_UIA_PROBE.ps1 -ExePath ./consumer/qt/ECO_UI0_QT.exe -OutputDir ./consumer/qt/consumer-diagnostics -Framework qt
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: ECO_UI0_QT_CONSUMER_DIAGNOSTICS
+          path: consumer/qt/consumer-diagnostics
+          if-no-files-found: ignore
+          retention-days: 7

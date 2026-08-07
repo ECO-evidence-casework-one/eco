@@ -1,0 +1,16 @@
+[package]
+name = "eco-ui0-slint"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+slint = { version = "=1.17.1", default-features = false, features = ["std", "backend-winit", "renderer-software", "compat-1-2"] }
+
+[build-dependencies]
+slint-build = "=1.17.1"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
