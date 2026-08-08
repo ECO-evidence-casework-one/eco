@@ -25,7 +25,7 @@ public sealed class EcoV41A11yInfo
 public static class EcoV41A11y
 {
     private const uint OBJID_CLIENT = 0xFFFFFFFC;
-    private const uint BM_CLICK = 0x00F5;
+    private const uint WM_COMMAND = 0x0111;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
@@ -67,9 +67,9 @@ public static class EcoV41A11y
         return info;
     }
 
-    public static void Click(IntPtr hwnd)
+    public static void SendButtonCommand(IntPtr parent, int controlId, IntPtr buttonHwnd)
     {
-        SendMessage(hwnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
+        SendMessage(parent, WM_COMMAND, new IntPtr(controlId), buttonHwnd);
     }
 }
 '@ -ReferencedAssemblies $accessibilityAssembly
@@ -112,22 +112,22 @@ try {
     }
     Write-Host 'ECO_GATE v41_nav_msaa=PASS_7_NATIVE_BUTTONS'
 
-    # Hosted Windows runners are not interactive desktops, so use the standard
-    # Win32 BM_CLICK contract for functional activation after proving the MSAA
-    # role/name/focus/default-action metadata above.
-    [EcoV41A11y]::Click($buttons['Ask ECO'])
+    # A real Win32 button sends WM_COMMAND/BN_CLICKED to its parent. GitHub's
+    # hosted Windows runner has no interactive user desktop, so exercise that
+    # exact parent command contract directly after proving the native controls.
+    [EcoV41A11y]::SendButtonCommand($hwnd, 1202, $buttons['Ask ECO'])
     Start-Sleep -Milliseconds 350
     $edit = [EcoV41A11y]::FindWindowEx($hwnd, [IntPtr]::Zero, 'Edit', $null)
     if ($edit -eq [IntPtr]::Zero) { throw 'Ask ECO question edit control was not found.' }
-    if (-not [EcoV41A11y]::IsWindowVisible($edit)) { throw 'Ask ECO navigation did not expose the question edit control.' }
-    Write-Host 'ECO_GATE v41_nav_ask_activation=PASS'
+    if (-not [EcoV41A11y]::IsWindowVisible($edit)) { throw 'Ask ECO command did not expose the question edit control.' }
+    Write-Host 'ECO_GATE v41_nav_ask_command=PASS'
 
-    [EcoV41A11y]::Click($buttons['Evidence'])
+    [EcoV41A11y]::SendButtonCommand($hwnd, 1201, $buttons['Evidence'])
     Start-Sleep -Milliseconds 350
-    if ([EcoV41A11y]::IsWindowVisible($edit)) { throw 'Evidence navigation did not hide Ask ECO controls.' }
-    Write-Host 'ECO_GATE v41_nav_evidence_activation=PASS'
+    if ([EcoV41A11y]::IsWindowVisible($edit)) { throw 'Evidence command did not hide Ask ECO controls.' }
+    Write-Host 'ECO_GATE v41_nav_evidence_command=PASS'
 
-    Write-Host 'ECO_GATE v41_windows_navigation=PASS'
+    Write-Host 'ECO_GATE v41_windows_navigation=PASS_NATIVE_CONTROLS_AND_COMMAND_ROUTE'
 }
 finally {
     if ($p -and -not $p.HasExited) {
