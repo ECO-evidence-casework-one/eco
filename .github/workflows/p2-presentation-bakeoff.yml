@@ -181,5 +181,9 @@ jobs:
           # the bounded synthetic PNG evidence and checksum register, never runnable outputs.
           git add -f "$root"
           git diff --cached --name-only
+          if git diff --cached --quiet; then
+            echo 'Synthetic renderer evidence already matches the preserved branch evidence.'
+            exit 0
+          fi
           git commit -m 'Dev evidence: preserve synthetic renderer screenshots [skip ci]'
           git push origin HEAD:dev/p2-presentation-bakeoff-20260808
