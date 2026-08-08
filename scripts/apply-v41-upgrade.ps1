@@ -91,7 +91,7 @@ $main = Replace-RegexOnce $main 'func \(a \*application\) layoutControls\(w, h i
 $whatsNew = @'
 messageBox(app.hwnd, "What’s new — Evidence & Casework One Version 41 P1", "ACCESSIBLE CASEWORK STUDIO — V41 P1\r\n\r\n• Starts with a new, empty V41 workspace. Older ECO test data is left untouched and is not loaded automatically.\r\n• Rebuilt the main sidebar as seven genuine native Windows buttons while retaining the ECO visual design.\r\n• Tab and Shift+Tab can now reach the primary navigation; Alt+1 through Alt+7 still work as direct shortcuts.\r\n• Fixed the Ask ECO control layout so it no longer pushes controls off-screen at narrower supported window sizes.\r\n• Preserved drag-and-drop, multi-file and folder evidence intake, encrypted evidence storage, SHA-256 verification, duplicate checks, Matters, Review, Changes, backups and native previews.\r\n• Preserved source-backed Ask ECO retrieval and exact source citations. This build does not pretend that deterministic retrieval is a generative language model.\r\n• Retained the native Win32 architecture: no browser shell, no localhost service, no cloud account and no telemetry.\r\n\r\nTEST THIS VERSION AS A NEW WORKSPACE. Your earlier ECO test vaults remain on disk separately.", MB_OK|MB_ICONINFORMATION)
 '@
-$main = Replace-RegexOnce $main 'messageBox\(app\.hwnd, "What’s new — Evidence & Casework One Version 25 N2", ".*?", MB_OK\|MB_ICONINFORMATION\)' $whatsNew 'Whats New dialog'
+$main = Replace-RegexOnce $main 'messageBox\(app\.hwnd, "What.s new — Evidence & Casework One Version 25 N2", ".*?", MB_OK\|MB_ICONINFORMATION\)' $whatsNew 'Whats New dialog'
 
 $replacements = @(
     @('VERSION 25 N2 • NATIVE DOCUMENT VISION FOUNDATION', 'VERSION 41 P1 • ACCESSIBLE CASEWORK STUDIO'),
