@@ -1,0 +1,185 @@
+name: P2 native Win32 accessibility spike
+
+on:
+  push:
+    branches: [ dev/p2-presentation-bakeoff-20260808 ]
+    paths:
+      - 'labs/native_win32_accessibility_spike/**'
+      - '.github/workflows/p2-native-win32-accessibility-spike.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p2-native-win32-a11y-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-win32-accessibility:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Prove bounded dependency surface
+        working-directory: labs/native_win32_accessibility_spike
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $modules = @(go list -m all)
+          $modules | ForEach-Object { Write-Host $_ }
+          if ($modules.Count -ne 1) {
+            throw "Native spike unexpectedly has third-party Go module dependencies: $($modules -join ', ')"
+          }
+          if (Get-ChildItem -Recurse -File | Select-String -Pattern 'net/http|WinHTTP|WinInet|https?://' -CaseSensitive:$false) {
+            throw 'Native spike contains an unexpected network-capable dependency or URL.'
+          }
+          Write-Host 'ECO_GATE native_win32_dependency_surface=PASS_STDLIB_ONLY'
+
+      - name: Vet and build one-file no-CGo Windows GUI
+        working-directory: labs/native_win32_accessibility_spike
+        shell: pwsh
+        env:
+          CGO_ENABLED: '0'
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go vet ./...
+          $exe = "$env:RUNNER_TEMP\eco-native-a11y-spike.exe"
+          go build -trimpath -ldflags '-H windowsgui' -o $exe .
+          if (-not (Test-Path $exe)) { throw 'Native Win32 spike executable was not built.' }
+          $item = Get-Item $exe
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "ECO_NATIVE_EXE_SIZE=$($item.Length)"
+          Write-Host "ECO_NATIVE_EXE_SHA256=$hash"
+          go version -m $exe
+          Write-Host 'ECO_GATE native_win32_one_file_cgo0_build=PASS'
+
+      - name: Exercise Windows UI Automation semantics and interaction patterns
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+
+          $exe = "$env:RUNNER_TEMP\eco-native-a11y-spike.exe"
+          $handleFile = "$env:RUNNER_TEMP\eco-native-a11y-hwnd.txt"
+          Remove-Item $handleFile -Force -ErrorAction SilentlyContinue
+          $p = Start-Process -FilePath $exe -ArgumentList @('--handle-file', $handleFile) -PassThru
+
+          try {
+            $deadline = (Get-Date).AddSeconds(20)
+            while (-not (Test-Path $handleFile) -and (Get-Date) -lt $deadline -and -not $p.HasExited) {
+              Start-Sleep -Milliseconds 200
+              $p.Refresh()
+            }
+            if ($p.HasExited) {
+              throw "Native Win32 spike exited before publishing its HWND. Exit code: $($p.ExitCode)"
+            }
+            if (-not (Test-Path $handleFile)) {
+              throw 'Native Win32 spike did not publish a window handle.'
+            }
+
+            $raw = [UInt64]::Parse((Get-Content $handleFile -Raw).Trim())
+            $hwnd = [IntPtr]::new([Int64]$raw)
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+            if ($null -eq $root) { throw 'Windows UI Automation could not resolve the native ECO window.' }
+
+            $all = $root.FindAll(
+              [System.Windows.Automation.TreeScope]::Descendants,
+              [System.Windows.Automation.Condition]::TrueCondition
+            )
+            $rows = @()
+            foreach ($el in $all) {
+              try {
+                $rows += [pscustomobject]@{
+                  Name = $el.Current.Name
+                  Type = $el.Current.ControlType.ProgrammaticName
+                  Focusable = $el.Current.IsKeyboardFocusable
+                  Enabled = $el.Current.IsEnabled
+                }
+              } catch {}
+            }
+            $rows | ConvertTo-Json -Depth 3 | Write-Host
+
+            function Require-NamedControl([string]$name, [System.Windows.Automation.ControlType]$type) {
+              $condName = [System.Windows.Automation.PropertyCondition]::new(
+                [System.Windows.Automation.AutomationElement]::NameProperty,
+                $name
+              )
+              $matches = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condName)
+              foreach ($match in $matches) {
+                if ($match.Current.ControlType -eq $type) { return $match }
+              }
+              throw "Required UIA control '$name' with type '$($type.ProgrammaticName)' was not exposed."
+            }
+
+            $workspace = Require-NamedControl 'Matter Workspace' ([System.Windows.Automation.ControlType]::Text)
+            $workspaceNav = Require-NamedControl 'Workspace' ([System.Windows.Automation.ControlType]::Button)
+            $documentsNav = Require-NamedControl 'Documents' ([System.Windows.Automation.ControlType]::Button)
+            $review = Require-NamedControl 'Review evidence' ([System.Windows.Automation.ControlType]::Button)
+            $ask = Require-NamedControl 'Ask ECO' ([System.Windows.Automation.ControlType]::Button)
+
+            $editCondition = [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [System.Windows.Automation.ControlType]::Edit
+            )
+            $edit = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $editCondition)
+            if ($null -eq $edit) { throw 'Native search EDIT control was not exposed through UIA.' }
+
+            $listCondition = [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+              [System.Windows.Automation.ControlType]::List
+            )
+            $list = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $listCondition)
+            if ($null -eq $list) { throw 'Native evidence LISTBOX was not exposed through UIA.' }
+
+            $valueObj = $null
+            if (-not $edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$valueObj)) {
+              throw 'Native EDIT control does not expose UIA ValuePattern.'
+            }
+            $valuePattern = [System.Windows.Automation.ValuePattern]$valueObj
+            $valuePattern.SetValue('synthetic local search')
+            Start-Sleep -Milliseconds 100
+            if ($valuePattern.Current.Value -ne 'synthetic local search') {
+              throw "UIA ValuePattern did not update the native EDIT control. Current='$($valuePattern.Current.Value)'"
+            }
+
+            $invokeObj = $null
+            if (-not $review.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invokeObj)) {
+              throw 'Native Review evidence button does not expose UIA InvokePattern.'
+            }
+            ([System.Windows.Automation.InvokePattern]$invokeObj).Invoke()
+
+            $listItems = $list.FindAll(
+              [System.Windows.Automation.TreeScope]::Children,
+              [System.Windows.Automation.Condition]::TrueCondition
+            )
+            if ($listItems.Count -lt 4) {
+              throw "Expected at least four accessible evidence list items; found $($listItems.Count)."
+            }
+
+            Write-Host "ECO_UIA_TEXT=$($workspace.Current.Name)"
+            Write-Host "ECO_UIA_EDIT_VALUE=$($valuePattern.Current.Value)"
+            Write-Host "ECO_UIA_LIST_ITEMS=$($listItems.Count)"
+            Write-Host 'ECO_GATE native_win32_windows_uia=PASS_TEXT_BUTTON_EDIT_LIST'
+            Write-Host 'ECO_GATE native_win32_uia_value_pattern=PASS'
+            Write-Host 'ECO_GATE native_win32_uia_invoke_pattern=PASS'
+          }
+          finally {
+            if ($p -and -not $p.HasExited) {
+              Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+
+      - name: Prove no runnable build artifact is published
+        shell: pwsh
+        run: |
+          if (Select-String -Path '.github\workflows\p2-native-win32-accessibility-spike.yml' -Pattern 'actions/upload-artifact@') {
+            throw 'Public workflow artifact upload is forbidden for this spike.'
+          }
+          Write-Host 'ECO_GATE native_win32_public_binary_upload=ABSENT'
