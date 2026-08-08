@@ -96,7 +96,8 @@ try {
     $buttons = @{}
 
     foreach ($label in $labels) {
-        $button = [EcoV41A11y]::FindWindowEx($hwnd, [IntPtr]::Zero, 'Button', $label)
+        $windowText = if ($label -eq 'Trust & settings') { 'Trust && settings' } else { $label }
+        $button = [EcoV41A11y]::FindWindowEx($hwnd, [IntPtr]::Zero, 'Button', $windowText)
         if ($button -eq [IntPtr]::Zero) { throw "Native navigation button '$label' was not found." }
         $info = [EcoV41A11y]::Inspect($button)
         if ($info.Role -ne $ROLE_SYSTEM_PUSHBUTTON) { throw "'$label' role was $($info.Role), expected pushbutton $ROLE_SYSTEM_PUSHBUTTON." }
