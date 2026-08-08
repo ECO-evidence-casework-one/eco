@@ -23,8 +23,8 @@ function Replace-RegexOnce([string]$Text, [string]$Pattern, [string]$Replacement
 $main = Get-Content $mainPath -Raw
 $types = Get-Content $typesPath -Raw
 
-# New identity and fresh, isolated local vault. This deliberately does not read
-# the old V25/V33/V38-era application data folders on first start.
+# V41 is intentionally isolated from earlier test vaults. Nothing is deleted;
+# old test data simply is not opened by this candidate.
 $main = Replace-Exact $main 'ECO_V25_NATIVE_MAIN' 'ECO_V41_NATIVE_MAIN' 'main window class'
 $main = Replace-Exact $main 'ECO_V25_IMAGE_PREVIEW' 'ECO_V41_IMAGE_PREVIEW' 'preview window class'
 $main = Replace-Exact $main 'ECO_V25_INPUT_DIALOG' 'ECO_V41_INPUT_DIALOG' 'input window class'
@@ -33,13 +33,11 @@ $main = Replace-Exact $main 'whats-seen-N2-P1' 'whats-seen-V41-P1' 'first-run ma
 $types = Replace-Exact $types 'BuildID   = "ECO-V25-20260731-N2-P1"' 'BuildID   = "ECO-V41-20260808-P1"' 'BuildID'
 $types = Replace-Exact $types 'BuildName = "Evidence & Casework One Version 25 N2 — Native Document Vision Foundation Preview 1"' 'BuildName = "Evidence & Casework One Version 41 P1 — Accessible Casework Studio"' 'BuildName'
 
-# Native Windows sidebar controls: preserve the modern painted appearance while
-# making all seven primary destinations real BUTTON controls for Tab navigation,
-# MSAA/screen-reader naming and standard default actions.
-$main = Replace-RegexOnce $main '(questionEdit, askButton, answerEdit\s+uintptr\r?\n)' ('$1' + "\tnavButtons                                                                [7]uintptr`r`n") 'navigation field'
-$main = Replace-RegexOnce $main '(\t\tapp\.answerEdit = createWindowEx\([^\r\n]+\)\r?\n)' ('$1' + "\t\tapp.createV41Navigation(hwnd)`r`n") 'navigation creation'
+# Add seven real Win32 BUTTON controls over the existing painted sidebar.
+$main = Replace-RegexOnce $main '(questionEdit, askButton, answerEdit\s+uintptr\r?\n)' ('$1' + "`tnavButtons                                                                [7]uintptr`r`n") 'navigation field'
+$main = Replace-RegexOnce $main '(\t\tapp\.answerEdit = createWindowEx\([^\r\n]+\)\r?\n)' ('$1' + "`t`tapp.createV41Navigation(hwnd)`r`n") 'navigation creation'
 $main = Replace-Exact $main "`tcase WM_COMMAND:" "`tcase WM_DRAWITEM:`r`n`t`tif app.drawV41OwnerButton(lparam) {`r`n`t`t`treturn 1`r`n`t`t}`r`n`t`treturn 0`r`n`tcase WM_COMMAND:" 'owner-draw dispatch'
-$main = Replace-RegexOnce $main '(\t\tcode := int\(hiword\(wparam\)\)\r?\n)' ('$1' + "\t\tif app.handleV41NavCommand(id, code) {`r`n\t\t\treturn 0`r`n\t\t}`r`n") 'navigation command handler'
+$main = Replace-RegexOnce $main '(\t\tcode := int\(hiword\(wparam\)\)\r?\n)' ('$1' + "`t`tif app.handleV41NavCommand(id, code) {`r`n`t`t`treturn 0`r`n`t`t}`r`n") 'navigation command handler'
 
 $newLayout = @'
 func (a *application) layoutControls(w, h int32) {
@@ -88,13 +86,13 @@ func (a *application) paint
 '@
 $main = Replace-RegexOnce $main 'func \(a \*application\) layoutControls\(w, h int32\) \{.*?\r?\n\}\r?\n\r?\nfunc \(a \*application\) paint' $newLayout 'responsive Ask ECO layout'
 
-# First-run change report. This is deliberately visible so every test version
-# states exactly what changed instead of making the tester guess.
-$whatsNew = 'messageBox(app.hwnd, "What’s new — Evidence & Casework One Version 41 P1", "ACCESSIBLE CASEWORK STUDIO — V41 P1\r\n\r\n• Starts with a new, empty V41 workspace. Older ECO test data is left untouched and is not loaded automatically.\r\n• Rebuilt the main sidebar as seven genuine native Windows buttons while retaining the ECO visual design.\r\n• Tab and Shift+Tab can now reach the primary navigation; Alt+1 through Alt+7 still work as direct shortcuts.\r\n• Fixed the Ask ECO control layout so it no longer pushes controls off-screen at narrower supported window sizes.\r\n• Preserved drag-and-drop, multi-file and folder evidence intake, encrypted evidence storage, SHA-256 verification, duplicate checks, Matters, Review, Changes, backups and native previews.\r\n• Preserved source-backed Ask ECO retrieval and exact source citations. This build does not pretend that deterministic retrieval is a generative language model.\r\n• Retained the native Win32 architecture: no browser shell, no localhost service, no cloud account and no telemetry.\r\n\r\nTEST THIS VERSION AS A NEW WORKSPACE. Your earlier ECO test vaults remain on disk separately.", MB_OK|MB_ICONINFORMATION)'
-$main = Replace-RegexOnce $main 'messageBox\(app\.hwnd, "What’s new — Evidence & Casework One Version 25 N2", ".*?", MB_OK\|MB_ICONINFORMATION\)' $whatsNew 'What’s New dialog'
+# The change report is a here-string so typographic apostrophes cannot be
+# interpreted as PowerShell quote delimiters.
+$whatsNew = @'
+messageBox(app.hwnd, "What’s new — Evidence & Casework One Version 41 P1", "ACCESSIBLE CASEWORK STUDIO — V41 P1\r\n\r\n• Starts with a new, empty V41 workspace. Older ECO test data is left untouched and is not loaded automatically.\r\n• Rebuilt the main sidebar as seven genuine native Windows buttons while retaining the ECO visual design.\r\n• Tab and Shift+Tab can now reach the primary navigation; Alt+1 through Alt+7 still work as direct shortcuts.\r\n• Fixed the Ask ECO control layout so it no longer pushes controls off-screen at narrower supported window sizes.\r\n• Preserved drag-and-drop, multi-file and folder evidence intake, encrypted evidence storage, SHA-256 verification, duplicate checks, Matters, Review, Changes, backups and native previews.\r\n• Preserved source-backed Ask ECO retrieval and exact source citations. This build does not pretend that deterministic retrieval is a generative language model.\r\n• Retained the native Win32 architecture: no browser shell, no localhost service, no cloud account and no telemetry.\r\n\r\nTEST THIS VERSION AS A NEW WORKSPACE. Your earlier ECO test vaults remain on disk separately.", MB_OK|MB_ICONINFORMATION)
+'@
+$main = Replace-RegexOnce $main 'messageBox\(app\.hwnd, "What’s new — Evidence & Casework One Version 25 N2", ".*?", MB_OK\|MB_ICONINFORMATION\)' $whatsNew 'Whats New dialog'
 
-# Visible product language refresh. Claims remain bounded to what the source
-# actually implements.
 $replacements = @(
     @('VERSION 25 N2 • NATIVE DOCUMENT VISION FOUNDATION', 'VERSION 41 P1 • ACCESSIBLE CASEWORK STUDIO'),
     @('Native. Private.\r\nSource-backed.', 'Your evidence.\r\nYour device.'),
@@ -114,11 +112,7 @@ foreach ($pair in $replacements) {
     }
 }
 
-# Make the default window slightly roomier while preserving support for the
-# existing minimum size and low-spec laptop target.
 $main = Replace-Exact $main 'CW_USEDEFAULT, CW_USEDEFAULT, 1260, 820' 'CW_USEDEFAULT, CW_USEDEFAULT, 1360, 860' 'default window size'
-
-# Help now describes the visible keyboard path rather than hiding it.
 $main = Replace-Exact $main 'Alt+1..7: change workspace\r\nUp/Down: select evidence' 'Tab / Shift+Tab: move through native controls\r\nAlt+1..7: change workspace\r\nUp/Down: select evidence' 'keyboard help'
 
 Set-Content -Path $mainPath -Value $main -Encoding utf8
@@ -126,7 +120,7 @@ Set-Content -Path $typesPath -Value $types -Encoding utf8
 
 & gofmt -w $mainPath $typesPath (Join-Path $root 'cmd\eco\v41_ui_windows.go')
 if ($LASTEXITCODE -ne 0) {
-    throw "gofmt failed after applying V41 upgrade"
+    throw 'gofmt failed after applying V41 upgrade'
 }
 
 Write-Host 'ECO_GATE v41_source_upgrade=PASS'
