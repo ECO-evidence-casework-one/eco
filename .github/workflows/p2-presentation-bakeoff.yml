@@ -48,7 +48,7 @@ jobs:
           go-version: '1.24.x'
           cache: false
       - name: Install headless render prerequisites
-        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev libwayland-dev libxkbcommon-dev
+        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev libwayland-dev libxkbcommon-dev libvulkan-dev
       - name: Resolve and lock Gio dependencies
         working-directory: labs/presentation_bakeoff/gio
         run: go mod tidy
