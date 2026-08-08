@@ -65,6 +65,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Add-Type -AssemblyName UIAutomationClient
           Add-Type -AssemblyName UIAutomationTypes
+          # Standard Win32 controls are exposed through Microsoft's client-side UIA proxy table.
+          # PowerShell does not load that assembly merely by loading UIAutomationClient.
+          Add-Type -AssemblyName UIAutomationClientsideProviders
 
           $exe = "$env:RUNNER_TEMP\eco-native-a11y-spike.exe"
           $handleFile = "$env:RUNNER_TEMP\eco-native-a11y-hwnd.txt"
@@ -99,6 +102,9 @@ jobs:
                 $rows += [pscustomobject]@{
                   Name = $el.Current.Name
                   Type = $el.Current.ControlType.ProgrammaticName
+                  ClassName = $el.Current.ClassName
+                  Framework = $el.Current.FrameworkId
+                  NativeHandle = $el.Current.NativeWindowHandle
                   Focusable = $el.Current.IsKeyboardFocusable
                   Enabled = $el.Current.IsEnabled
                 }
