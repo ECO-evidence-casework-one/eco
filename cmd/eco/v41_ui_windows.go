@@ -5,15 +5,15 @@ package main
 import "unsafe"
 
 const (
-	ctrlV41NavBase   = 1200
-	v41BSOwnerDraw   = 0x0000000B
-	WM_DRAWITEM      = 0x002B
-	v41ODSSelected   = 0x0001
-	v41ODSFocus      = 0x0010
+	ctrlV41NavBase = 1200
+	v41BSOwnerDraw = 0x0000000B
+	WM_DRAWITEM    = 0x002B
+	v41ODSSelected = 0x0001
+	v41ODSFocus    = 0x0010
 )
 
 var v41NavPages = [7]string{"home", "evidence", "ask", "matters", "review", "changes", "trust"}
-var v41NavLabels = [7]string{"Home", "Evidence", "Ask ECO", "Matters", "Review", "Changes", "Trust & settings"}
+var v41NavLabels = [7]string{"Home", "Evidence", "Ask ECO", "Matters", "Review", "Changes", "Trust && settings"}
 
 type v41DrawItemStruct struct {
 	CtlType    uint32
