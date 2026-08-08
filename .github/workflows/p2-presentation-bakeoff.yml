@@ -123,3 +123,54 @@ jobs:
           echo 'Cogent Core v0.3.38 is not promoted in this bake-off.'
           echo 'Reason: Go 1.25.6 requirement plus materially larger native/WebGPU dependency surface.'
           echo 'It remains a reserve only if Gio and Fyne both fail mandatory gates.'
+
+  preserve-synthetic-evidence:
+    needs: [gio, fyne]
+    if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Extract isolated bake-off source
+        run: tar -xzf labs/presentation_bakeoff_bundle.tar.gz
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Install Gio headless render prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev libwayland-dev libxkbcommon-dev libvulkan-dev mesa-vulkan-drivers
+      - name: Render Gio evidence
+        working-directory: labs/presentation_bakeoff/gio
+        env:
+          EGL_PLATFORM: surfaceless
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GALLIUM_DRIVER: llvmpipe
+        run: |
+          go mod tidy
+          go run ./cmd/render ../fixture/p2_snapshot.json out
+      - name: Render Fyne evidence
+        working-directory: labs/presentation_bakeoff/fyne
+        run: |
+          go mod tidy
+          go run ./cmd/render ../fixture/p2_snapshot.json out
+      - name: Preserve non-runnable synthetic PNG evidence only
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=labs/presentation_bakeoff/evidence/latest
+          rm -rf "$root"
+          mkdir -p "$root/gio" "$root/fyne"
+          cp labs/presentation_bakeoff/gio/out/*.png "$root/gio/"
+          cp labs/presentation_bakeoff/fyne/out/*.png "$root/fyne/"
+          find "$root" -type f -name '*.png' -print0 | sort -z | xargs -0 sha256sum > "$root/SHA256SUMS.txt"
+          if find "$root" -type f ! -name '*.png' ! -name 'SHA256SUMS.txt' | grep -q .; then
+            echo 'Unexpected evidence file type.' >&2
+            exit 1
+          fi
+          git config user.name 'ECO Development Sentinel'
+          git config user.email 'actions@users.noreply.github.com'
+          git add "$root"
+          git commit -m 'Dev evidence: preserve synthetic renderer screenshots [skip ci]'
+          git push origin HEAD:dev/p2-presentation-bakeoff-20260808
