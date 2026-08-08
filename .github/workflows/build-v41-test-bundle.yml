@@ -1,0 +1,140 @@
+name: V41 P1 Windows test bundle
+
+on:
+  push:
+    branches: [ dev/v41-accessible-casework-studio-20260808 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v41-p1-test-bundle-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-test-package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.x'
+          cache: false
+
+      - name: Apply V41 source upgrade
+        shell: pwsh
+        run: ./scripts/apply-v41-upgrade.ps1
+
+      - name: Build and independently deterministic-rebuild Windows EXE
+        shell: pwsh
+        run: ./scripts/build-windows.ps1
+
+      - name: Live Windows navigation and accessibility test
+        shell: powershell
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'eco-v41-test-localappdata'
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          .\scripts\test-v41-navigation.ps1 -ExePath '.\dist\ECO.exe' -LocalAppDataRoot $root
+
+      - name: Assemble V41 P1 test package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = Join-Path $env:RUNNER_TEMP 'ECO_V41_P1_TEST_PACKAGE'
+          $out = Join-Path $env:RUNNER_TEMP 'ECO_V41_P1_ARTIFACT'
+          New-Item -ItemType Directory -Path $bundle -Force | Out-Null
+          New-Item -ItemType Directory -Path $out -Force | Out-Null
+
+          $exeName = 'EvidenceCaseworkOne_V41_P1.exe'
+          Copy-Item '.\dist\ECO.exe' (Join-Path $bundle $exeName)
+          $exePath = Join-Path $bundle $exeName
+          $hash = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLowerInvariant()
+          $size = (Get-Item $exePath).Length
+          "$hash  $exeName" | Set-Content -Encoding ascii (Join-Path $bundle 'SHA256SUMS.txt')
+
+          @"
+          Evidence & Casework One — V41 P1
+          Build ID: ECO-V41-20260808-P1
+          Test class: unsigned private Windows test candidate
+
+          WHAT CHANGED
+          - Starts in a completely new V41P1 local vault. Older ECO test vaults are untouched and are not loaded automatically.
+          - Primary sidebar navigation is now seven genuine native Windows buttons while keeping the ECO dark-teal visual shell.
+          - Tab / Shift+Tab reaches primary navigation; Alt+1..7 remains available.
+          - Ask ECO layout is repaired for narrower supported window sizes so the question field and action button stay on-screen.
+          - The startup What's New report explicitly lists the version changes.
+          - Existing encrypted evidence intake, SHA-256 verification, duplicate handling, Matters, Review, Changes, backup/restore, image preview and source-backed Ask ECO are retained.
+
+          IMPORTANT
+          Ask ECO in V41 P1 is the working source-backed local retrieval engine. It is not falsely labelled as a bundled generative LLM. The recovered M1.18 runtime remains separate from this presentation candidate until the model/runtime integration gate is genuinely passed.
+          "@ | Set-Content -Encoding utf8 (Join-Path $bundle 'WHATS_NEW_V41_P1.txt')
+
+          @"
+          V41 P1 — FIRST TEST
+
+          1. Run EvidenceCaseworkOne_V41_P1.exe.
+          2. Confirm it opens EMPTY. It must not load evidence or conversations from an older ECO version.
+          3. Click every sidebar destination: Home, Evidence, Ask ECO, Matters, Review, Changes, Trust & settings.
+          4. Press Tab repeatedly and confirm the sidebar destinations receive keyboard focus.
+          5. Press Alt+1 through Alt+7 and confirm each destination opens.
+          6. Add a small synthetic/test document with Add evidence or Ctrl+U.
+          7. Open Evidence and confirm the imported item appears and can be selected.
+          8. Open Ask ECO and ask something supported by the imported readable text.
+          9. Create a Matter and visit Review, Changes and Trust & settings.
+          10. Report any visual clipping, dead buttons, unexpected old data, freezing, or incorrect navigation with a screenshot.
+          "@ | Set-Content -Encoding utf8 (Join-Path $bundle 'TEST_FIRST_V41_P1.txt')
+
+          @"
+          V41 P1 — KNOWN LIMITATIONS
+
+          - This is an unsigned private test candidate, not a public release.
+          - A bundled generative local language model is not integrated in this candidate. Ask ECO uses the existing deterministic, source-backed local retrieval path.
+          - A production Windows 11 NVDA/Narrator pass is still required. CI proves the native navigation buttons expose Microsoft Active Accessibility push-button roles, names, focusability and default actions.
+          - The evidence list and several in-page painted action cards still use the recovered native presentation implementation; the primary navigation has been upgraded first.
+          - Existing older ECO vaults are deliberately not migrated automatically into V41 P1.
+          "@ | Set-Content -Encoding utf8 (Join-Path $bundle 'KNOWN_LIMITATIONS_V41_P1.txt')
+
+          $receipt = [ordered]@{
+            schema = 1
+            build_id = 'ECO-V41-20260808-P1'
+            build_name = 'Evidence & Casework One Version 41 P1 — Accessible Casework Studio'
+            source_branch = '${{ github.ref_name }}'
+            source_commit = '${{ github.sha }}'
+            workflow_run = '${{ github.run_id }}'
+            go_version = (go version)
+            goos = 'windows'
+            goarch = 'amd64'
+            cgo_enabled = '0'
+            deterministic_rebuild = 'PASS'
+            live_windows_navigation_test = 'PASS'
+            native_sidebar_buttons = 7
+            fresh_vault_root = 'EvidenceCaseworkOne/V41P1'
+            exe_name = $exeName
+            exe_size_bytes = $size
+            exe_sha256 = $hash
+            signed = $false
+            release_class = 'unsigned private test candidate'
+          }
+          $receipt | ConvertTo-Json -Depth 5 | Set-Content -Encoding utf8 (Join-Path $bundle 'BUILD_RECEIPT_V41_P1.json')
+
+          $zip = Join-Path $out 'ECO_V41_P1_ALL_IN_ONE_TEST_BUNDLE_2026-08-08.zip'
+          Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath $zip -CompressionLevel Optimal -Force
+          Copy-Item (Join-Path $bundle '*') $out
+
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          $zipSize = (Get-Item $zip).Length
+          Write-Host "ECO_V41_EXE_SIZE=$size"
+          Write-Host "ECO_V41_EXE_SHA256=$hash"
+          Write-Host "ECO_V41_ZIP_SIZE=$zipSize"
+          Write-Host "ECO_V41_ZIP_SHA256=$zipHash"
+          Write-Host 'ECO_GATE v41_test_bundle=PASS'
+
+      - name: Upload V41 P1 test deliverables
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: ECO_V41_P1_TEST_DELIVERABLES_2026-08-08
+          path: ${{ runner.temp }}/ECO_V41_P1_ARTIFACT/*
+          if-no-files-found: error
+          retention-days: 7
