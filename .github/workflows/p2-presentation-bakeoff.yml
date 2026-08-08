@@ -48,7 +48,7 @@ jobs:
           go-version: '1.24.x'
           cache: false
       - name: Install headless render prerequisites
-        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev libwayland-dev libxkbcommon-dev libvulkan-dev
+        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev libwayland-dev libxkbcommon-dev libvulkan-dev mesa-vulkan-drivers
       - name: Resolve and lock Gio dependencies
         working-directory: labs/presentation_bakeoff/gio
         run: go mod tidy
@@ -57,6 +57,10 @@ jobs:
         run: go test ./...
       - name: Render locked representative screens with Gio
         working-directory: labs/presentation_bakeoff/gio
+        env:
+          EGL_PLATFORM: surfaceless
+          LIBGL_ALWAYS_SOFTWARE: '1'
+          GALLIUM_DRIVER: llvmpipe
         run: go run ./cmd/render ../fixture/p2_snapshot.json out
       - name: Prove Gio Windows cross-build without CGo
         working-directory: labs/presentation_bakeoff/gio
