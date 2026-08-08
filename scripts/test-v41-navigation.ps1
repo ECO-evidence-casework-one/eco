@@ -25,6 +25,7 @@ public sealed class EcoV41A11yInfo
 public static class EcoV41A11y
 {
     private const uint OBJID_CLIENT = 0xFFFFFFFC;
+    private const uint BM_CLICK = 0x00F5;
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     public static extern IntPtr FindWindowEx(IntPtr hwndParent, IntPtr hwndChildAfter, string lpszClass, string lpszWindow);
@@ -32,6 +33,9 @@ public static class EcoV41A11y
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern IntPtr SendMessage(IntPtr hwnd, uint msg, IntPtr wParam, IntPtr lParam);
 
     [DllImport("oleacc.dll")]
     private static extern int AccessibleObjectFromWindow(
@@ -63,9 +67,9 @@ public static class EcoV41A11y
         return info;
     }
 
-    public static void DoDefaultAction(IntPtr hwnd)
+    public static void Click(IntPtr hwnd)
     {
-        AccessibleFor(hwnd).accDoDefaultAction(0);
+        SendMessage(hwnd, BM_CLICK, IntPtr.Zero, IntPtr.Zero);
     }
 }
 '@ -ReferencedAssemblies $accessibilityAssembly
@@ -108,14 +112,17 @@ try {
     }
     Write-Host 'ECO_GATE v41_nav_msaa=PASS_7_NATIVE_BUTTONS'
 
-    [EcoV41A11y]::DoDefaultAction($buttons['Ask ECO'])
+    # Hosted Windows runners are not interactive desktops, so use the standard
+    # Win32 BM_CLICK contract for functional activation after proving the MSAA
+    # role/name/focus/default-action metadata above.
+    [EcoV41A11y]::Click($buttons['Ask ECO'])
     Start-Sleep -Milliseconds 350
     $edit = [EcoV41A11y]::FindWindowEx($hwnd, [IntPtr]::Zero, 'Edit', $null)
     if ($edit -eq [IntPtr]::Zero) { throw 'Ask ECO question edit control was not found.' }
     if (-not [EcoV41A11y]::IsWindowVisible($edit)) { throw 'Ask ECO navigation did not expose the question edit control.' }
     Write-Host 'ECO_GATE v41_nav_ask_activation=PASS'
 
-    [EcoV41A11y]::DoDefaultAction($buttons['Evidence'])
+    [EcoV41A11y]::Click($buttons['Evidence'])
     Start-Sleep -Milliseconds 350
     if ([EcoV41A11y]::IsWindowVisible($edit)) { throw 'Evidence navigation did not hide Ask ECO controls.' }
     Write-Host 'ECO_GATE v41_nav_evidence_activation=PASS'
