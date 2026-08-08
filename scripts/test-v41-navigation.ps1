@@ -13,6 +13,15 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 
+public sealed class EcoV41A11yInfo
+{
+    public IntPtr Hwnd { get; set; }
+    public string Name { get; set; }
+    public string DefaultAction { get; set; }
+    public int Role { get; set; }
+    public int State { get; set; }
+}
+
 public static class EcoV41A11y
 {
     private const uint OBJID_CLIENT = 0xFFFFFFFC;
@@ -31,7 +40,7 @@ public static class EcoV41A11y
         ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out Accessibility.IAccessible ppvObject);
 
-    public static Accessibility.IAccessible AccessibleFor(IntPtr hwnd)
+    private static Accessibility.IAccessible AccessibleFor(IntPtr hwnd)
     {
         Guid iid = typeof(Accessibility.IAccessible).GUID;
         Accessibility.IAccessible acc;
@@ -39,6 +48,24 @@ public static class EcoV41A11y
         if (hr < 0) Marshal.ThrowExceptionForHR(hr);
         if (acc == null) throw new InvalidOperationException("No IAccessible object returned.");
         return acc;
+    }
+
+    public static EcoV41A11yInfo Inspect(IntPtr hwnd)
+    {
+        Accessibility.IAccessible acc = AccessibleFor(hwnd);
+        object self = 0;
+        EcoV41A11yInfo info = new EcoV41A11yInfo();
+        info.Hwnd = hwnd;
+        info.Role = Convert.ToInt32(acc.get_accRole(self));
+        info.State = Convert.ToInt32(acc.get_accState(self));
+        try { info.Name = acc.get_accName(self); } catch { }
+        try { info.DefaultAction = acc.get_accDefaultAction(self); } catch { }
+        return info;
+    }
+
+    public static void DoDefaultAction(IntPtr hwnd)
+    {
+        AccessibleFor(hwnd).accDoDefaultAction(0);
     }
 }
 '@ -ReferencedAssemblies $accessibilityAssembly
@@ -71,28 +98,23 @@ try {
     foreach ($label in $labels) {
         $button = [EcoV41A11y]::FindWindowEx($hwnd, [IntPtr]::Zero, 'Button', $label)
         if ($button -eq [IntPtr]::Zero) { throw "Native navigation button '$label' was not found." }
-        $acc = [EcoV41A11y]::AccessibleFor($button)
-        $self = 0
-        $role = [int]$acc.get_accRole($self)
-        $state = [int]$acc.get_accState($self)
-        $name = $acc.get_accName($self)
-        $action = $acc.get_accDefaultAction($self)
-        if ($role -ne $ROLE_SYSTEM_PUSHBUTTON) { throw "'$label' role was $role, expected pushbutton $ROLE_SYSTEM_PUSHBUTTON." }
-        if (($state -band $STATE_SYSTEM_FOCUSABLE) -eq 0) { throw "'$label' is not focusable through MSAA." }
-        if ($name -ne $label) { throw "'$label' accessible name mismatch: '$name'." }
-        if ([string]::IsNullOrWhiteSpace($action)) { throw "'$label' has no default accessibility action." }
-        $buttons[$label] = $acc
+        $info = [EcoV41A11y]::Inspect($button)
+        if ($info.Role -ne $ROLE_SYSTEM_PUSHBUTTON) { throw "'$label' role was $($info.Role), expected pushbutton $ROLE_SYSTEM_PUSHBUTTON." }
+        if (($info.State -band $STATE_SYSTEM_FOCUSABLE) -eq 0) { throw "'$label' is not focusable through MSAA." }
+        if ($info.Name -ne $label) { throw "'$label' accessible name mismatch: '$($info.Name)'." }
+        if ([string]::IsNullOrWhiteSpace($info.DefaultAction)) { throw "'$label' has no default accessibility action." }
+        $buttons[$label] = $button
     }
     Write-Host 'ECO_GATE v41_nav_msaa=PASS_7_NATIVE_BUTTONS'
 
-    $buttons['Ask ECO'].accDoDefaultAction(0)
+    [EcoV41A11y]::DoDefaultAction($buttons['Ask ECO'])
     Start-Sleep -Milliseconds 350
     $edit = [EcoV41A11y]::FindWindowEx($hwnd, [IntPtr]::Zero, 'Edit', $null)
     if ($edit -eq [IntPtr]::Zero) { throw 'Ask ECO question edit control was not found.' }
     if (-not [EcoV41A11y]::IsWindowVisible($edit)) { throw 'Ask ECO navigation did not expose the question edit control.' }
     Write-Host 'ECO_GATE v41_nav_ask_activation=PASS'
 
-    $buttons['Evidence'].accDoDefaultAction(0)
+    [EcoV41A11y]::DoDefaultAction($buttons['Evidence'])
     Start-Sleep -Milliseconds 350
     if ([EcoV41A11y]::IsWindowVisible($edit)) { throw 'Evidence navigation did not hide Ask ECO controls.' }
     Write-Host 'ECO_GATE v41_nav_evidence_activation=PASS'
