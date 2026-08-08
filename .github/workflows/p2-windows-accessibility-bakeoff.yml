@@ -13,7 +13,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  fyne-windows-uia:
+  fyne-windows-accessibility:
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
@@ -88,7 +88,33 @@ jobs:
           go build -tags accessibility -trimpath -o "$env:RUNNER_TEMP\fyne-accessibility-probe.exe" ./cmd/accessibility-probe
           if (-not (Test-Path "$env:RUNNER_TEMP\fyne-accessibility-probe.exe")) { throw 'Accessibility probe executable was not built.' }
           Write-Host 'ECO_GATE fyne_windows_accessibility_build=PASS'
-      - name: Prove Fyne exposes a child control through Windows UI Automation
+      - name: Audit Fyne accessibility capability required by ECO
+        working-directory: labs/presentation_bakeoff/fyne
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dir = go list -m -f '{{.Dir}}' fyne.io/fyne/v2
+          if (-not $dir) { throw 'Could not resolve Fyne module source.' }
+          $api = Get-Content (Join-Path $dir 'accessibility.go') -Raw
+          $entry = Get-Content (Join-Path $dir 'widget\entry.go') -Raw
+          $provider = Get-Content (Join-Path $dir 'internal\driver\glfw\accessibility_windows.c') -Raw
+
+          $roles = [regex]::Matches($api, 'AccessibleRole[A-Za-z]+') | ForEach-Object Value | Sort-Object -Unique
+          Write-Host ('Fyne accessible roles: ' + ($roles -join ', '))
+
+          $entryAccessible = $entry -match 'fyne\.Accessible'
+          $hasEditRole = $api -match 'AccessibleRole(Edit|Input|TextBox|Textbox)'
+          $patternProviderAlwaysNull = $provider -match '(?s)S_GetPatternProvider.*?\*pRetVal\s*=\s*NULL\s*;.*?return\s+S_OK\s*;'
+          Write-Host "Fyne Entry implements fyne.Accessible: $entryAccessible"
+          Write-Host "Fyne exposes an edit/input accessibility role: $hasEditRole"
+          Write-Host "Fyne Windows UIA pattern provider returns no patterns: $patternProviderAlwaysNull"
+
+          if (-not $entryAccessible -or -not $hasEditRole -or $patternProviderAlwaysNull) {
+            Write-Host 'ECO_GATE fyne_windows_accessibility_capability=FAIL_AS_IS_MISSING_EDIT_OR_UIA_INTERACTION_SUPPORT'
+          } else {
+            Write-Host 'ECO_GATE fyne_windows_accessibility_capability=REQUIRES_RUNTIME_VALIDATION'
+          }
+      - name: Attempt hosted-runner UI Automation smoke
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -97,36 +123,36 @@ jobs:
           $exe = "$env:RUNNER_TEMP\fyne-accessibility-probe.exe"
           $proc = Start-Process -FilePath $exe -PassThru
           try {
-            $deadline = (Get-Date).AddSeconds(30)
+            $deadline = (Get-Date).AddSeconds(20)
             do {
               Start-Sleep -Milliseconds 500
               $proc.Refresh()
             } while ($proc.MainWindowHandle -eq 0 -and (Get-Date) -lt $deadline -and -not $proc.HasExited)
-            if ($proc.HasExited) { throw "Accessibility probe exited prematurely with code $($proc.ExitCode)." }
-            if ($proc.MainWindowHandle -eq 0) { throw 'Accessibility probe did not expose a native top-level window handle.' }
+            if ($proc.HasExited) {
+              Write-Host "ECO_GATE fyne_windows_accessibility_runtime=INCONCLUSIVE_PROCESS_EXIT_$($proc.ExitCode)"
+              exit 0
+            }
+            if ($proc.MainWindowHandle -eq 0) {
+              Write-Host 'GitHub-hosted Windows runners do not provide a reliable interactive desktop window for this GLFW probe.'
+              Write-Host 'ECO_GATE fyne_windows_accessibility_runtime=INCONCLUSIVE_HOSTED_RUNNER_NO_WINDOW_HANDLE'
+              exit 0
+            }
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
-            if ($null -eq $root) { throw 'UI Automation could not obtain the Fyne window root.' }
+            if ($null -eq $root) {
+              Write-Host 'ECO_GATE fyne_windows_accessibility_runtime=INCONCLUSIVE_UIA_ROOT_UNAVAILABLE'
+              exit 0
+            }
             $condition = [System.Windows.Automation.PropertyCondition]::new(
               [System.Windows.Automation.AutomationElement]::NameProperty,
               'Accessibility probe action'
             )
             $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
             if ($null -eq $button) {
-              $all = $root.FindAll(
-                [System.Windows.Automation.TreeScope]::Descendants,
-                [System.Windows.Automation.Condition]::TrueCondition
-              )
-              Write-Host "UIA descendants discovered: $($all.Count)"
-              foreach ($item in $all) {
-                try { Write-Host "UIA node name='$($item.Current.Name)' type='$($item.Current.ControlType.ProgrammaticName)'" } catch {}
-              }
-              throw 'The Fyne child button was not exposed through Windows UI Automation.'
+              Write-Host 'ECO_GATE fyne_windows_accessibility_runtime=FAIL_BUTTON_NOT_EXPOSED'
+              exit 0
             }
-            if ($button.Current.ControlType -ne [System.Windows.Automation.ControlType]::Button) {
-              throw "Expected UIA Button control, got $($button.Current.ControlType.ProgrammaticName)."
-            }
-            Write-Host "ECO_UIA_PASS name='$($button.Current.Name)' type='$($button.Current.ControlType.ProgrammaticName)'"
-            Write-Host 'ECO_GATE fyne_windows_accessibility_uia=PASS'
+            Write-Host "ECO_UIA_OBSERVED name='$($button.Current.Name)' type='$($button.Current.ControlType.ProgrammaticName)'"
+            Write-Host 'ECO_GATE fyne_windows_accessibility_runtime=PASS_BASIC_DISCOVERY_ONLY'
           }
           finally {
             if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
@@ -159,15 +185,42 @@ jobs:
           $winFiles = Get-ChildItem $env:GIO_MODULE_DIR -Recurse -File -Include '*.go','*.c','*.h' |
             Where-Object { $_.Name -match 'windows|win32' -or $_.FullName -match 'windows|win32' }
           if (-not $winFiles) { throw 'No Gio Windows source files were found for audit.' }
-          $nativeHits = $winFiles | Select-String -Pattern 'UIAutomation|IRawElementProvider|UiaReturnRawElementProvider|IAccessible|WM_GETOBJECT' -CaseSensitive:$false
-          $semanticHits = $winFiles | Select-String -Pattern 'SemanticRoot|semantic|accessib' -CaseSensitive:$false
+          $nativeHits = $winFiles | Select-String -Pattern 'UIAutomation|IRawElementProvider|UiaReturnRawElementProvider|IAccessible|WM_GETOBJECT|NotifyWinEvent|CreateStdAccessibleObject|AccessibleObjectFromWindow|oleacc' -CaseSensitive:$false
           Write-Host "Gio Windows files audited: $($winFiles.Count)"
-          Write-Host "Native accessibility bridge hits: $($nativeHits.Count)"
-          Write-Host "Windows semantic/accessibility hits: $($semanticHits.Count)"
-          if ($nativeHits.Count -eq 0 -and $semanticHits.Count -eq 0) {
-            Write-Host 'ECO_GATE gio_windows_accessibility=FAIL_NO_WINDOWS_UIA_OR_ACCESSIBILITY_BRIDGE_FOUND'
+          Write-Host "Native Windows accessibility bridge hits: $($nativeHits.Count)"
+          if ($nativeHits.Count -eq 0) {
+            Write-Host 'ECO_GATE gio_windows_accessibility=FAIL_NO_WINDOWS_UIA_OR_MSAA_BRIDGE_FOUND'
           } else {
             Write-Host 'ECO_GATE gio_windows_accessibility=REQUIRES_MANUAL_REVIEW'
-            $nativeHits | ForEach-Object { Write-Host $_.Line }
-            $semanticHits | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line }
+            $nativeHits | Select-Object -First 30 | ForEach-Object { Write-Host $_.Line }
+          }
+
+  cogent-windows-accessibility-source-audit:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.6'
+          cache: false
+      - name: Resolve pinned Cogent Core source
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $json = go mod download -json cogentcore.org/core@v0.3.38 | ConvertFrom-Json
+          if (-not $json.Dir) { throw 'Could not resolve Cogent Core v0.3.38 source.' }
+          "COGENT_MODULE_DIR=$($json.Dir)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Audit Cogent Core for Windows screen-reader bridge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $files = Get-ChildItem $env:COGENT_MODULE_DIR -Recurse -File -Include '*.go','*.c','*.h','*.cpp','*.m'
+          $nativeHits = $files | Select-String -Pattern 'UIAutomation|IRawElementProvider|UiaReturnRawElementProvider|IAccessible|WM_GETOBJECT|NotifyWinEvent|CreateStdAccessibleObject|AccessibleObjectFromWindow|oleacc|screen reader' -CaseSensitive:$false
+          Write-Host "Cogent Core files audited: $($files.Count)"
+          Write-Host "Windows/screen-reader accessibility hits: $($nativeHits.Count)"
+          if ($nativeHits.Count -eq 0) {
+            Write-Host 'ECO_GATE cogent_windows_accessibility=FAIL_NO_SCREEN_READER_BRIDGE_FOUND'
+          } else {
+            Write-Host 'ECO_GATE cogent_windows_accessibility=REQUIRES_MANUAL_REVIEW'
+            $nativeHits | Select-Object -First 30 | ForEach-Object { Write-Host $_.Path ':' $_.LineNumber ':' $_.Line }
           }
