@@ -1,0 +1,121 @@
+name: P2 presentation bake-off
+
+on:
+  push:
+    branches: [ dev/p2-presentation-bakeoff-20260808 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p2-presentation-bakeoff-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  safety-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Extract isolated bake-off source
+        run: tar -xzf labs/presentation_bakeoff_bundle.tar.gz
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Prove fixture remains substantial
+        run: go test ./labs/presentation_bakeoff/shared
+      - name: Prove public binary upload remains absent
+        shell: bash
+        run: |
+          if grep -R --line-number --fixed-strings 'actions/upload-artifact' .github/workflows; then
+            echo 'Public artifact upload is forbidden in this bake-off.' >&2
+            exit 1
+          fi
+          echo 'No public artifact upload step present.'
+
+  gio:
+    needs: safety-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Extract isolated bake-off source
+        run: tar -xzf labs/presentation_bakeoff_bundle.tar.gz
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Install headless render prerequisites
+        run: sudo apt-get update && sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev libx11-dev libwayland-dev libxkbcommon-dev
+      - name: Resolve Gio dependencies
+        working-directory: labs/presentation_bakeoff/gio
+        run: go mod download
+      - name: Compile and test Gio spike
+        working-directory: labs/presentation_bakeoff/gio
+        run: go test ./...
+      - name: Render locked representative screens with Gio
+        working-directory: labs/presentation_bakeoff/gio
+        run: go run ./cmd/render ../fixture/p2_snapshot.json out
+      - name: Prove Gio Windows cross-build without CGo
+        working-directory: labs/presentation_bakeoff/gio
+        env:
+          GOOS: windows
+          GOARCH: amd64
+          CGO_ENABLED: '0'
+        run: go build -trimpath -o /tmp/gio-bakeoff.exe ./cmd/render
+      - name: Emit non-runnable screenshot evidence to raw log
+        working-directory: labs/presentation_bakeoff/gio
+        shell: bash
+        run: |
+          sha256sum out/*.png
+          for f in out/*.png; do
+            echo "ECO_SCREENSHOT_B64_BEGIN gio $(basename "$f")"
+            base64 -w0 "$f"; echo
+            echo "ECO_SCREENSHOT_B64_END gio $(basename "$f")"
+          done
+
+  fyne:
+    needs: safety-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Extract isolated bake-off source
+        run: tar -xzf labs/presentation_bakeoff_bundle.tar.gz
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Resolve Fyne dependencies
+        working-directory: labs/presentation_bakeoff/fyne
+        run: go mod download
+      - name: Compile and test Fyne software-render spike
+        working-directory: labs/presentation_bakeoff/fyne
+        run: go test ./...
+      - name: Render locked representative screens with Fyne
+        working-directory: labs/presentation_bakeoff/fyne
+        run: go run ./cmd/render ../fixture/p2_snapshot.json out
+      - name: Emit non-runnable screenshot evidence to raw log
+        working-directory: labs/presentation_bakeoff/fyne
+        shell: bash
+        run: |
+          sha256sum out/*.png
+          for f in out/*.png; do
+            echo "ECO_SCREENSHOT_B64_BEGIN fyne $(basename "$f")"
+            base64 -w0 "$f"; echo
+            echo "ECO_SCREENSHOT_B64_END fyne $(basename "$f")"
+          done
+
+  cogent-risk-gate:
+    needs: safety-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Record why Cogent stays reserve-only
+        run: |
+          echo 'Cogent Core v0.3.38 is not promoted in this bake-off.'
+          echo 'Reason: Go 1.25.6 requirement plus materially larger native/WebGPU dependency surface.'
+          echo 'It remains a reserve only if Gio and Fyne both fail mandatory gates.'
