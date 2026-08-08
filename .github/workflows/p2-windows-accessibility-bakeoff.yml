@@ -1,0 +1,173 @@
+name: P2 Windows accessibility bake-off
+
+on:
+  push:
+    branches: [ dev/p2-presentation-bakeoff-20260808 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p2-windows-accessibility-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fyne-windows-uia:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Extract isolated bake-off source
+        shell: bash
+        run: tar -xzf labs/presentation_bakeoff_bundle.tar.gz
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Prepare MinGW CGo compiler
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $gcc = Get-Command gcc.exe -ErrorAction SilentlyContinue
+          if (-not $gcc) {
+            $candidates = @(
+              'C:\msys64\mingw64\bin\gcc.exe',
+              'C:\mingw64\bin\gcc.exe',
+              'C:\ProgramData\mingw64\mingw64\bin\gcc.exe'
+            )
+            $found = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $found) {
+              choco install mingw -y --no-progress
+              $found = Get-ChildItem 'C:\ProgramData' -Filter gcc.exe -Recurse -ErrorAction SilentlyContinue |
+                Where-Object { $_.FullName -match 'mingw' } |
+                Select-Object -First 1 -ExpandProperty FullName
+            }
+            if (-not $found) { throw 'No MinGW gcc.exe was available for the Fyne accessibility build.' }
+            Split-Path $found | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          }
+      - name: Create bounded native accessibility probe
+        working-directory: labs/presentation_bakeoff/fyne
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force cmd/accessibility-probe | Out-Null
+          @'
+          package main
+
+          import (
+              "fyne.io/fyne/v2"
+              "fyne.io/fyne/v2/app"
+              "fyne.io/fyne/v2/container"
+              "fyne.io/fyne/v2/widget"
+          )
+
+          func main() {
+              a := app.NewWithID("org.eco.accessibilityprobe")
+              w := a.NewWindow("ECO accessibility probe")
+              label := widget.NewLabel("Evidence & Casework One accessibility probe")
+              button := widget.NewButton("Accessibility probe action", func() {})
+              entry := widget.NewEntry()
+              entry.SetPlaceHolder("Accessibility probe input")
+              w.SetContent(container.NewVBox(label, button, entry))
+              w.Resize(fyne.NewSize(640, 320))
+              w.ShowAndRun()
+          }
+          '@ | Set-Content -Path cmd/accessibility-probe/main.go -Encoding utf8
+      - name: Resolve Fyne desktop dependencies
+        working-directory: labs/presentation_bakeoff/fyne
+        shell: pwsh
+        run: go mod tidy
+      - name: Build Fyne with Windows accessibility enabled
+        working-directory: labs/presentation_bakeoff/fyne
+        shell: pwsh
+        env:
+          CGO_ENABLED: '1'
+        run: |
+          gcc.exe --version
+          go build -tags accessibility -trimpath -o "$env:RUNNER_TEMP\fyne-accessibility-probe.exe" ./cmd/accessibility-probe
+          if (-not (Test-Path "$env:RUNNER_TEMP\fyne-accessibility-probe.exe")) { throw 'Accessibility probe executable was not built.' }
+          Write-Host 'ECO_GATE fyne_windows_accessibility_build=PASS'
+      - name: Prove Fyne exposes a child control through Windows UI Automation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          $exe = "$env:RUNNER_TEMP\fyne-accessibility-probe.exe"
+          $proc = Start-Process -FilePath $exe -PassThru
+          try {
+            $deadline = (Get-Date).AddSeconds(30)
+            do {
+              Start-Sleep -Milliseconds 500
+              $proc.Refresh()
+            } while ($proc.MainWindowHandle -eq 0 -and (Get-Date) -lt $deadline -and -not $proc.HasExited)
+            if ($proc.HasExited) { throw "Accessibility probe exited prematurely with code $($proc.ExitCode)." }
+            if ($proc.MainWindowHandle -eq 0) { throw 'Accessibility probe did not expose a native top-level window handle.' }
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($proc.MainWindowHandle)
+            if ($null -eq $root) { throw 'UI Automation could not obtain the Fyne window root.' }
+            $condition = [System.Windows.Automation.PropertyCondition]::new(
+              [System.Windows.Automation.AutomationElement]::NameProperty,
+              'Accessibility probe action'
+            )
+            $button = $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condition)
+            if ($null -eq $button) {
+              $all = $root.FindAll(
+                [System.Windows.Automation.TreeScope]::Descendants,
+                [System.Windows.Automation.Condition]::TrueCondition
+              )
+              Write-Host "UIA descendants discovered: $($all.Count)"
+              foreach ($item in $all) {
+                try { Write-Host "UIA node name='$($item.Current.Name)' type='$($item.Current.ControlType.ProgrammaticName)'" } catch {}
+              }
+              throw 'The Fyne child button was not exposed through Windows UI Automation.'
+            }
+            if ($button.Current.ControlType -ne [System.Windows.Automation.ControlType]::Button) {
+              throw "Expected UIA Button control, got $($button.Current.ControlType.ProgrammaticName)."
+            }
+            Write-Host "ECO_UIA_PASS name='$($button.Current.Name)' type='$($button.Current.ControlType.ProgrammaticName)'"
+            Write-Host 'ECO_GATE fyne_windows_accessibility_uia=PASS'
+          }
+          finally {
+            if ($proc -and -not $proc.HasExited) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
+          }
+
+  gio-windows-accessibility-source-audit:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Extract isolated bake-off source
+        shell: bash
+        run: tar -xzf labs/presentation_bakeoff_bundle.tar.gz
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Resolve Gio dependency source
+        working-directory: labs/presentation_bakeoff/gio
+        shell: pwsh
+        run: |
+          go mod tidy
+          $dir = go list -m -f '{{.Dir}}' gioui.org
+          if (-not $dir) { throw 'Could not resolve Gio module source.' }
+          "GIO_MODULE_DIR=$dir" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Audit Gio Windows source for native accessibility bridge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winFiles = Get-ChildItem $env:GIO_MODULE_DIR -Recurse -File -Include '*.go','*.c','*.h' |
+            Where-Object { $_.Name -match 'windows|win32' -or $_.FullName -match 'windows|win32' }
+          if (-not $winFiles) { throw 'No Gio Windows source files were found for audit.' }
+          $nativeHits = $winFiles | Select-String -Pattern 'UIAutomation|IRawElementProvider|UiaReturnRawElementProvider|IAccessible|WM_GETOBJECT' -CaseSensitive:$false
+          $semanticHits = $winFiles | Select-String -Pattern 'SemanticRoot|semantic|accessib' -CaseSensitive:$false
+          Write-Host "Gio Windows files audited: $($winFiles.Count)"
+          Write-Host "Native accessibility bridge hits: $($nativeHits.Count)"
+          Write-Host "Windows semantic/accessibility hits: $($semanticHits.Count)"
+          if ($nativeHits.Count -eq 0 -and $semanticHits.Count -eq 0) {
+            Write-Host 'ECO_GATE gio_windows_accessibility=FAIL_NO_WINDOWS_UIA_OR_ACCESSIBILITY_BRIDGE_FOUND'
+          } else {
+            Write-Host 'ECO_GATE gio_windows_accessibility=REQUIRES_MANUAL_REVIEW'
+            $nativeHits | ForEach-Object { Write-Host $_.Line }
+            $semanticHits | Select-Object -First 20 | ForEach-Object { Write-Host $_.Line }
+          }
