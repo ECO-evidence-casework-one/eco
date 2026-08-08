@@ -60,10 +60,11 @@ jobs:
           Write-Host 'ECO_GATE native_win32_one_file_cgo0_build=PASS'
 
       - name: Prove standard Win32 controls expose direct MSAA contracts
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           Add-Type -AssemblyName Accessibility
+          $accessibilityAssembly = [Accessibility.IAccessible].Assembly.Location
           Add-Type -TypeDefinition @'
           using System;
           using System.Runtime.InteropServices;
@@ -112,14 +113,12 @@ jobs:
 
                   Accessibility.IAccessible acc = AccessibleFor(hwnd);
                   object self = 0;
-                  var info = new EcoMsaaInfo
-                  {
-                      Hwnd = hwnd,
-                      ClassName = className,
-                      WindowText = windowText,
-                      Role = Convert.ToInt32(acc.get_accRole(self)),
-                      State = Convert.ToInt32(acc.get_accState(self))
-                  };
+                  EcoMsaaInfo info = new EcoMsaaInfo();
+                  info.Hwnd = hwnd;
+                  info.ClassName = className;
+                  info.WindowText = windowText;
+                  info.Role = Convert.ToInt32(acc.get_accRole(self));
+                  info.State = Convert.ToInt32(acc.get_accState(self));
                   try { info.AccessibleName = acc.get_accName(self); } catch { }
                   try { info.AccessibleValue = acc.get_accValue(self); } catch { }
                   try { info.DefaultAction = acc.get_accDefaultAction(self); } catch { }
@@ -134,7 +133,7 @@ jobs:
                   AccessibleFor(hwnd).accDoDefaultAction(0);
               }
           }
-          '@ -ReferencedAssemblies Accessibility
+          '@ -ReferencedAssemblies $accessibilityAssembly
 
           $exe = "$env:RUNNER_TEMP\eco-native-a11y-spike.exe"
           $handleFile = "$env:RUNNER_TEMP\eco-native-msaa-hwnd.txt"
@@ -151,9 +150,8 @@ jobs:
             if (-not (Test-Path $handleFile)) { throw 'Native Win32 spike did not publish a window handle for MSAA inspection.' }
 
             $raw = [UInt64]::Parse((Get-Content $handleFile -Raw).Trim())
-            $hwnd = [IntPtr]::new([Int64]$raw)
+            $hwnd = New-Object IntPtr ([Int64]$raw)
 
-            # Microsoft Active Accessibility role constants.
             $ROLE_SYSTEM_STATICTEXT = 0x29
             $ROLE_SYSTEM_TEXT = 0x2A
             $ROLE_SYSTEM_PUSHBUTTON = 0x2B
@@ -195,14 +193,13 @@ jobs:
           }
 
       - name: Diagnose hosted Windows UI Automation proxy mapping
-        shell: pwsh
+        shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           Add-Type -AssemblyName UIAutomationClient
           Add-Type -AssemblyName UIAutomationTypes
           Add-Type -AssemblyName UIAutomationClientsideProviders
 
-          # Try explicit registration as well as the assembly's normal automatic registration.
           try {
             $providerType = [Type]::GetType('UIAutomationClientsideProviders.UIAutomationClientSideProviders, UIAutomationClientsideProviders', $false)
             if ($providerType) {
@@ -233,7 +230,7 @@ jobs:
             }
 
             $raw = [UInt64]::Parse((Get-Content $handleFile -Raw).Trim())
-            $hwnd = [IntPtr]::new([Int64]$raw)
+            $hwnd = New-Object IntPtr ([Int64]$raw)
             $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
             if ($null -eq $root) {
               Write-Host 'ECO_GATE native_win32_hosted_uia=INCONCLUSIVE_NO_UIA_ROOT'
