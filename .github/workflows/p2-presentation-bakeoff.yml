@@ -100,6 +100,9 @@ jobs:
         run: go test ./...
       - name: Render locked representative screens with Fyne
         working-directory: labs/presentation_bakeoff/fyne
+        env:
+          LANG: C.UTF-8
+          LC_ALL: C.UTF-8
         run: go run ./cmd/render ../fixture/p2_snapshot.json out
       - name: Emit non-runnable screenshot evidence to raw log
         working-directory: labs/presentation_bakeoff/fyne
@@ -152,6 +155,9 @@ jobs:
           go run ./cmd/render ../fixture/p2_snapshot.json out
       - name: Render Fyne evidence
         working-directory: labs/presentation_bakeoff/fyne
+        env:
+          LANG: C.UTF-8
+          LC_ALL: C.UTF-8
         run: |
           go mod tidy
           go run ./cmd/render ../fixture/p2_snapshot.json out
@@ -171,6 +177,9 @@ jobs:
           fi
           git config user.name 'ECO Development Sentinel'
           git config user.email 'actions@users.noreply.github.com'
-          git add "$root"
+          # The extracted bake-off tree is deliberately not tracked as source. Force-add only
+          # the bounded synthetic PNG evidence and checksum register, never runnable outputs.
+          git add -f "$root"
+          git diff --cached --name-only
           git commit -m 'Dev evidence: preserve synthetic renderer screenshots [skip ci]'
           git push origin HEAD:dev/p2-presentation-bakeoff-20260808
