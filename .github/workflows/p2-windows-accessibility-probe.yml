@@ -1,0 +1,209 @@
+name: P2 Windows accessibility probes
+
+on:
+  push:
+    branches: [ dev/p2-presentation-bakeoff-20260808 ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p2-windows-a11y-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gio-uia:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.24.x'
+          cache: false
+      - name: Create isolated Gio accessibility probe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\gio-uia" | Out-Null
+          Set-Location "$env:RUNNER_TEMP\gio-uia"
+          @'
+          module eco.local/gio-uia-probe
+
+          go 1.24.0
+
+          require gioui.org v0.10.1
+          '@ | Set-Content -Encoding utf8 go.mod
+          @'
+          package main
+
+          import (
+              "image/color"
+              "os"
+              "time"
+
+              "gioui.org/app"
+              "gioui.org/io/key"
+              "gioui.org/layout"
+              "gioui.org/op"
+              "gioui.org/unit"
+              "gioui.org/widget"
+              "gioui.org/widget/material"
+          )
+
+          func main() {
+              go func() {
+                  w := new(app.Window)
+                  w.Option(app.Title("ECO Gio Accessibility Probe"), app.Size(640, 420))
+                  th := material.NewTheme()
+                  var ops op.Ops
+                  var review, ask widget.Clickable
+                  var search widget.Editor
+                  search.SingleLine = true
+                  deadline := time.Now().Add(25 * time.Second)
+                  for {
+                      if time.Now().After(deadline) { os.Exit(3) }
+                      switch e := w.Event().(type) {
+                      case app.DestroyEvent:
+                          os.Exit(0)
+                      case app.FrameEvent:
+                          gtx := app.NewContext(&ops, e)
+                          layout.Inset{Top: unit.Dp(24), Right: unit.Dp(24), Bottom: unit.Dp(24), Left: unit.Dp(24)}.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+                              return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+                                  layout.Rigid(material.H4(th, "Matter Workspace").Layout),
+                                  layout.Rigid(layout.Spacer{Height: unit.Dp(16)}.Layout),
+                                  layout.Rigid(material.Button(th, &review, "Review evidence").Layout),
+                                  layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
+                                  layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+                                      ed := material.Editor(th, &search, "Search this Matter")
+                                      ed.Color = color.NRGBA{R: 9, G: 48, B: 55, A: 255}
+                                      return ed.Layout(gtx)
+                                  }),
+                                  layout.Rigid(layout.Spacer{Height: unit.Dp(12)}.Layout),
+                                  layout.Rigid(material.Button(th, &ask, "Ask ECO").Layout),
+                              )
+                          })
+                          key.FocusCmd{Tag: &search}.Execute(gtx)
+                          e.Frame(gtx.Ops)
+                      }
+                  }
+              }()
+              app.Main()
+          }
+          '@ | Set-Content -Encoding utf8 main.go
+          go mod tidy
+          go build -trimpath -ldflags '-H windowsgui' -o gio-uia-probe.exe .
+      - name: Inspect Gio through Windows UI Automation
+        shell: pwsh
+        run: |
+          Set-Location "$env:RUNNER_TEMP\gio-uia"
+          $p = Start-Process .\gio-uia-probe.exe -PassThru
+          try {
+            for ($i = 0; $i -lt 50 -and $p.MainWindowHandle -eq 0; $i++) { Start-Sleep -Milliseconds 200; $p.Refresh() }
+            if ($p.MainWindowHandle -eq 0) { throw 'Gio probe did not create a Win32 window.' }
+            Add-Type -AssemblyName UIAutomationClient
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+            $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+            $rows = @()
+            foreach ($el in $all) {
+              $rows += [pscustomobject]@{ Name=$el.Current.Name; Type=$el.Current.ControlType.ProgrammaticName; Focusable=$el.Current.IsKeyboardFocusable }
+            }
+            $rows | ConvertTo-Json -Depth 3 | Write-Host
+            $names = @($rows | ForEach-Object { $_.Name })
+            $required = @('Matter Workspace','Review evidence','Search this Matter','Ask ECO')
+            $missing = @($required | Where-Object { $_ -notin $names })
+            if ($missing.Count -gt 0) {
+              Write-Host "GIO_UIA_RESULT=FAIL"
+              Write-Host "GIO_UIA_MISSING=$($missing -join ', ')"
+              exit 23
+            }
+            Write-Host 'GIO_UIA_RESULT=PASS'
+          } finally {
+            if (!$p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
+
+  fyne-uia:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: Install open-source MinGW compiler needed by Fyne desktop build
+        shell: pwsh
+        run: choco install mingw -y --no-progress
+      - name: Create isolated Fyne accessibility probe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\fyne-uia" | Out-Null
+          Set-Location "$env:RUNNER_TEMP\fyne-uia"
+          @'
+          module eco.local/fyne-uia-probe
+
+          go 1.23.0
+
+          require fyne.io/fyne/v2 v2.8.0
+          '@ | Set-Content -Encoding utf8 go.mod
+          @'
+          package main
+
+          import (
+              "fyne.io/fyne/v2"
+              "fyne.io/fyne/v2/app"
+              "fyne.io/fyne/v2/container"
+              "fyne.io/fyne/v2/widget"
+          )
+
+          func main() {
+              a := app.New()
+              w := a.NewWindow("ECO Fyne Accessibility Probe")
+              search := widget.NewEntry()
+              search.SetPlaceHolder("Search this Matter")
+              w.SetContent(container.NewVBox(
+                  widget.NewLabel("Matter Workspace"),
+                  widget.NewButton("Review evidence", func() {}),
+                  search,
+                  widget.NewButton("Ask ECO", func() {}),
+              ))
+              w.Resize(fyne.NewSize(640, 420))
+              w.ShowAndRun()
+          }
+          '@ | Set-Content -Encoding utf8 main.go
+          go mod tidy
+          where.exe gcc
+          go build -tags accessibility -trimpath -ldflags '-H windowsgui' -o fyne-uia-probe.exe .
+      - name: Inspect Fyne through Windows UI Automation
+        shell: pwsh
+        run: |
+          Set-Location "$env:RUNNER_TEMP\fyne-uia"
+          $p = Start-Process .\fyne-uia-probe.exe -PassThru
+          try {
+            for ($i = 0; $i -lt 50 -and $p.MainWindowHandle -eq 0; $i++) { Start-Sleep -Milliseconds 200; $p.Refresh() }
+            if ($p.MainWindowHandle -eq 0) { throw 'Fyne probe did not create a Win32 window.' }
+            Add-Type -AssemblyName UIAutomationClient
+            $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+            $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+            $rows = @()
+            foreach ($el in $all) {
+              $rows += [pscustomobject]@{ Name=$el.Current.Name; Type=$el.Current.ControlType.ProgrammaticName; Focusable=$el.Current.IsKeyboardFocusable }
+            }
+            $rows | ConvertTo-Json -Depth 3 | Write-Host
+            $names = @($rows | ForEach-Object { $_.Name })
+            $required = @('Matter Workspace','Review evidence','Ask ECO')
+            $missing = @($required | Where-Object { $_ -notin $names })
+            if ($missing.Count -gt 0) {
+              Write-Host "FYNE_UIA_RESULT=FAIL"
+              Write-Host "FYNE_UIA_MISSING=$($missing -join ', ')"
+              exit 23
+            }
+            $buttons = @($rows | Where-Object { $_.Name -in @('Review evidence','Ask ECO') -and $_.Type -eq 'ControlType.Button' })
+            if ($buttons.Count -ne 2) {
+              Write-Host 'FYNE_UIA_RESULT=FAIL_ROLE_MAPPING'
+              exit 24
+            }
+            Write-Host 'FYNE_UIA_RESULT=PASS_BASIC_SEMANTICS'
+          } finally {
+            if (!$p.HasExited) { Stop-Process -Id $p.Id -Force }
+          }
