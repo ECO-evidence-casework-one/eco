@@ -1,0 +1,30 @@
+{
+  "schema": "aeib-result-v0.1",
+  "required_per_fixture": [
+    "fixture_id",
+    "source_sha256",
+    "engine_build_id",
+    "status",
+    "source_modified",
+    "accounted",
+    "notes"
+  ],
+  "allowed_status": [
+    "accepted",
+    "rejected",
+    "quarantined",
+    "unsupported",
+    "encrypted",
+    "corrupt",
+    "partial",
+    "error"
+  ],
+  "recommended_run_fields": [
+    "started_at_utc",
+    "finished_at_utc",
+    "db_integrity",
+    "fts_integrity",
+    "pending_object_count",
+    "resource_limit_result"
+  ]
+}
