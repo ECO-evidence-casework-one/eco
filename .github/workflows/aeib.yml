@@ -1,0 +1,28 @@
+name: AEIB research qualification
+
+on:
+  pull_request:
+    paths:
+      - 'tools/aeib/**'
+      - 'docs/aeib/**'
+      - '.github/workflows/aeib.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Run AEIB deterministic closed-set qualification
+        run: python3 tools/aeib/test_determinism.py
+      - name: Confirm generated corpus verifier independently
+        run: |
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          python3 tools/aeib/generate.py --output "$tmp/corpus" --seed 20260821
+          python3 tools/aeib/verify.py "$tmp/corpus"
+      # Research qualification only: no corpus or runnable application artifact upload.
