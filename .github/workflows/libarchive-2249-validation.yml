@@ -1,0 +1,80 @@
+name: libarchive 2249 clean-room validation
+
+on:
+  pull_request:
+    paths:
+      - 'research/external/libarchive2249/**'
+      - '.github/workflows/libarchive-2249-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-candidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out validation harness
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Check out frozen libarchive master
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: libarchive/libarchive
+          ref: 2e5d7befd63c02200e2ad6295b8ff95de3cf922d
+          path: upstream
+          persist-credentials: false
+
+      - name: Verify exact upstream and generate issue fixture
+        shell: bash
+        run: |
+          test "$(git -C upstream rev-parse HEAD)" = "2e5d7befd63c02200e2ad6295b8ff95de3cf922d"
+          python3 research/external/libarchive2249/make_fixture.py "$RUNNER_TEMP/contains_zip.rar"
+
+      - name: Build unmodified upstream
+        shell: bash
+        run: |
+          cmake -S upstream -B build-baseline -DENABLE_TEST=OFF -DENABLE_WERROR=OFF
+          cmake --build build-baseline --target bsdtar -j2
+
+      - name: Require current-master ZIP misidentification
+        shell: bash
+        run: |
+          set -o pipefail
+          build-baseline/bin/bsdtar -tvvf "$RUNNER_TEMP/contains_zip.rar" 2>&1 | tee "$RUNNER_TEMP/baseline.txt"
+          grep -q 'Archive Format: ZIP' "$RUNNER_TEMP/baseline.txt"
+
+      - name: Apply bounded candidate and show diff
+        shell: bash
+        run: |
+          python3 research/external/libarchive2249/apply_candidate.py upstream
+          git -C upstream diff --check
+          git -C upstream diff --stat
+          git -C upstream diff -- libarchive/archive_read_support_format_rar5.c libarchive/test/test_read_format_rar5.c Makefile.am
+
+      - name: Build patched libarchive and tests
+        shell: bash
+        run: |
+          cmake -S upstream -B build-patched -DENABLE_TEST=ON -DENABLE_WERROR=OFF
+          cmake --build build-patched --target bsdtar libarchive_test -j2
+
+      - name: Require patched RAR5 identification
+        shell: bash
+        run: |
+          set -o pipefail
+          build-patched/bin/bsdtar -tvvf "$RUNNER_TEMP/contains_zip.rar" 2>&1 | tee "$RUNNER_TEMP/patched.txt"
+          grep -q 'Archive Format: RAR' "$RUNNER_TEMP/patched.txt"
+          grep -q 'test.zip' "$RUNNER_TEMP/patched.txt"
+
+      - name: Require and run regression test
+        shell: bash
+        run: |
+          ctest --test-dir build-patched -N -R 'read_format_rar5_contains_zip' | tee "$RUNNER_TEMP/ctest-list.txt"
+          grep -q 'read_format_rar5_contains_zip' "$RUNNER_TEMP/ctest-list.txt"
+          ctest --test-dir build-patched -R 'read_format_rar5_contains_zip' --output-on-failure
+
+      - name: Confirm validation lane publishes no artifacts
+        shell: bash
+        run: |
+          echo 'No upload-artifact step exists in this workflow; builds remain ephemeral.'
