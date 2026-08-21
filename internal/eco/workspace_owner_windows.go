@@ -3,7 +3,11 @@
 package eco
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -15,17 +19,16 @@ const (
 	fileShareRead           = 0x00000001
 	fileShareWrite          = 0x00000002
 	fileShareDelete         = 0x00000004
+	genericRead             = 0x80000000
+	genericWrite            = 0x40000000
 	openExisting            = 3
+	openAlways              = 4
+	fileAttributeNormal     = 0x00000080
 	fileFlagBackupSemantics = 0x02000000
-	waitObject0             = 0x00000000
-	waitTimeout             = 0x00000102
 )
 
 var (
 	kernel32Workspace                       = syscall.NewLazyDLL("kernel32.dll")
-	procCreateSemaphoreWWorkspace           = kernel32Workspace.NewProc("CreateSemaphoreW")
-	procWaitForSingleObjectWorkspace        = kernel32Workspace.NewProc("WaitForSingleObject")
-	procReleaseSemaphoreWorkspace           = kernel32Workspace.NewProc("ReleaseSemaphore")
 	procGetFileInformationByHandleWorkspace = kernel32Workspace.NewProc("GetFileInformationByHandle")
 )
 
@@ -47,32 +50,62 @@ type byHandleFileInformation struct {
 	FileIndexLow       uint32
 }
 
+// platformAcquireWorkspaceLock binds cross-process ownership to an exclusive
+// handle on a deterministic user-local lock file keyed by the underlying
+// filesystem object identity and the logical lock role.
+//
+// The lock file deliberately lives outside the workspace object. Holding its
+// handle therefore does not block workspace directory rename/retarget, while
+// share mode 0 prevents a second process from opening, replacing or deleting
+// that exact lock file until the owning handle closes or the process exits.
 func platformAcquireWorkspaceLock(path string) (platformWorkspaceLock, error) {
 	identity, err := platformWorkspaceObjectIdentity(filepath.Dir(path))
 	if err != nil {
 		return nil, fmt.Errorf("identify workspace lock object: %w", err)
 	}
-	name := fmt.Sprintf("Global\\ECO.Workspace.%016x.%016x.%s", identity.Volume, identity.File, strings.ToLower(filepath.Base(path)))
-	ptr, err := syscall.UTF16PtrFromString(name)
+	lockPath, err := platformWorkspaceLockPath(identity, filepath.Base(path))
 	if err != nil {
-		return nil, fmt.Errorf("encode workspace semaphore name: %w", err)
+		return nil, err
 	}
-	h, _, createErr := procCreateSemaphoreWWorkspace.Call(0, 1, 1, uintptr(unsafe.Pointer(ptr)))
-	if h == 0 {
-		return nil, fmt.Errorf("create workspace semaphore: %w", createErr)
+	ptr, err := syscall.UTF16PtrFromString(lockPath)
+	if err != nil {
+		return nil, fmt.Errorf("encode workspace lock path: %w", err)
 	}
-	handle := syscall.Handle(h)
-	result, _, waitErr := procWaitForSingleObjectWorkspace.Call(h, 0)
-	switch uint32(result) {
-	case waitObject0:
-		return &windowsWorkspaceLock{handle: handle}, nil
-	case waitTimeout:
-		_ = syscall.CloseHandle(handle)
-		return nil, ErrWorkspaceInUse
-	default:
-		_ = syscall.CloseHandle(handle)
-		return nil, fmt.Errorf("wait for workspace semaphore: %w", waitErr)
+	handle, err := syscall.CreateFile(
+		ptr,
+		genericRead|genericWrite,
+		0, // exclusive sharing: no competing open/delete/replace while held
+		nil,
+		openAlways,
+		fileAttributeNormal,
+		0,
+	)
+	if err != nil {
+		if errors.Is(err, syscall.Errno(32)) { // ERROR_SHARING_VIOLATION
+			return nil, ErrWorkspaceInUse
+		}
+		return nil, fmt.Errorf("open exclusive workspace lock file: %w", err)
 	}
+	return &windowsWorkspaceLock{handle: handle}, nil
+}
+
+func platformWorkspaceLockPath(identity workspaceObjectIdentity, role string) (string, error) {
+	cacheRoot, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve user cache for workspace lock: %w", err)
+	}
+	lockDir := filepath.Join(cacheRoot, "ECO", "workspace-locks")
+	if err := os.MkdirAll(lockDir, 0700); err != nil {
+		return "", fmt.Errorf("create workspace lock directory: %w", err)
+	}
+	sum := sha256.Sum256([]byte(strings.ToLower(role)))
+	name := fmt.Sprintf(
+		"%016x-%016x-%s.lck",
+		identity.Volume,
+		identity.File,
+		hex.EncodeToString(sum[:8]),
+	)
+	return filepath.Join(lockDir, name), nil
 }
 
 func (l *windowsWorkspaceLock) Close() error {
@@ -84,14 +117,10 @@ func (l *windowsWorkspaceLock) Close() error {
 	if l.handle == 0 || l.handle == syscall.InvalidHandle {
 		return nil
 	}
-	ok, _, releaseErr := procReleaseSemaphoreWorkspace.Call(uintptr(l.handle), 1, 0)
 	closeErr := syscall.CloseHandle(l.handle)
 	l.handle = syscall.InvalidHandle
-	if ok == 0 {
-		return fmt.Errorf("release workspace semaphore: %w", releaseErr)
-	}
 	if closeErr != nil {
-		return fmt.Errorf("close workspace semaphore: %w", closeErr)
+		return fmt.Errorf("close workspace lock file: %w", closeErr)
 	}
 	return nil
 }
