@@ -88,11 +88,11 @@ jobs:
         working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
         shell: pwsh
         run: |
-          $lines = Get-Content -LiteralPath go.mod
-          $filtered = $lines | Where-Object { $_ -notmatch '^\s*replace\s+github\.com/wailsapp/wails/v2\s*=>' }
-          Set-Content -LiteralPath go.mod -Value $filtered -Encoding utf8
+          go mod edit -dropreplace=github.com/wailsapp/wails/v2
           go mod tidy
           go mod verify
+          $gomod = Get-Content -LiteralPath go.mod -Raw
+          if ($gomod -match 'replace\s+github\.com/wailsapp/wails/v2') { throw 'Wails self-repo replacement is still present.' }
           Get-Content -LiteralPath go.mod
       - name: Build real Windows desktop executable
         working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
