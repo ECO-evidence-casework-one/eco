@@ -1,0 +1,228 @@
+name: UI shell qualification — Fyne Wails Avalonia
+
+on:
+  push:
+    branches:
+      - qualification/ui-shell-fyne-vs-wails-20260903
+    paths:
+      - 'experiments/ui-shell-qualification/**'
+      - '.github/workflows/ui-shell-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-ui-shell-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fyne:
+    name: Fyne 2.8.1 Windows UIA qualification
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      error: ${{ steps.result.outputs.error }}
+      bytes: ${{ steps.result.outputs.bytes }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: mingw-w64-ucrt-x86_64-gcc
+      - name: Build exact Fyne accessibility candidate
+        working-directory: experiments/ui-shell-qualification/fyne
+        shell: pwsh
+        run: |
+          $env:CGO_ENABLED = '1'
+          $env:CC = 'C:\msys64\ucrt64\bin\gcc.exe'
+          if (-not (Test-Path $env:CC)) { throw 'MinGW gcc not found.' }
+          go mod tidy
+          go mod verify
+          New-Item -ItemType Directory -Force -Path candidate | Out-Null
+          go build -trimpath -tags accessibility -ldflags '-s -w' -o candidate\ECO_UI_FYNE.exe .
+          $exe = Resolve-Path candidate\ECO_UI_FYNE.exe
+          Write-Host "FYNE_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant())"
+          Write-Host "FYNE_BYTES=$((Get-Item $exe).Length)"
+          & 'C:\msys64\ucrt64\bin\objdump.exe' -p $exe | Select-String 'DLL Name' | Write-Host
+      - name: Consumer-style launch and UI Automation probe
+        shell: pwsh
+        run: |
+          ./experiments/ui-shell-qualification/uia_probe.ps1 -ExePath ./experiments/ui-shell-qualification/fyne/candidate/ECO_UI_FYNE.exe -OutputDir ./experiments/ui-shell-qualification/fyne/diagnostics -Framework fyne
+      - name: Record Fyne result
+        id: result
+        shell: pwsh
+        run: |
+          $m = Get-Content experiments/ui-shell-qualification/fyne/diagnostics/uia_result.txt -Raw | ConvertFrom-StringData
+          $err = [string]$m.error
+          $err = $err.Replace("`r",' ').Replace("`n",' ')
+          $bytes = (Get-Item experiments/ui-shell-qualification/fyne/candidate/ECO_UI_FYNE.exe).Length
+          "status=$($m.status)" >> $env:GITHUB_OUTPUT
+          "error=$err" >> $env:GITHUB_OUTPUT
+          "bytes=$bytes" >> $env:GITHUB_OUTPUT
+          Write-Host "FYNE_UIA_STATUS=$($m.status)"
+          if ($err) { Write-Host "FYNE_UIA_ERROR=$err" }
+      # Deliberately no executable artifact upload.
+
+  wails:
+    name: Wails 2.14.0 Windows UIA qualification
+    runs-on: windows-latest
+    timeout-minutes: 30
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      error: ${{ steps.result.outputs.error }}
+      bytes: ${{ steps.result.outputs.bytes }}
+      webview2: ${{ steps.result.outputs.webview2 }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Generate exact Wails React shell and build
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+          $root = "$env:RUNNER_TEMP\eco-wails-qualification"
+          New-Item -ItemType Directory -Force -Path $root | Out-Null
+          wails init -n ECOUIWails -t react-ts -d "$root\ECOUIWails"
+          Copy-Item experiments\ui-shell-qualification\wails\App.tsx "$root\ECOUIWails\frontend\src\App.tsx" -Force
+          Push-Location "$root\ECOUIWails"
+          go mod tidy
+          go mod verify
+          wails build -clean -platform windows/amd64
+          Pop-Location
+          New-Item -ItemType Directory -Force -Path experiments\ui-shell-qualification\wails\candidate | Out-Null
+          $built = Get-ChildItem "$root\ECOUIWails\build\bin" -Filter *.exe -File | Select-Object -First 1
+          if (-not $built) { throw 'Wails produced no executable.' }
+          Copy-Item $built.FullName experiments\ui-shell-qualification\wails\candidate\ECO_UI_WAILS.exe -Force
+          Write-Host "WAILS_SHA256=$((Get-FileHash -Algorithm SHA256 experiments\ui-shell-qualification\wails\candidate\ECO_UI_WAILS.exe).Hash.ToLowerInvariant())"
+          Write-Host "WAILS_BYTES=$((Get-Item experiments\ui-shell-qualification\wails\candidate\ECO_UI_WAILS.exe).Length)"
+      - name: Inventory installed WebView2 runtime boundary
+        id: webview
+        shell: pwsh
+        run: |
+          $found = @()
+          foreach ($root in @('HKLM:\SOFTWARE\Microsoft\EdgeUpdate\Clients','HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients','HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients')) {
+            if (Test-Path $root) {
+              $found += Get-ChildItem $root -ErrorAction SilentlyContinue | ForEach-Object { Get-ItemProperty $_.PSPath -ErrorAction SilentlyContinue } | Where-Object { ([string]$_.name) -match 'WebView2' }
+            }
+          }
+          if ($found.Count -eq 0) {
+            Write-Host 'WEBVIEW2_RUNTIME=not-found-in-edgeupdate-registry'
+            'value=unknown' >> $env:GITHUB_OUTPUT
+          } else {
+            $text = ($found | ForEach-Object { "name=$($_.name);version=$($_.pv)" }) -join '|'
+            Write-Host "WEBVIEW2_RUNTIME=$text"
+            "value=$text" >> $env:GITHUB_OUTPUT
+          }
+      - name: Consumer-style launch and UI Automation probe
+        shell: pwsh
+        run: |
+          ./experiments/ui-shell-qualification/uia_probe.ps1 -ExePath ./experiments/ui-shell-qualification/wails/candidate/ECO_UI_WAILS.exe -OutputDir ./experiments/ui-shell-qualification/wails/diagnostics -Framework wails
+      - name: Record Wails result
+        id: result
+        shell: pwsh
+        run: |
+          $m = Get-Content experiments/ui-shell-qualification/wails/diagnostics/uia_result.txt -Raw | ConvertFrom-StringData
+          $err = [string]$m.error
+          $err = $err.Replace("`r",' ').Replace("`n",' ')
+          $bytes = (Get-Item experiments/ui-shell-qualification/wails/candidate/ECO_UI_WAILS.exe).Length
+          "status=$($m.status)" >> $env:GITHUB_OUTPUT
+          "error=$err" >> $env:GITHUB_OUTPUT
+          "bytes=$bytes" >> $env:GITHUB_OUTPUT
+          "webview2=${{ steps.webview.outputs.value }}" >> $env:GITHUB_OUTPUT
+          Write-Host "WAILS_UIA_STATUS=$($m.status)"
+          if ($err) { Write-Host "WAILS_UIA_ERROR=$err" }
+      # Deliberately no executable artifact upload.
+
+  avalonia:
+    name: Avalonia 12.1.2 self-contained Windows UIA qualification
+    runs-on: windows-latest
+    timeout-minutes: 35
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      error: ${{ steps.result.outputs.error }}
+      bytes: ${{ steps.result.outputs.bytes }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Record installed .NET SDK and restore exact Avalonia packages
+        working-directory: experiments/ui-shell-qualification/avalonia
+        shell: pwsh
+        run: |
+          dotnet --info
+          dotnet restore
+          dotnet list package --include-transitive
+      - name: Publish self-contained single-file Windows candidate
+        working-directory: experiments/ui-shell-qualification/avalonia
+        shell: pwsh
+        run: |
+          dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o candidate
+          $exe = Resolve-Path candidate\ECO.UIQualification.exe
+          Write-Host "AVALONIA_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant())"
+          Write-Host "AVALONIA_BYTES=$((Get-Item $exe).Length)"
+          Get-ChildItem candidate -File | Sort-Object Name | Format-Table Name,Length | Out-String | Write-Host
+      - name: Consumer-style launch and UI Automation probe
+        shell: pwsh
+        run: |
+          $savedDotnet = $env:DOTNET_ROOT
+          $env:DOTNET_ROOT = 'Z:\definitely-not-a-dotnet-runtime'
+          try {
+            ./experiments/ui-shell-qualification/uia_probe.ps1 -ExePath ./experiments/ui-shell-qualification/avalonia/candidate/ECO.UIQualification.exe -OutputDir ./experiments/ui-shell-qualification/avalonia/diagnostics -Framework avalonia
+          } finally {
+            $env:DOTNET_ROOT = $savedDotnet
+          }
+      - name: Record Avalonia result
+        id: result
+        shell: pwsh
+        run: |
+          $m = Get-Content experiments/ui-shell-qualification/avalonia/diagnostics/uia_result.txt -Raw | ConvertFrom-StringData
+          $err = [string]$m.error
+          $err = $err.Replace("`r",' ').Replace("`n",' ')
+          $bytes = (Get-Item experiments/ui-shell-qualification/avalonia/candidate/ECO.UIQualification.exe).Length
+          "status=$($m.status)" >> $env:GITHUB_OUTPUT
+          "error=$err" >> $env:GITHUB_OUTPUT
+          "bytes=$bytes" >> $env:GITHUB_OUTPUT
+          Write-Host "AVALONIA_UIA_STATUS=$($m.status)"
+          if ($err) { Write-Host "AVALONIA_UIA_ERROR=$err" }
+      # Deliberately no executable artifact upload.
+
+  decision:
+    name: UI shell evidence decision
+    if: always()
+    needs: [fyne, wails, avalonia]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate strict all-FOSS accessibility gate
+        shell: bash
+        run: |
+          echo "FYNE_JOB=${{ needs.fyne.result }} STATUS=${{ needs.fyne.outputs.status }} BYTES=${{ needs.fyne.outputs.bytes }} ERROR=${{ needs.fyne.outputs.error }}"
+          echo "WAILS_JOB=${{ needs.wails.result }} STATUS=${{ needs.wails.outputs.status }} BYTES=${{ needs.wails.outputs.bytes }} WEBVIEW2=${{ needs.wails.outputs.webview2 }} ERROR=${{ needs.wails.outputs.error }}"
+          echo "AVALONIA_JOB=${{ needs.avalonia.result }} STATUS=${{ needs.avalonia.outputs.status }} BYTES=${{ needs.avalonia.outputs.bytes }} ERROR=${{ needs.avalonia.outputs.error }}"
+
+          # Wails is functionally interesting but cannot satisfy ECO's strict all-FOSS runtime
+          # requirement on Windows while it depends on Microsoft Edge WebView2 Runtime.
+          if [[ "${{ needs.avalonia.result }}" == "success" && "${{ needs.avalonia.outputs.status }}" == "PASS" ]]; then
+            echo 'PROVISIONAL_UI_SHELL=AVALONIA'
+            echo 'DECISION=PASS — Avalonia is the first candidate in this lane to satisfy the strict FOSS + Windows UIA gate.'
+            exit 0
+          fi
+          if [[ "${{ needs.fyne.result }}" == "success" && "${{ needs.fyne.outputs.status }}" == "PASS" ]]; then
+            echo 'PROVISIONAL_UI_SHELL=FYNE'
+            echo 'DECISION=PASS — Fyne unexpectedly satisfied the full UIA behaviour gate; require native Acer comparison before adoption.'
+            exit 0
+          fi
+          if [[ "${{ needs.wails.result }}" == "success" && "${{ needs.wails.outputs.status }}" == "PASS" ]]; then
+            echo 'PROVISIONAL_UI_SHELL=NONE_STRICT_FOSS'
+            echo 'DECISION=HOLD — Wails passed behaviour but WebView2 keeps the strict all-FOSS boundary unresolved. Existing Qt baseline remains fallback.'
+            exit 1
+          fi
+          echo 'PROVISIONAL_UI_SHELL=NONE'
+          echo 'DECISION=FAIL — no new candidate passed the required behaviour gate; existing Qt baseline remains the only proven shell.'
+          exit 1
