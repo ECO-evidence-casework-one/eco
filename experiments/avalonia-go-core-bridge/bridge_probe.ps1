@@ -42,15 +42,17 @@ function ReadValue($element) {
 
 function WaitForValue([System.Windows.Automation.AutomationElement]$root, [string]$name, [string]$pattern, [int]$seconds = 20) {
     $deadline = (Get-Date).AddSeconds($seconds)
+    $lastObserved = '<control not found>'
     do {
         $e = FindNamedEdit $root $name
         if ($null -ne $e) {
             $value = ReadValue $e
+            $lastObserved = [string]$value
             if ($value -match $pattern) { return $value }
         }
         Start-Sleep -Milliseconds 200
     } while ((Get-Date) -lt $deadline)
-    throw "Timed out waiting for $name to match $pattern"
+    throw "Timed out waiting for $name to match $pattern; last_observed=$lastObserved; pid_file_exists=$(Test-Path $pidFile)"
 }
 
 function AssertNoNetworkEndpoint([int]$processId, [string]$label) {
@@ -72,6 +74,7 @@ $saved = @{
 
 $app = $null
 $corePid = 0
+$root = $null
 try {
     $resolvedApp = (Resolve-Path $AppExe).Path
     $resolvedCore = (Resolve-Path $CoreExe).Path
@@ -84,7 +87,6 @@ try {
 
     $app = Start-Process -FilePath $resolvedApp -WorkingDirectory (Split-Path $resolvedApp) -PassThru
     $deadline = (Get-Date).AddSeconds(20)
-    $root = $null
     do {
         Start-Sleep -Milliseconds 250
         if ($app.HasExited) { throw "Avalonia shell exited before UIA was available: $($app.ExitCode)" }
@@ -151,7 +153,17 @@ try {
     }
 }
 catch {
-    @('status=FAIL',"error=$($_.Exception.Message)") | Set-Content $resultFile -Encoding utf8
+    $observedStatus = '<unavailable>'
+    if ($null -ne $root) {
+        try { $observedStatus = ReadValue (FindNamedEdit $root 'Core status') } catch { }
+    }
+    @(
+        'status=FAIL',
+        "error=$($_.Exception.Message)",
+        "observed_core_status=$observedStatus",
+        "pid_file_exists=$(Test-Path $pidFile)",
+        "pid_file_value=$(if (Test-Path $pidFile) { (Get-Content $pidFile -Raw).Trim() } else { '' })"
+    ) | Set-Content $resultFile -Encoding utf8
     throw
 }
 finally {
