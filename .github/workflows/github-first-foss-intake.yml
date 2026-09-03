@@ -79,20 +79,20 @@ jobs:
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
           wails version
-      - name: Generate official React TypeScript shell
+      - name: Generate official React TypeScript shell in ordinary external-project mode
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\eco-wails-probe" | Out-Null
-          wails init -n ECOGitHubFirstShell -t react-ts -d "$env:RUNNER_TEMP\eco-wails-probe\ECOGitHubFirstShell" -ci
-      - name: Remove Wails-repository-only CI replace and verify module
+          wails init -n ECOGitHubFirstShell -t react-ts -d "$env:RUNNER_TEMP\eco-wails-probe\ECOGitHubFirstShell"
+      - name: Verify generated module uses the published Wails module
         working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
         shell: pwsh
         run: |
-          go mod edit -dropreplace=github.com/wailsapp/wails/v2
           go mod tidy
           go mod verify
           $gomod = Get-Content -LiteralPath go.mod -Raw
-          if ($gomod -match 'replace\s+github\.com/wailsapp/wails/v2') { throw 'Wails self-repo replacement is still present.' }
+          if ($gomod -match 'replace\s+github\.com/wailsapp/wails/v2') { throw 'Unexpected local Wails replacement in external project.' }
+          if ($gomod -notmatch 'github\.com/wailsapp/wails/v2\s+v2\.14\.0') { throw 'Exact Wails v2.14.0 requirement missing.' }
           Get-Content -LiteralPath go.mod
       - name: Build real Windows desktop executable
         working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
