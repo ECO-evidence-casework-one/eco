@@ -91,7 +91,7 @@ jobs:
           go mod tidy
           go mod verify
           $gomod = Get-Content -LiteralPath go.mod -Raw
-          if ($gomod -match 'replace\s+github\.com/wailsapp/wails/v2') { throw 'Unexpected local Wails replacement in external project.' }
+          if ($gomod -match '(?m)^\s*replace\s+github\.com/wailsapp/wails/v2') { throw 'Unexpected active local Wails replacement in external project.' }
           if ($gomod -notmatch 'github\.com/wailsapp/wails/v2\s+v2\.14\.0') { throw 'Exact Wails v2.14.0 requirement missing.' }
           Get-Content -LiteralPath go.mod
       - name: Build real Windows desktop executable
