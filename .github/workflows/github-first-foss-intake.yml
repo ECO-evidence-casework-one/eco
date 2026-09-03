@@ -84,6 +84,16 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\eco-wails-probe" | Out-Null
           wails init -n ECOGitHubFirstShell -t react-ts -d "$env:RUNNER_TEMP\eco-wails-probe\ECOGitHubFirstShell" -ci
+      - name: Remove Wails-repository-only CI replace and verify module
+        working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
+        shell: pwsh
+        run: |
+          $lines = Get-Content -LiteralPath go.mod
+          $filtered = $lines | Where-Object { $_ -notmatch '^\s*replace\s+github\.com/wailsapp/wails/v2\s*=>' }
+          Set-Content -LiteralPath go.mod -Value $filtered -Encoding utf8
+          go mod tidy
+          go mod verify
+          Get-Content -LiteralPath go.mod
       - name: Build real Windows desktop executable
         working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
         shell: pwsh
