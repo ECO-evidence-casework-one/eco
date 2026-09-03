@@ -23,18 +23,13 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Resolve only the pinned FOSS probe module
+      - name: Resolve and verify pinned Go FOSS probe
         working-directory: experiments/github-first-probe
-        run: go mod tidy
-      - name: Verify downloaded module content
-        working-directory: experiments/github-first-probe
-        run: go mod verify
-      - name: Exercise the combined FOSS stack
-        working-directory: experiments/github-first-probe
-        run: go test -v ./...
-      - name: Print exact resolved module graph
-        working-directory: experiments/github-first-probe
-        run: go list -m all
+        run: |
+          go mod tidy
+          go mod verify
+          go test -v ./...
+          go list -m all
 
   probe-windows:
     needs: probe-linux
@@ -46,18 +41,13 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Resolve only the pinned FOSS probe module
+      - name: Resolve verify and exercise pinned Go FOSS probe on Windows
         working-directory: experiments/github-first-probe
         shell: pwsh
-        run: go mod tidy
-      - name: Verify downloaded module content
-        working-directory: experiments/github-first-probe
-        shell: pwsh
-        run: go mod verify
-      - name: Exercise the combined FOSS stack on Windows
-        working-directory: experiments/github-first-probe
-        shell: pwsh
-        run: go test -v ./...
+        run: |
+          go mod tidy
+          go mod verify
+          go test -v ./...
 
   prove-wails-react-windows-shell:
     needs: probe-windows
@@ -69,50 +59,31 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Record Node and npm toolchain
+      - name: Install exact Wails and generate official React TypeScript shell
         shell: pwsh
         run: |
           node --version
           npm --version
-      - name: Install exact Wails v2.14.0 CLI
-        shell: pwsh
-        run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
           wails version
-      - name: Generate official React TypeScript shell in ordinary external-project mode
-        shell: pwsh
-        run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\eco-wails-probe" | Out-Null
           wails init -n ECOGitHubFirstShell -t react-ts -d "$env:RUNNER_TEMP\eco-wails-probe\ECOGitHubFirstShell"
-      - name: Verify generated module uses the published Wails module
+      - name: Verify exact Wails module and build real Windows PE
         working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
         shell: pwsh
         run: |
           go mod tidy
           go mod verify
           $gomod = Get-Content -LiteralPath go.mod -Raw
-          if ($gomod -match '(?m)^\s*replace\s+github\.com/wailsapp/wails/v2') { throw 'Unexpected active local Wails replacement in external project.' }
+          if ($gomod -match '(?m)^\s*replace\s+github\.com/wailsapp/wails/v2') { throw 'Unexpected active local Wails replacement.' }
           if ($gomod -notmatch 'github\.com/wailsapp/wails/v2\s+v2\.14\.0') { throw 'Exact Wails v2.14.0 requirement missing.' }
-          Get-Content -LiteralPath go.mod
-      - name: Build real Windows desktop executable
-        working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
-        shell: pwsh
-        run: |
           wails build -clean -platform windows/amd64
-      - name: Verify Windows PE and build outputs
-        working-directory: ${{ runner.temp }}\eco-wails-probe\ECOGitHubFirstShell
-        shell: pwsh
-        run: |
           $exe = Get-ChildItem -Path build\bin -Filter *.exe -File | Select-Object -First 1
           if (-not $exe) { throw 'Wails did not produce a Windows EXE.' }
           $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
-          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Output is not a PE/MZ Windows executable.' }
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash.ToLowerInvariant()
-          Write-Host "WAILS_WINDOWS_EXE=$($exe.Name)"
-          Write-Host "WAILS_WINDOWS_EXE_BYTES=$($exe.Length)"
-          Write-Host "WAILS_WINDOWS_EXE_SHA256=$hash"
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Output is not a PE/MZ executable.' }
+          Write-Host "WAILS_WINDOWS_EXE_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash.ToLowerInvariant())"
           Write-Host 'WAILS_REACT_WINDOWS_SHELL=PASS'
-      # Deliberately no artifact upload while ECO binary-release gates remain closed.
 
   prove-wails-casework-frontend-stack:
     needs: prove-wails-react-windows-shell
@@ -124,17 +95,13 @@ jobs:
         with:
           go-version: '1.25.x'
           cache: false
-      - name: Install exact Wails v2.14.0 CLI
+      - name: Generate exact Wails shell
         shell: pwsh
         run: |
           go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
-          wails version
-      - name: Generate official React TypeScript shell
-        shell: pwsh
-        run: |
           New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\eco-casework-frontend" | Out-Null
           wails init -n ECOCaseworkFrontend -t react-ts -d "$env:RUNNER_TEMP\eco-casework-frontend\ECOCaseworkFrontend"
-      - name: Pin and install exact casework frontend components
+      - name: Pin exact GitHub-proven casework frontend components
         working-directory: ${{ runner.temp }}\eco-casework-frontend\ECOCaseworkFrontend\frontend
         shell: pwsh
         run: |
@@ -151,10 +118,10 @@ jobs:
           }
           foreach ($name in $expected.Keys) {
             if ($pkg.dependencies.$name -ne $expected[$name]) {
-              throw "Unexpected version for $name: $($pkg.dependencies.$name)"
+              throw "Unexpected version for ${name}: $($pkg.dependencies.$name)"
             }
           }
-      - name: Build a real evidence-table dialog graph and timeline surface
+      - name: Build real evidence table dialog graph and timeline frontend
         working-directory: ${{ runner.temp }}\eco-casework-frontend\ECOCaseworkFrontend
         shell: pwsh
         run: |
@@ -167,13 +134,7 @@ jobs:
           import { Timeline } from 'vis-timeline/standalone'
           import 'vis-timeline/styles/vis-timeline-graph2d.min.css'
 
-          type EvidenceRow = {
-            id: string
-            source: string
-            sha256: string
-            origin: string
-          }
-
+          type EvidenceRow = { id: string; source: string; sha256: string; origin: string }
           const features = tableFeatures({})
           const helper = createColumnHelper<typeof features, EvidenceRow>()
           const columns = helper.columns([
@@ -197,30 +158,7 @@ jobs:
 
           function EvidenceTable() {
             const table = useTable({ features, columns, data: evidence })
-            return (
-              <table aria-label="Evidence identity table">
-                <thead>
-                  {table.getHeaderGroups().map((group) => (
-                    <tr key={group.id}>
-                      {group.headers.map((header) => (
-                        <th key={header.id}>
-                          {header.isPlaceholder ? null : <table.FlexRender header={header} />}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-                <tbody>
-                  {table.getRowModel().rows.map((row) => (
-                    <tr key={row.id}>
-                      {row.getAllCells().map((cell) => (
-                        <td key={cell.id}><table.FlexRender cell={cell} /></td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
+            return <table aria-label="Evidence identity table"><thead>{table.getHeaderGroups().map(group => <tr key={group.id}>{group.headers.map(header => <th key={header.id}>{header.isPlaceholder ? null : <table.FlexRender header={header} />}</th>)}</tr>)}</thead><tbody>{table.getRowModel().rows.map(row => <tr key={row.id}>{row.getAllCells().map(cell => <td key={cell.id}><table.FlexRender cell={cell} /></td>)}</tr>)}</tbody></table>
           }
 
           function TimelineProof() {
@@ -238,37 +176,13 @@ jobs:
           }
 
           export default function App() {
-            return (
-              <main>
-                <h1>ECO GitHub-first casework surface</h1>
-                <section><h2>Evidence</h2><EvidenceTable /></section>
-                <Dialog.Root>
-                  <Dialog.Trigger>Review source details</Dialog.Trigger>
-                  <Dialog.Portal>
-                    <Dialog.Overlay />
-                    <Dialog.Content>
-                      <Dialog.Title>Source details</Dialog.Title>
-                      <Dialog.Description>Derived fields never replace preserved source bytes.</Dialog.Description>
-                      <Dialog.Close>Close</Dialog.Close>
-                    </Dialog.Content>
-                  </Dialog.Portal>
-                </Dialog.Root>
-                <section style={{ height: 260 }} aria-label="Relationship graph">
-                  <ReactFlow nodes={nodes} edges={edges} fitView>
-                    <Background />
-                    <MiniMap />
-                    <Controls />
-                  </ReactFlow>
-                </section>
-                <section><h2>Timeline</h2><TimelineProof /></section>
-              </main>
-            )
+            return <main><h1>ECO GitHub-first casework surface</h1><section><h2>Evidence</h2><EvidenceTable /></section><Dialog.Root><Dialog.Trigger>Review source details</Dialog.Trigger><Dialog.Portal><Dialog.Overlay /><Dialog.Content><Dialog.Title>Source details</Dialog.Title><Dialog.Description>Derived fields never replace preserved source bytes.</Dialog.Description><Dialog.Close>Close</Dialog.Close></Dialog.Content></Dialog.Portal></Dialog.Root><section style={{ height: 260 }} aria-label="Relationship graph"><ReactFlow nodes={nodes} edges={edges} fitView><Background /><MiniMap /><Controls /></ReactFlow></section><section><h2>Timeline</h2><TimelineProof /></section></main>
           }
           '@ | Set-Content -LiteralPath frontend\src\App.tsx -Encoding utf8
           Push-Location frontend
           npm run build
           Pop-Location
-      - name: Build the combined casework surface as a real Windows EXE
+      - name: Build combined casework surface as real Windows EXE
         working-directory: ${{ runner.temp }}\eco-casework-frontend\ECOCaseworkFrontend
         shell: pwsh
         run: |
@@ -278,10 +192,7 @@ jobs:
           $exe = Get-ChildItem -Path build\bin -Filter *.exe -File | Select-Object -First 1
           if (-not $exe) { throw 'Combined casework frontend did not produce a Windows EXE.' }
           $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
-          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Combined output is not a PE/MZ Windows executable.' }
-          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash.ToLowerInvariant()
-          Write-Host "CASEWORK_FRONTEND_EXE=$($exe.Name)"
-          Write-Host "CASEWORK_FRONTEND_EXE_BYTES=$($exe.Length)"
-          Write-Host "CASEWORK_FRONTEND_EXE_SHA256=$hash"
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Combined output is not a PE/MZ executable.' }
+          Write-Host "CASEWORK_FRONTEND_EXE_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash.ToLowerInvariant())"
           Write-Host 'WAILS_CASEWORK_FRONTEND_STACK=PASS'
       # Deliberately no executable artifact upload while ECO binary-release gates remain closed.
