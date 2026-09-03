@@ -1,0 +1,110 @@
+name: Avalonia to Go core bridge qualification
+
+on:
+  push:
+    branches:
+      - qualification/avalonia-go-core-bridge-20260903
+    paths:
+      - 'experiments/avalonia-go-core-bridge/**'
+      - 'experiments/ui-shell-qualification/avalonia/**'
+      - '.github/workflows/avalonia-go-core-bridge.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-avalonia-go-core-bridge-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bridge:
+    name: Windows stdio frame/hash/lifetime qualification
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Build synthetic Go core fixture
+        id: core
+        working-directory: experiments/avalonia-go-core-bridge/go-fixture
+        shell: pwsh
+        run: |
+          go vet ./...
+          New-Item -ItemType Directory -Force candidate | Out-Null
+          go build -trimpath -ldflags '-s -w' -o candidate\eco-bridge-core-fixture.exe .
+          $exe = Resolve-Path candidate\eco-bridge-core-fixture.exe
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
+          $bytes = (Get-Item $exe).Length
+          Write-Host "CORE_SHA256=$sha"
+          Write-Host "CORE_BYTES=$bytes"
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          "path=$exe" >> $env:GITHUB_OUTPUT
+
+      - name: Build one-file self-contained Avalonia bridge shell
+        id: shell
+        working-directory: experiments/ui-shell-qualification/avalonia
+        shell: pwsh
+        run: |
+          $sdk = dotnet --version
+          Write-Host "DOTNET_SDK=$sdk"
+          if ($sdk -ne '8.0.424') { throw 'Pinned .NET SDK 8.0.424 was not selected.' }
+          dotnet restore
+          dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o bridge-candidate
+          Remove-Item bridge-candidate\*.pdb -Force -ErrorAction SilentlyContinue
+          $files = @(Get-ChildItem bridge-candidate -File)
+          if ($files.Count -ne 1) { throw "Bridge shell is not a one-file package: $($files.Count) files remain." }
+          $exe = Resolve-Path bridge-candidate\ECO.UIQualification.exe
+          $sha = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
+          $bytes = (Get-Item $exe).Length
+          Write-Host "SHELL_SHA256=$sha"
+          Write-Host "SHELL_BYTES=$bytes"
+          "sha=$sha" >> $env:GITHUB_OUTPUT
+          "path=$exe" >> $env:GITHUB_OUTPUT
+
+      - name: Positive bridge — ping, projection, zero network, graceful shutdown
+        shell: pwsh
+        run: |
+          ./experiments/avalonia-go-core-bridge/bridge_probe.ps1 `
+            -AppExe '${{ steps.shell.outputs.path }}' `
+            -CoreExe '${{ steps.core.outputs.path }}' `
+            -ExpectedCoreSha256 '${{ steps.core.outputs.sha }}' `
+            -OutputDir ./experiments/avalonia-go-core-bridge/diagnostics/normal
+
+      - name: Negative bridge — wrong core hash blocks launch
+        shell: pwsh
+        run: |
+          ./experiments/avalonia-go-core-bridge/bridge_probe.ps1 `
+            -AppExe '${{ steps.shell.outputs.path }}' `
+            -CoreExe '${{ steps.core.outputs.path }}' `
+            -ExpectedCoreSha256 '0000000000000000000000000000000000000000000000000000000000000000' `
+            -OutputDir ./experiments/avalonia-go-core-bridge/diagnostics/hash-mismatch `
+            -ExpectHashMismatch
+
+      - name: Forced lifetime bridge — core ignores EOF, shell must kill and wait
+        shell: pwsh
+        run: |
+          ./experiments/avalonia-go-core-bridge/bridge_probe.ps1 `
+            -AppExe '${{ steps.shell.outputs.path }}' `
+            -CoreExe '${{ steps.core.outputs.path }}' `
+            -ExpectedCoreSha256 '${{ steps.core.outputs.sha }}' `
+            -OutputDir ./experiments/avalonia-go-core-bridge/diagnostics/stubborn `
+            -StubbornCore
+
+      - name: Summarise evidence
+        shell: pwsh
+        run: |
+          Write-Host '--- normal ---'
+          Get-Content experiments/avalonia-go-core-bridge/diagnostics/normal/bridge_result.txt | Write-Host
+          Write-Host '--- hash mismatch ---'
+          Get-Content experiments/avalonia-go-core-bridge/diagnostics/hash-mismatch/bridge_result.txt | Write-Host
+          Write-Host '--- stubborn core ---'
+          Get-Content experiments/avalonia-go-core-bridge/diagnostics/stubborn/bridge_result.txt | Write-Host
+          Write-Host 'BRIDGE_DECISION=PASS'
+
+      # Deliberately no executable or diagnostic artifact upload. Evidence is in
+      # the exact-head workflow log only; no real evidence or current ECO source is present.
