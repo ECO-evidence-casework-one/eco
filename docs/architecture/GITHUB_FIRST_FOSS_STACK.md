@@ -44,17 +44,30 @@ No third-party component is admitted merely because it is popular or available o
 | Accessible UI primitives | `radix-ui/primitives` | MIT | **ADOPT** for dialogs, tabs, menus, tooltips and keyboard-accessible primitives. |
 | Relationship graph | `xyflow/xyflow` | MIT | **ADOPT** for People/Organisations/relationship exploration. |
 | React frontend | `facebook/react` | MIT | **ADOPT** as Wails frontend runtime. |
-| Timeline visualization | `visjs/vis-timeline` | pending exact licence intake | **HOLD UNTIL LICENCE PINNED**. |
+| Timeline visualization | `visjs/vis-timeline` | Apache-2.0 OR MIT | **ADOPT**. Upstream `LICENSE.md` explicitly permits either Apache-2.0 or MIT; use the interactive timeline only for derived case chronology, not as source authority. |
 
-## Initial exact pins
+## Exact pins established so far
 
-These refs were resolved directly from GitHub before this branch was created:
+These refs and package versions were resolved directly from GitHub before admission or CI use:
 
 - Wails v2.14.0 — commit `857398f61118eae7a6d9f5f18ffdd391590703e3` — MIT.
 - Bleve v2.6.1 — commit `048761396d42661336db8caa0bed1e98cf2aeaa6` — Apache-2.0.
-- Apache Tika 3.2.3 release-preparation commit `8e2ab0c58b62d74245b29689306ac6e1b79f36a1` — Apache-2.0. Tika 4.0.0 is still being treated as a separate upgrade candidate because the current Git ref resolves to an RC-stage commit.
+- Apache Tika 3.2.3 release-preparation commit `8e2ab0c58b62d74245b29689306ac6e1b79f36a1` — Apache-2.0. Tika 4.0.0 remains a separate upgrade candidate because the current Git ref resolves to an RC-stage commit.
+- React `19.1.0` and React DOM `19.1.0` — exact runtime pins for the Wails frontend proof; the official Wails v2.14.0 React-TypeScript template itself declares React/React DOM `^19.1.0`.
+- `@tanstack/react-table` `9.2.4` — MIT. Use the v9 API (`useTable`, `tableFeatures`, `table.FlexRender`), not v8 examples.
+- `@radix-ui/react-dialog` `1.1.23` — MIT; upstream peer range explicitly supports React 19.
+- `@xyflow/react` `12.11.6` — MIT.
+- `vis-timeline` `8.5.4` — Apache-2.0 OR MIT; latest stable GitHub release resolved on 3 September 2026.
 
-All remaining ADOPT rows require their exact release/tag commit to be appended to the lock before source or binaries are imported.
+The Go-side compatibility probe also pins:
+
+- `github.com/mholt/archives` `v0.1.5`
+- `github.com/emersion/go-message` `v0.18.2`
+- `github.com/emersion/go-mbox` `v1.0.4`
+- `github.com/xuri/excelize/v2` `v2.11.0`
+- `github.com/gabriel-vasile/mimetype` `v1.4.15`
+
+Remaining ADOPT rows still require exact release/tag lock entries before source or binaries are imported into a releasable ECO build.
 
 ## Reference systems — benchmark, do not embed wholesale
 
