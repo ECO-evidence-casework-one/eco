@@ -81,13 +81,13 @@ public sealed class MainWindow : Window
         var stack = new StackPanel
         {
             Spacing = 8,
+            Margin = new Thickness(24),
             Children = { title, search, actions, transcriptLabel, transcript }
         };
 
         Content = new ScrollViewer
         {
             Content = stack,
-            Padding = new Thickness(24),
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto
         };
