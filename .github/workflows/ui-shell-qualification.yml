@@ -32,6 +32,7 @@ jobs:
           go-version: '1.25.x'
           cache: false
       - uses: msys2/setup-msys2@66cd2cce69caa17b53920067426061ca1de3a884 # v2
+        id: msys2
         with:
           msystem: UCRT64
           update: true
@@ -39,10 +40,14 @@ jobs:
       - name: Build exact Fyne accessibility candidate
         working-directory: experiments/ui-shell-qualification/fyne
         shell: pwsh
+        env:
+          MSYS2_LOCATION: ${{ steps.msys2.outputs.msys2-location }}
         run: |
           $env:CGO_ENABLED = '1'
-          $env:CC = 'C:\msys64\ucrt64\bin\gcc.exe'
-          if (-not (Test-Path $env:CC)) { throw 'MinGW gcc not found.' }
+          $env:CC = Join-Path $env:MSYS2_LOCATION 'ucrt64\bin\gcc.exe'
+          $objdump = Join-Path $env:MSYS2_LOCATION 'ucrt64\bin\objdump.exe'
+          if (-not (Test-Path $env:CC)) { throw "MinGW gcc not found at $env:CC" }
+          if (-not (Test-Path $objdump)) { throw "objdump not found at $objdump" }
           go mod tidy
           go mod verify
           New-Item -ItemType Directory -Force -Path candidate | Out-Null
@@ -50,7 +55,7 @@ jobs:
           $exe = Resolve-Path candidate\ECO_UI_FYNE.exe
           Write-Host "FYNE_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant())"
           Write-Host "FYNE_BYTES=$((Get-Item $exe).Length)"
-          & 'C:\msys64\ucrt64\bin\objdump.exe' -p $exe | Select-String 'DLL Name' | Write-Host
+          & $objdump -p $exe | Select-String 'DLL Name' | Write-Host
       - name: Consumer-style launch and UI Automation probe
         shell: pwsh
         run: |
@@ -152,11 +157,12 @@ jobs:
       bytes: ${{ steps.result.outputs.bytes }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Record installed .NET SDK and restore exact Avalonia packages
+      - name: Record pinned .NET SDK and restore exact Avalonia packages
         working-directory: experiments/ui-shell-qualification/avalonia
         shell: pwsh
         run: |
-          dotnet --info
+          dotnet --version
+          if ((dotnet --version) -ne '8.0.424') { throw 'Pinned .NET SDK 8.0.424 was not selected.' }
           dotnet restore
           dotnet list package --include-transitive
       - name: Publish self-contained single-file Windows candidate
@@ -164,10 +170,12 @@ jobs:
         shell: pwsh
         run: |
           dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=None -o candidate
+          Remove-Item candidate\*.pdb -Force -ErrorAction SilentlyContinue
           $exe = Resolve-Path candidate\ECO.UIQualification.exe
+          $files = @(Get-ChildItem candidate -File)
+          if ($files.Count -ne 1) { throw "Avalonia candidate is not a one-file package: $($files.Count) files remain." }
           Write-Host "AVALONIA_SHA256=$((Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant())"
           Write-Host "AVALONIA_BYTES=$((Get-Item $exe).Length)"
-          Get-ChildItem candidate -File | Sort-Object Name | Format-Table Name,Length | Out-String | Write-Host
       - name: Consumer-style launch and UI Automation probe
         shell: pwsh
         run: |
@@ -206,8 +214,6 @@ jobs:
           echo "WAILS_JOB=${{ needs.wails.result }} STATUS=${{ needs.wails.outputs.status }} BYTES=${{ needs.wails.outputs.bytes }} WEBVIEW2=${{ needs.wails.outputs.webview2 }} ERROR=${{ needs.wails.outputs.error }}"
           echo "AVALONIA_JOB=${{ needs.avalonia.result }} STATUS=${{ needs.avalonia.outputs.status }} BYTES=${{ needs.avalonia.outputs.bytes }} ERROR=${{ needs.avalonia.outputs.error }}"
 
-          # Wails is functionally interesting but cannot satisfy ECO's strict all-FOSS runtime
-          # requirement on Windows while it depends on Microsoft Edge WebView2 Runtime.
           if [[ "${{ needs.avalonia.result }}" == "success" && "${{ needs.avalonia.outputs.status }}" == "PASS" ]]; then
             echo 'PROVISIONAL_UI_SHELL=AVALONIA'
             echo 'DECISION=PASS — Avalonia is the first candidate in this lane to satisfy the strict FOSS + Windows UIA gate.'
