@@ -1,0 +1,60 @@
+name: GitHub-first FOSS intake
+
+on:
+  push:
+    branches:
+      - integration/github-first-stack-20260903
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-github-first-foss-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Resolve only the pinned FOSS probe module
+        working-directory: experiments/github-first-probe
+        run: go mod tidy
+      - name: Verify downloaded module content
+        working-directory: experiments/github-first-probe
+        run: go mod verify
+      - name: Exercise the combined FOSS stack
+        working-directory: experiments/github-first-probe
+        run: go test -v ./...
+      - name: Print exact resolved module graph
+        working-directory: experiments/github-first-probe
+        run: go list -m all
+
+  probe-windows:
+    needs: probe-linux
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Resolve only the pinned FOSS probe module
+        working-directory: experiments/github-first-probe
+        shell: pwsh
+        run: go mod tidy
+      - name: Verify downloaded module content
+        working-directory: experiments/github-first-probe
+        shell: pwsh
+        run: go mod verify
+      - name: Exercise the combined FOSS stack on Windows
+        working-directory: experiments/github-first-probe
+        shell: pwsh
+        run: go test -v ./...
