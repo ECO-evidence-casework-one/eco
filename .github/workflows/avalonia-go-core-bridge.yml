@@ -69,7 +69,7 @@ jobs:
       - name: Positive bridge — ping, projection, zero network, graceful shutdown
         shell: pwsh
         run: |
-          ./experiments/avalonia-go-core-bridge/bridge_probe.ps1 `
+          ./experiments/avalonia-go-core-bridge/run_bridge_probe.ps1 `
             -AppExe '${{ steps.shell.outputs.path }}' `
             -CoreExe '${{ steps.core.outputs.path }}' `
             -ExpectedCoreSha256 '${{ steps.core.outputs.sha }}' `
@@ -78,7 +78,7 @@ jobs:
       - name: Negative bridge — wrong core hash blocks launch
         shell: pwsh
         run: |
-          ./experiments/avalonia-go-core-bridge/bridge_probe.ps1 `
+          ./experiments/avalonia-go-core-bridge/run_bridge_probe.ps1 `
             -AppExe '${{ steps.shell.outputs.path }}' `
             -CoreExe '${{ steps.core.outputs.path }}' `
             -ExpectedCoreSha256 '0000000000000000000000000000000000000000000000000000000000000000' `
@@ -88,7 +88,7 @@ jobs:
       - name: Forced lifetime bridge — core ignores EOF, shell must kill and wait
         shell: pwsh
         run: |
-          ./experiments/avalonia-go-core-bridge/bridge_probe.ps1 `
+          ./experiments/avalonia-go-core-bridge/run_bridge_probe.ps1 `
             -AppExe '${{ steps.shell.outputs.path }}' `
             -CoreExe '${{ steps.core.outputs.path }}' `
             -ExpectedCoreSha256 '${{ steps.core.outputs.sha }}' `
