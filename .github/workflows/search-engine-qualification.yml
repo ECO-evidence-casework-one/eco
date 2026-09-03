@@ -1,0 +1,70 @@
+name: Search engine qualification — Recall Bleve Bluge
+
+on:
+  push:
+    branches:
+      - qualification/search-recall-bleve-bluge-20260903
+    paths:
+      - 'experiments/search-engine-qualification/**'
+      - '.github/workflows/search-engine-qualification.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eco-search-engine-qualification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    name: Search qualification (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+
+      - name: Verify exact modules and dependency surface
+        working-directory: experiments/search-engine-qualification
+        shell: pwsh
+        run: |
+          go mod tidy
+          go mod verify
+          $recall = @(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' github.com/deagy/recall/bm25 | Where-Object { $_ -and $_ -notmatch '^eco-search-engine-qualification$' })
+          $bleve = @(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' github.com/blevesearch/bleve/v2 | Where-Object { $_ -and $_ -notmatch '^eco-search-engine-qualification$' })
+          $bluge = @(go list -deps -f '{{if not .Standard}}{{.ImportPath}}{{end}}' github.com/blugelabs/bluge | Where-Object { $_ -and $_ -notmatch '^eco-search-engine-qualification$' })
+          Write-Host "RECALL_NONSTD_DEPS=$($recall.Count)"
+          Write-Host "BLEVE_NONSTD_DEPS=$($bleve.Count)"
+          Write-Host "BLUGE_NONSTD_DEPS=$($bluge.Count)"
+          Write-Host '--- exact module list ---'
+          go list -m all | Write-Host
+
+      - name: Vet and run deterministic synthetic qualification
+        working-directory: experiments/search-engine-qualification
+        shell: pwsh
+        run: |
+          go vet ./...
+          go run . | Tee-Object -FilePath qualification-result.json | Write-Host
+
+      - name: Enforce mandatory correctness and print decision
+        working-directory: experiments/search-engine-qualification
+        shell: pwsh
+        run: |
+          $r = Get-Content qualification-result.json -Raw | ConvertFrom-Json
+          foreach ($engine in $r.reports) {
+            Write-Host ("ENGINE={0} PASS={1} BUILD_MS={2} HEAP_BYTES={3} MEAN_SEARCH_US={4}" -f $engine.engine,$engine.mandatory_pass,$engine.build_millis,$engine.retained_heap_bytes,$engine.mean_search_micros)
+          }
+          $recall = $r.reports | Where-Object { $_.engine -eq 'recall-v0.3.6' }
+          if (-not $recall.mandatory_pass) { throw 'Current Recall baseline failed the mandatory qualification.' }
+          Write-Host "SEARCH_DECISION=$($r.decision)"
+
+      # Deliberately no index/result artifact upload. All indexes are memory-only
+      # and qualification evidence remains in the exact-head workflow log.
