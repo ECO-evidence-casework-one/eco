@@ -60,16 +60,42 @@ public sealed class CoreProcessClient : IDisposable
         if (!process.Start())
             throw new InvalidOperationException("Core process did not start.");
 
-        if (!string.IsNullOrWhiteSpace(pidFile))
-            File.WriteAllText(Path.GetFullPath(pidFile), process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
-
-        _ = Task.Run(async () =>
+        try
         {
-            try { await process.StandardError.ReadToEndAsync().ConfigureAwait(false); }
-            catch { }
-        });
+            if (!string.IsNullOrWhiteSpace(pidFile))
+            {
+                var receiptPath = Path.GetFullPath(pidFile);
+                var receiptDir = Path.GetDirectoryName(receiptPath);
+                if (!string.IsNullOrWhiteSpace(receiptDir))
+                    Directory.CreateDirectory(receiptDir);
+                File.WriteAllText(receiptPath, process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
+            }
 
-        return new CoreProcessClient(process);
+            _ = Task.Run(async () =>
+            {
+                try { await process.StandardError.ReadToEndAsync().ConfigureAwait(false); }
+                catch { }
+            });
+
+            return new CoreProcessClient(process);
+        }
+        catch
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                    process.WaitForExit(5000);
+                }
+            }
+            catch { }
+            finally
+            {
+                process.Dispose();
+            }
+            throw;
+        }
     }
 
     public async Task<CoreResponse> PingAsync(CancellationToken cancellationToken = default)
