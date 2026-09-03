@@ -19,9 +19,9 @@ function All([System.Windows.Automation.AutomationElement]$root) {
     $root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
 }
 function NameOf($e) { try { [string]$e.Current.Name } catch { '' } }
-function TopForPid([int]$pid) {
+function TopForProcessId([int]$processId) {
     $desktop = [System.Windows.Automation.AutomationElement]::RootElement
-    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$pid)
+    $cond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$processId)
     $desktop.FindFirst([System.Windows.Automation.TreeScope]::Children,$cond)
 }
 function Names($elements) {
@@ -51,9 +51,6 @@ function HasValuePattern($e) {
 $savedPath = $env:PATH
 $p = $null
 try {
-    # Remove developer/toolchain paths before the consumer launch. This does not pretend
-    # the hosted image is a pristine retail PC; it proves the package does not require
-    # PATH access to the compiler/package manager used earlier in the job.
     $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
     $exe = (Resolve-Path $ExePath).Path
     $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
@@ -63,7 +60,7 @@ try {
     do {
         Start-Sleep -Milliseconds 250
         if ($p.HasExited) { throw "candidate exited before UIA window; exit=$($p.ExitCode)" }
-        $root = TopForPid $p.Id
+        $root = TopForProcessId $p.Id
     } while ($null -eq $root -and (Get-Date) -lt $deadline)
     if ($null -eq $root) { throw 'no top-level Windows UI Automation element within 20 seconds' }
 
@@ -118,7 +115,7 @@ try {
     @(
         "framework=$Framework",
         'status=PASS',
-        "pid=$($p.Id)",
+        "process_id=$($p.Id)",
         "accessible_descendants=$($elements.Count)",
         "buttons=$($buttons.Count)",
         "keyboard_focusable=$($focusable.Count)",
