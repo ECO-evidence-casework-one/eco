@@ -113,3 +113,175 @@ jobs:
           Write-Host "WAILS_WINDOWS_EXE_SHA256=$hash"
           Write-Host 'WAILS_REACT_WINDOWS_SHELL=PASS'
       # Deliberately no artifact upload while ECO binary-release gates remain closed.
+
+  prove-wails-casework-frontend-stack:
+    needs: prove-wails-react-windows-shell
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Install exact Wails v2.14.0 CLI
+        shell: pwsh
+        run: |
+          go install github.com/wailsapp/wails/v2/cmd/wails@v2.14.0
+          wails version
+      - name: Generate official React TypeScript shell
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "$env:RUNNER_TEMP\eco-casework-frontend" | Out-Null
+          wails init -n ECOCaseworkFrontend -t react-ts -d "$env:RUNNER_TEMP\eco-casework-frontend\ECOCaseworkFrontend"
+      - name: Pin and install exact casework frontend components
+        working-directory: ${{ runner.temp }}\eco-casework-frontend\ECOCaseworkFrontend\frontend
+        shell: pwsh
+        run: |
+          npm install --save-exact react@19.1.0 react-dom@19.1.0 @tanstack/react-table@9.2.4 @radix-ui/react-dialog@1.1.23 @xyflow/react@12.11.6 vis-timeline@8.5.4
+          npm ls --depth=0
+          $pkg = Get-Content -LiteralPath package.json -Raw | ConvertFrom-Json
+          $expected = @{
+            'react'='19.1.0'
+            'react-dom'='19.1.0'
+            '@tanstack/react-table'='9.2.4'
+            '@radix-ui/react-dialog'='1.1.23'
+            '@xyflow/react'='12.11.6'
+            'vis-timeline'='8.5.4'
+          }
+          foreach ($name in $expected.Keys) {
+            if ($pkg.dependencies.$name -ne $expected[$name]) {
+              throw "Unexpected version for $name: $($pkg.dependencies.$name)"
+            }
+          }
+      - name: Build a real evidence-table dialog graph and timeline surface
+        working-directory: ${{ runner.temp }}\eco-casework-frontend\ECOCaseworkFrontend
+        shell: pwsh
+        run: |
+          @'
+          import { useEffect, useRef } from 'react'
+          import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table'
+          import * as Dialog from '@radix-ui/react-dialog'
+          import { Background, Controls, MiniMap, ReactFlow, type Edge, type Node } from '@xyflow/react'
+          import '@xyflow/react/dist/style.css'
+          import { Timeline } from 'vis-timeline/standalone'
+          import 'vis-timeline/styles/vis-timeline-graph2d.min.css'
+
+          type EvidenceRow = {
+            id: string
+            source: string
+            sha256: string
+            origin: string
+          }
+
+          const features = tableFeatures({})
+          const helper = createColumnHelper<typeof features, EvidenceRow>()
+          const columns = helper.columns([
+            helper.accessor('source', { header: 'Source' }),
+            helper.accessor('sha256', { header: 'SHA-256' }),
+            helper.accessor('origin', { header: 'Origin' }),
+          ])
+          const evidence: EvidenceRow[] = [
+            { id: 'ev-001', source: 'Email.eml', sha256: '4f6f...0a2b', origin: 'preserved-source' },
+            { id: 'ev-002', source: 'Invoice.pdf', sha256: '922a...7ee1', origin: 'preserved-source' },
+          ]
+          const nodes: Node[] = [
+            { id: 'person', position: { x: 0, y: 40 }, data: { label: 'Person' } },
+            { id: 'organisation', position: { x: 220, y: 40 }, data: { label: 'Organisation' } },
+            { id: 'evidence', position: { x: 440, y: 40 }, data: { label: 'Evidence' } },
+          ]
+          const edges: Edge[] = [
+            { id: 'p-o', source: 'person', target: 'organisation', label: 'works with' },
+            { id: 'o-e', source: 'organisation', target: 'evidence', label: 'appears in' },
+          ]
+
+          function EvidenceTable() {
+            const table = useTable({ features, columns, data: evidence })
+            return (
+              <table aria-label="Evidence identity table">
+                <thead>
+                  {table.getHeaderGroups().map((group) => (
+                    <tr key={group.id}>
+                      {group.headers.map((header) => (
+                        <th key={header.id}>
+                          {header.isPlaceholder ? null : <table.FlexRender header={header} />}
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.map((row) => (
+                    <tr key={row.id}>
+                      {row.getAllCells().map((cell) => (
+                        <td key={cell.id}><table.FlexRender cell={cell} /></td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          }
+
+          function TimelineProof() {
+            const target = useRef<HTMLDivElement>(null)
+            useEffect(() => {
+              if (!target.current) return
+              const timeline = new Timeline(target.current, [
+                { id: 1, content: 'Evidence received', start: new Date('2026-08-01T09:00:00Z') },
+                { id: 2, content: 'Contradiction recorded', start: new Date('2026-08-03T14:30:00Z') },
+                { id: 3, content: 'Task created', start: new Date('2026-08-04T10:15:00Z') },
+              ], { height: '180px' })
+              return () => timeline.destroy()
+            }, [])
+            return <div ref={target} aria-label="Case timeline" />
+          }
+
+          export default function App() {
+            return (
+              <main>
+                <h1>ECO GitHub-first casework surface</h1>
+                <section><h2>Evidence</h2><EvidenceTable /></section>
+                <Dialog.Root>
+                  <Dialog.Trigger>Review source details</Dialog.Trigger>
+                  <Dialog.Portal>
+                    <Dialog.Overlay />
+                    <Dialog.Content>
+                      <Dialog.Title>Source details</Dialog.Title>
+                      <Dialog.Description>Derived fields never replace preserved source bytes.</Dialog.Description>
+                      <Dialog.Close>Close</Dialog.Close>
+                    </Dialog.Content>
+                  </Dialog.Portal>
+                </Dialog.Root>
+                <section style={{ height: 260 }} aria-label="Relationship graph">
+                  <ReactFlow nodes={nodes} edges={edges} fitView>
+                    <Background />
+                    <MiniMap />
+                    <Controls />
+                  </ReactFlow>
+                </section>
+                <section><h2>Timeline</h2><TimelineProof /></section>
+              </main>
+            )
+          }
+          '@ | Set-Content -LiteralPath frontend\src\App.tsx -Encoding utf8
+          Push-Location frontend
+          npm run build
+          Pop-Location
+      - name: Build the combined casework surface as a real Windows EXE
+        working-directory: ${{ runner.temp }}\eco-casework-frontend\ECOCaseworkFrontend
+        shell: pwsh
+        run: |
+          go mod tidy
+          go mod verify
+          wails build -clean -platform windows/amd64
+          $exe = Get-ChildItem -Path build\bin -Filter *.exe -File | Select-Object -First 1
+          if (-not $exe) { throw 'Combined casework frontend did not produce a Windows EXE.' }
+          $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)
+          if ($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a) { throw 'Combined output is not a PE/MZ Windows executable.' }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName).Hash.ToLowerInvariant()
+          Write-Host "CASEWORK_FRONTEND_EXE=$($exe.Name)"
+          Write-Host "CASEWORK_FRONTEND_EXE_BYTES=$($exe.Length)"
+          Write-Host "CASEWORK_FRONTEND_EXE_SHA256=$hash"
+          Write-Host 'WAILS_CASEWORK_FRONTEND_STACK=PASS'
+      # Deliberately no executable artifact upload while ECO binary-release gates remain closed.
