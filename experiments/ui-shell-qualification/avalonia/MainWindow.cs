@@ -30,7 +30,7 @@ public sealed class MainWindow : Window
 
         var search = new TextBox
         {
-            Watermark = "Search this Matter",
+            PlaceholderText = "Search this Matter",
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(0, 0, 0, 12)
         };
