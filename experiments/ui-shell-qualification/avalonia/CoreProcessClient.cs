@@ -63,8 +63,6 @@ public sealed class CoreProcessClient : IDisposable
         if (!string.IsNullOrWhiteSpace(pidFile))
             File.WriteAllText(Path.GetFullPath(pidFile), process.Id.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
-        // Drain stderr so a noisy core cannot deadlock on a full error pipe. The
-        // qualification shell never mirrors this content into user-facing text.
         _ = Task.Run(async () =>
         {
             try { await process.StandardError.ReadToEndAsync().ConfigureAwait(false); }
@@ -97,7 +95,8 @@ public sealed class CoreProcessClient : IDisposable
 
     public async Task<CoreResponse> SendAsync(CoreRequest request, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_disposed)
+            throw new ObjectDisposedException(nameof(CoreProcessClient));
         await _requestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
