@@ -31,7 +31,7 @@ function Names($elements) {
 }
 function FindSearch($elements) {
     foreach ($e in $elements) {
-        if ((NameOf $e) -match 'Search this Matter') { return $e }
+        if ((NameOf $e) -match 'Search this Matter' -and $e.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) { return $e }
     }
     foreach ($e in $elements) {
         if ($e.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) { return $e }
@@ -39,6 +39,9 @@ function FindSearch($elements) {
     $null
 }
 function FindTranscript($elements) {
+    foreach ($e in $elements) {
+        if ((NameOf $e) -eq 'AI conversation transcript' -and $e.Current.ControlType -eq [System.Windows.Automation.ControlType]::Edit) { return $e }
+    }
     foreach ($e in $elements) {
         if ((NameOf $e) -eq 'AI conversation transcript') { return $e }
     }
