@@ -22,6 +22,31 @@ jobs:
       - name: Check offline source and embedded-secret policy
         run: python3 scripts/check_source_policy.py
 
+  secret-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Install pinned Gitleaks v8.30.1
+        shell: bash
+        run: |
+          set -euo pipefail
+          version='8.30.1'
+          archive="gitleaks_${version}_linux_x64.tar.gz"
+          url="https://github.com/gitleaks/gitleaks/releases/download/v${version}/${archive}"
+          target="$RUNNER_TEMP/$archive"
+          curl --fail --location --silent --show-error "$url" --output "$target"
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  $target" | sha256sum --check --strict -
+          tar -xzf "$target" -C "$RUNNER_TEMP" gitleaks
+          chmod 0755 "$RUNNER_TEMP/gitleaks"
+          "$RUNNER_TEMP/gitleaks" version
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - name: Scan checked-out repository for secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          gitleaks dir --redact --verbose --no-banner .
+
   test-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -37,7 +62,7 @@ jobs:
         run: go vet ./...
 
   build-windows:
-    needs: [source-policy, test-linux]
+    needs: [source-policy, secret-scan, test-linux]
     runs-on: windows-latest
     timeout-minutes: 25
     steps:
