@@ -1,0 +1,14 @@
+title = "ECO Gitleaks policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Historical governance question: prose phrase 'key recovery, SBOM/provenance' is not a credential. Exact path and exact line only."
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''^docs/partnership/CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04\.md$''']
+  regexes = ['''^7\. Can it operate Windows build/release, Authenticode signing, key recovery, SBOM/provenance reconciliation and reproducible-build controls\?$''']
