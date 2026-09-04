@@ -1,0 +1,43 @@
+name: Apply qualified pdfium-cli page renderer
+
+on:
+  push:
+    branches:
+      - integration/pdfium-page-renderer-20260904
+    paths:
+      - .github/workflows/apply-pdfium-page-renderer.yml
+      - scripts/apply_pdfium_page_renderer.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: integration/pdfium-page-renderer-20260904
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+      - name: Apply and qualify renderer integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_pdfium_page_renderer.py
+          gofmt -w internal/eco/pdfium_renderer.go internal/eco/pdfium_renderer_test.go internal/eco/local_tools.go cmd/eco/main_windows.go
+          go test ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /tmp/eco-pdfium-preview.exe ./cmd/eco
+          python3 scripts/check_source_policy.py
+          git diff --check
+          git config user.name 'ECO GitHub integration bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add internal/eco/pdfium_renderer.go internal/eco/pdfium_renderer_test.go internal/eco/local_tools.go cmd/eco/main_windows.go THIRD_PARTY_NOTICES.md docs/foss/PDFIUM_CLI_PAGE_RENDERER_INTEGRATION.md
+          git commit -m 'Integrate qualified pdfium-cli PDF page renderer'
+          git push origin HEAD:integration/pdfium-page-renderer-20260904
