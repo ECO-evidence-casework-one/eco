@@ -32,14 +32,14 @@ The Windows build depends on `source-policy`, `secret-scan` and `test-linux`, so
 
 ## First qualification finding
 
-The first exact-head run correctly failed on one `generic-api-key` candidate in the historical OKFN partnership assessment. Inspection showed that the candidate was prose — the governance phrase `key recovery, SBOM/provenance ...` — rather than a credential or token.
+The first exact-head run correctly failed on one `generic-api-key` candidate in the historical OKFN partnership assessment. Inspection showed that the candidate was governance prose about recovery of signing material followed by SBOM/provenance controls, rather than a credential or token.
 
 The finding was not suppressed globally and `generic-api-key` remains enabled. `.gitleaks.toml` contains one rule-specific allowlist entry requiring BOTH:
 
 - the exact historical assessment path; and
-- the exact known prose line.
+- the exact known sentence pattern.
 
-Changing either the file path or the line content causes the exception not to match. This preserves the strict default rule elsewhere.
+Changing either the file path or the matching sentence causes the exception not to match. This preserves the strict default rule elsewhere.
 
 ## Deliberate limitations
 
