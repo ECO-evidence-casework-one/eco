@@ -137,7 +137,7 @@ func extractMBOX(path string) (string, error) {
 		fmt.Fprintf(&out, "[Mailbox is larger than ECO's %s automatic scan window; later content was not read in this preview.]\n", HumanBytes(maxMBOXScanBytes))
 	}
 	if messages == 0 && strings.TrimSpace(out.String()) == "" {
-		return "", errors.New("mailbox contains no readable mbox messages")
+		return "", fmt.Errorf("mailbox contains no readable mbox messages")
 	}
 	return out.String(), nil
 }
