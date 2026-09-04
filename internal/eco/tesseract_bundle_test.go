@@ -1,6 +1,7 @@
 package eco
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -19,10 +20,11 @@ func TestSafeTesseractRuntimeRelativePath(t *testing.T) {
 }
 
 func TestTesseractRuntimeRegistrationRequiresWave4Receipts(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "bundle")
 	base := TesseractRuntimeRegistration{
-		Root:                   `/tmp/bundle`,
-		Executable:             `/tmp/bundle/runtime/bin/tesseract.exe`,
-		TessdataDir:            `/tmp/bundle/runtime/share/tessdata`,
+		Root:                   root,
+		Executable:             filepath.Join(root, "runtime", "bin", "tesseract.exe"),
+		TessdataDir:            filepath.Join(root, "runtime", "share", "tessdata"),
 		Version:                "5.5.0",
 		BuildManifestSHA256:    wave4BuildManifestSHA256,
 		RuntimeInventorySHA256: wave4RuntimeInventorySHA256,
