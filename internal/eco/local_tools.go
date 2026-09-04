@@ -30,6 +30,8 @@ var localToolSpecs = map[string]localToolSpec{
 	"pdfcpu":    {Kind: "pdfcpu", Upstream: "pdfcpu/pdfcpu", License: "Apache-2.0"},
 }
 
+var localToolOrder = []string{"tesseract", "docling", "ocrmypdf", "llama.cpp", "pdfcpu"}
+
 type LocalToolRegistration struct {
 	Kind          string    `json:"kind"`
 	Executable    string    `json:"executable"`
@@ -88,7 +90,11 @@ func localToolVersion(ctx context.Context, kind, executable string) (string, err
 	}
 }
 
-func (v *Vault) RegisterLocalTool(ctx context.Context, kind, executable string) (LocalToolRegistration, error) {
+func (v *Vault) RegisterLocalTool(kind, executable string) (LocalToolRegistration, error) {
+	return v.RegisterLocalToolContext(context.Background(), kind, executable)
+}
+
+func (v *Vault) RegisterLocalToolContext(ctx context.Context, kind, executable string) (LocalToolRegistration, error) {
 	return v.registerLocalToolWithProbe(ctx, kind, executable, localToolVersion)
 }
 
@@ -215,7 +221,26 @@ func (v *Vault) RegisteredLocalTool(kind string) (LocalToolRegistration, error) 
 	return LocalToolRegistration{}, os.ErrNotExist
 }
 
-func (v *Vault) VerifyRegisteredLocalTool(ctx context.Context, kind string) (LocalToolRegistration, error) {
+func (v *Vault) RegisteredLocalTools() ([]LocalToolRegistration, error) {
+	out := make([]LocalToolRegistration, 0, len(localToolOrder))
+	for _, kind := range localToolOrder {
+		registration, err := v.RegisteredLocalTool(kind)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, registration)
+	}
+	return out, nil
+}
+
+func (v *Vault) VerifyRegisteredLocalTool(kind string) (LocalToolRegistration, error) {
+	return v.VerifyRegisteredLocalToolContext(context.Background(), kind)
+}
+
+func (v *Vault) VerifyRegisteredLocalToolContext(ctx context.Context, kind string) (LocalToolRegistration, error) {
 	return v.verifyRegisteredLocalToolWithProbe(ctx, kind, localToolVersion)
 }
 
@@ -327,7 +352,7 @@ func (v *Vault) OCRImageWithRegisteredTesseract(evidenceID, language string) err
 }
 
 func (v *Vault) OCRImageWithRegisteredTesseractContext(ctx context.Context, evidenceID, language string) error {
-	tool, err := v.VerifyRegisteredLocalTool(ctx, "tesseract")
+	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "tesseract")
 	if err != nil {
 		return err
 	}
@@ -339,7 +364,7 @@ func (v *Vault) ExtractEvidenceWithRegisteredDocling(evidenceID, artifactsPath s
 }
 
 func (v *Vault) ExtractEvidenceWithRegisteredDoclingContext(ctx context.Context, evidenceID, artifactsPath string) error {
-	tool, err := v.VerifyRegisteredLocalTool(ctx, "docling")
+	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "docling")
 	if err != nil {
 		return err
 	}
@@ -351,7 +376,7 @@ func (v *Vault) ExtractEvidenceWithRegisteredOCRmyPDF(evidenceID, language strin
 }
 
 func (v *Vault) ExtractEvidenceWithRegisteredOCRmyPDFContext(ctx context.Context, evidenceID, language string) (OCRmyPDFResult, error) {
-	tool, err := v.VerifyRegisteredLocalTool(ctx, "ocrmypdf")
+	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "ocrmypdf")
 	if err != nil {
 		return OCRmyPDFResult{}, err
 	}
@@ -363,7 +388,7 @@ func (v *Vault) InspectEvidencePDFWithRegisteredPDFCPU(evidenceID string) (PDFAs
 }
 
 func (v *Vault) InspectEvidencePDFWithRegisteredPDFCPUContext(ctx context.Context, evidenceID string) (PDFAssessment, error) {
-	tool, err := v.VerifyRegisteredLocalTool(ctx, "pdfcpu")
+	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "pdfcpu")
 	if err != nil {
 		return PDFAssessment{}, err
 	}
@@ -375,7 +400,7 @@ func (v *Vault) AskWithRegisteredLlamaCPP(question string, scopeIDs []string, mo
 }
 
 func (v *Vault) AskWithRegisteredLlamaCPPContext(ctx context.Context, question string, scopeIDs []string, modelPath string) (LlamaCPPAnswerResult, error) {
-	tool, err := v.VerifyRegisteredLocalTool(ctx, "llama.cpp")
+	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "llama.cpp")
 	if err != nil {
 		return LlamaCPPAnswerResult{}, err
 	}
