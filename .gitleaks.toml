@@ -1,0 +1,14 @@
+title = "ECO Gitleaks policy"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "generic-api-key"
+
+  [[rules.allowlists]]
+  description = "Historical governance prose false positive. Exact candidate file and exact sentence pattern only."
+  condition = "AND"
+  regexTarget = "line"
+  paths = ['''docs/partnership/CANDIDATE_ASSESSMENT_OPEN_KNOWLEDGE_FOUNDATION_2026-08-04\.md''']
+  regexes = ['''Authenticode signing, k[e]y recovery, SBOM/provenance reconciliation and reproducible-build controls''']
