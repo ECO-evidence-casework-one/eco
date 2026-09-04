@@ -23,6 +23,10 @@ The runtime registry checks the exact executable identity and self-checks its `r
 
 Ordinary PDF preview renders page 1. A source-backed citation with a recorded `Citation.Page` requests that exact page. The existing image-preview window is reused for viewing the rendered derivative; PDF-specific preview rotation is view-only and is not persisted as evidence rotation.
 
+## Actual ECO runtime qualification
+
+Windows workflow run `33913936762` exercised the exact pinned release through ECO rather than calling the renderer in isolation. It independently rechecked the asset size/SHA-256, opened a fresh ECO vault, imported and committed a synthetic two-page PDF through the normal preservation/verification pipeline, registered the renderer through the local-runtime registry, rendered page 1 and page 2 through `RenderEvidencePDFPageWithRegisteredPDFium`, confirmed both rendered derivatives remained bound to the preserved source object/SHA-256 and that the different-size requested pages produced different rendered dimensions, then deliberately modified the registered executable. ECO refused the next render after that modification. The workflow also removed the downloaded executable and uploaded no runnable artifact. Result: **PASS**.
+
 ## Remaining gate
 
 Before this renderer can be described as suitable for the controlling low-spec Windows target, the exact runtime plus ECO adapter must be exercised on that real machine. This integration does not waive accessibility, clean-machine, signing, publisher or release gates.
