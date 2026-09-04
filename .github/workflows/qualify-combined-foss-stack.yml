@@ -1,0 +1,50 @@
+name: Qualify combined GitHub FOSS stack
+
+on:
+  push:
+    branches:
+      - staging/github-foss-stack-20260904
+    paths:
+      - .github/workflows/qualify-combined-foss-stack.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  combine:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: staging/github-foss-stack-20260904
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+      - name: Merge all four green draft slices and qualify together
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ECO GitHub integration bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git fetch origin \
+            integration/tesseract-runtime-bundle-20260904 \
+            integration/mbox-reader-20260904 \
+            integration/hostile-input-fuzz-baseline-20260904
+          git merge --no-ff --no-edit origin/integration/tesseract-runtime-bundle-20260904
+          git merge --no-ff --no-edit origin/integration/mbox-reader-20260904
+          git merge --no-ff --no-edit origin/integration/hostile-input-fuzz-baseline-20260904
+          go mod tidy
+          gofmt -w internal/eco cmd/eco
+          go test ./...
+          go vet ./...
+          python3 scripts/check_source_policy.py
+          git diff --check
+          if ! git diff --quiet; then
+            git add -A
+            git commit -m 'Normalize combined FOSS integration stack'
+          fi
+          git push origin HEAD:staging/github-foss-stack-20260904
