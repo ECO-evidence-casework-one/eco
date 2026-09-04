@@ -1,0 +1,170 @@
+name: Controlled Tesseract Windows build wave 4
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/tesseract-controlled-build-wave4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - name: Build GitHub-only Tesseract x64 runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $work = Join-Path $env:RUNNER_TEMP 'eco-tesseract-build'
+          $src = Join-Path $work 'src'
+          $install = Join-Path $work 'install'
+          $control = Join-Path $work 'control'
+          $out = Join-Path $work 'out'
+          New-Item -ItemType Directory -Force -Path $src,$install,$control,$out | Out-Null
+
+          function Run([string]$Label, [scriptblock]$Command) {
+            Write-Host "== $Label =="
+            & $Command
+            if ($LASTEXITCODE -ne 0) { throw "$Label failed with native exit code $LASTEXITCODE" }
+          }
+          function ClonePinned([string]$Name,[string]$Repo,[string]$Ref) {
+            $path = Join-Path $src $Name
+            Run "clone $Name" { git clone --depth 1 --branch $Ref --no-tags "https://github.com/$Repo.git" $path }
+            $commit = (& git -C $path rev-parse HEAD).Trim()
+            if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') { throw "could not resolve $Name commit" }
+            return [pscustomobject]@{Name=$Name; Repo=$Repo; Ref=$Ref; Commit=$commit; Path=$path}
+          }
+          function CloneCommit([string]$Name,[string]$Repo,[string]$Commit) {
+            $path = Join-Path $src $Name
+            Run "clone $Name" { git clone --filter=blob:none --no-checkout "https://github.com/$Repo.git" $path }
+            Run "fetch $Name exact commit" { git -C $path fetch --depth 1 origin $Commit }
+            Run "checkout $Name exact commit" { git -C $path checkout --detach $Commit }
+            $actual = (& git -C $path rev-parse HEAD).Trim()
+            if ($actual -ne $Commit) { throw "$Name checkout mismatch: $actual" }
+            return [pscustomobject]@{Name=$Name; Repo=$Repo; Ref=$Commit; Commit=$actual; Path=$path}
+          }
+
+          $deps = @()
+          $deps += ClonePinned 'zlib-ng' 'zlib-ng/zlib-ng' '2.3.3'
+          $deps += ClonePinned 'libpng' 'pnggroup/libpng' 'v1.6.51'
+          $deps += ClonePinned 'libjpeg-turbo' 'libjpeg-turbo/libjpeg-turbo' '3.2.0'
+          $deps += ClonePinned 'leptonica' 'DanBloomberg/leptonica' '1.87.0'
+          $deps += CloneCommit 'tesseract' 'tesseract-ocr/tesseract' 'fb87a84b6e3384b424b2169c76de9031046861e9'
+          $deps += CloneCommit 'tessdata_fast' 'tesseract-ocr/tessdata_fast' '87416418657359cb625c412a48b6e1d6d41c29bd'
+
+          foreach ($d in $deps) {
+            $licDir = Join-Path $control ('licenses/' + $d.Name)
+            New-Item -ItemType Directory -Force -Path $licDir | Out-Null
+            $lic = Get-ChildItem -LiteralPath $d.Path -File | Where-Object { $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE)' }
+            if (-not $lic) { throw "No root licence/notice file found for $($d.Name)" }
+            foreach ($f in $lic) { Copy-Item -LiteralPath $f.FullName -Destination $licDir }
+          }
+
+          $prefix = $install
+          $prefixEsc = $prefix.Replace('\','/')
+
+          # zlib-ng in zlib compatibility mode; shared runtime.
+          Run 'configure zlib-ng' { cmake -S (Join-Path $src 'zlib-ng') -B (Join-Path $src 'zlib-ng/build') -A x64 -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DZLIB_COMPAT=ON -DZLIB_ENABLE_TESTS=OFF -DWITH_GTEST=OFF -DBUILD_SHARED_LIBS=ON }
+          Run 'build/install zlib-ng' { cmake --build (Join-Path $src 'zlib-ng/build') --config Release --target install --parallel 2 }
+
+          # PNG support from GitHub source.
+          Run 'configure libpng' { cmake -S (Join-Path $src 'libpng') -B (Join-Path $src 'libpng/build') -A x64 -DCMAKE_PREFIX_PATH="$prefixEsc" -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DPNG_TESTS=OFF -DPNG_SHARED=ON -DPNG_STATIC=OFF }
+          Run 'build/install libpng' { cmake --build (Join-Path $src 'libpng/build') --config Release --target install --parallel 2 }
+
+          # JPEG support from GitHub source.
+          Run 'configure libjpeg-turbo' { cmake -S (Join-Path $src 'libjpeg-turbo') -B (Join-Path $src 'libjpeg-turbo/build') -A x64 -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DENABLE_SHARED=ON -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF -DWITH_TESTS=OFF }
+          Run 'build/install libjpeg-turbo' { cmake --build (Join-Path $src 'libjpeg-turbo/build') --config Release --target install --parallel 2 }
+
+          # Leptonica is deliberately built only against the GitHub-sourced
+          # PNG/JPEG/zlib stack. TIFF/WebP/GIF/OpenJPEG are optional and omitted.
+          Run 'configure leptonica' { cmake -S (Join-Path $src 'leptonica') -B (Join-Path $src 'leptonica/build') -A x64 -DCMAKE_PREFIX_PATH="$prefixEsc" -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DSW_BUILD=OFF -DBUILD_PROG=OFF -DBUILD_SHARED_LIBS=ON }
+          Run 'build/install leptonica' { cmake --build (Join-Path $src 'leptonica/build') --config Release --target install --parallel 2 }
+
+          # Exact ECO-approved Tesseract source commit. No training tools,
+          # graphics, OpenMP, curl or archive dependency is required for ECO's
+          # local image-to-TSV OCR path.
+          Run 'configure tesseract' { cmake -S (Join-Path $src 'tesseract') -B (Join-Path $src 'tesseract/build') -A x64 -DCMAKE_PREFIX_PATH="$prefixEsc" -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DBUILD_SHARED_LIBS=ON -DBUILD_TRAINING_TOOLS=OFF -DGRAPHICS_DISABLED=ON -DOPENMP_BUILD=OFF -DENABLE_LTO=ON }
+          Run 'build/install tesseract' { cmake --build (Join-Path $src 'tesseract/build') --config Release --target install --parallel 2 }
+
+          $tessdata = Join-Path $install 'share/tessdata'
+          New-Item -ItemType Directory -Force -Path $tessdata | Out-Null
+          foreach ($model in @('eng.traineddata','osd.traineddata')) {
+            $source = Join-Path (Join-Path $src 'tessdata_fast') $model
+            if (-not (Test-Path -LiteralPath $source -PathType Leaf)) { throw "Missing $model at pinned tessdata_fast commit" }
+            Copy-Item -LiteralPath $source -Destination $tessdata
+          }
+
+          $tesseractExe = Get-ChildItem -LiteralPath $install -Recurse -Filter 'tesseract.exe' | Select-Object -First 1
+          if (-not $tesseractExe) { throw 'tesseract.exe was not installed' }
+          $runtimeBin = $tesseractExe.Directory.FullName
+          $env:PATH = "$runtimeBin;$env:PATH"
+          $env:TESSDATA_PREFIX = $tessdata
+
+          Run 'tesseract version smoke test' { & $tesseractExe.FullName --version }
+          $langs = & $tesseractExe.FullName --list-langs 2>&1 | Out-String
+          if ($LASTEXITCODE -ne 0 -or $langs -notmatch '(?m)^eng\s*$' -or $langs -notmatch '(?m)^osd\s*$') {
+            throw "Tesseract language smoke test failed: $langs"
+          }
+
+          # Actual OCR smoke test on a locally generated PNG. This proves the
+          # executable, Leptonica image decoding and English traineddata work together.
+          Add-Type -AssemblyName System.Drawing
+          $bmp = New-Object System.Drawing.Bitmap 900,180
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          try {
+            $g.Clear([System.Drawing.Color]::White)
+            $font = New-Object System.Drawing.Font('Arial',48,[System.Drawing.FontStyle]::Bold)
+            try { $g.DrawString('ECO OCR TEST 123',$font,[System.Drawing.Brushes]::Black,20,45) } finally { $font.Dispose() }
+            $testPng = Join-Path $work 'ocr-smoke.png'
+            $bmp.Save($testPng,[System.Drawing.Imaging.ImageFormat]::Png)
+          } finally { $g.Dispose(); $bmp.Dispose() }
+          $ocrText = & $tesseractExe.FullName $testPng stdout -l eng 2>$null | Out-String
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($ocrText)) { throw 'Actual OCR smoke test failed or returned no text' }
+          if ($ocrText -notmatch 'ECO' -or $ocrText -notmatch '123') { throw "OCR smoke text was unexpected: $ocrText" }
+
+          $manifest = [ordered]@{
+            schema = 1
+            platform = 'windows-x86_64'
+            purpose = 'ECO local Tesseract OCR runtime controlled build'
+            github_only_sources = $true
+            tiff_support = $false
+            webp_support = $false
+            gif_support = $false
+            openjpeg_support = $false
+            language_models = @('eng','osd')
+            ocr_smoke_test = 'PASS'
+            sources = @($deps | ForEach-Object { [ordered]@{ name=$_.Name; repo=$_.Repo; ref=$_.Ref; commit=$_.Commit } })
+          }
+          $manifest | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $control 'BUILD_MANIFEST.json') -Encoding utf8
+          $ocrText.Trim() | Set-Content -LiteralPath (Join-Path $control 'OCR_SMOKE_RESULT.txt') -Encoding utf8
+
+          $fileRows = @()
+          foreach ($f in Get-ChildItem -LiteralPath $install -File -Recurse | Sort-Object FullName) {
+            $rel = [IO.Path]::GetRelativePath($install,$f.FullName).Replace('\','/')
+            $fileRows += [pscustomobject]@{ path=$rel; bytes=$f.Length; sha256=(Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant() }
+          }
+          $fileRows | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $control 'RUNTIME_FILE_HASHES.json') -Encoding utf8
+
+          $packageRoot = Join-Path $work 'package/ECO_TESSERACT_WINDOWS_X64'
+          New-Item -ItemType Directory -Force -Path $packageRoot | Out-Null
+          Copy-Item -LiteralPath $install -Destination (Join-Path $packageRoot 'runtime') -Recurse
+          Copy-Item -LiteralPath $control -Destination (Join-Path $packageRoot 'control') -Recurse
+          $zip = Join-Path $out 'ECO_TESSERACT_WINDOWS_X64_WAVE4_20260904.zip'
+          Compress-Archive -Path "$packageRoot/*" -DestinationPath $zip -CompressionLevel Optimal
+          $zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{ file=(Split-Path $zip -Leaf); bytes=(Get-Item $zip).Length; sha256=$zipHash } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $out 'PACKAGE_RECEIPT.json') -Encoding utf8
+          "WAVE4_OUT=$out" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Upload verified Tesseract runtime package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO-TESSERACT-WINDOWS-X64-WAVE4-20260904
+          path: ${{ env.WAVE4_OUT }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
