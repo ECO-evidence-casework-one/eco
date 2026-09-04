@@ -1,0 +1,180 @@
+name: Qualify pinned pdfium-cli Windows renderer
+
+on:
+  push:
+    branches:
+      - ops/pdfium-cli-render-qualification-20260904
+    paths:
+      - .github/workflows/qualify-pdfium-cli-render.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ops/pdfium-cli-render-qualification-20260904
+          fetch-depth: 0
+
+      - name: Download and verify exact GitHub release asset
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://github.com/klippa-app/pdfium-cli/releases/download/v0.11.2/pdfium-webassembly-windows-amd64'
+          Invoke-WebRequest -Uri $url -OutFile pdfium.exe
+          $info = Get-Item pdfium.exe
+          if ($info.Length -ne 16988160) { throw "Unexpected pdfium-cli asset size: $($info.Length)" }
+          $hash = (Get-FileHash pdfium.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f') { throw "pdfium-cli SHA-256 mismatch: $hash" }
+          $head = [System.IO.File]::ReadAllBytes((Resolve-Path pdfium.exe))[0..1]
+          if ($head[0] -ne 0x4d -or $head[1] -ne 0x5a) { throw 'Downloaded asset is not a Windows PE executable' }
+          .\pdfium.exe --help | Out-File -Encoding utf8 pdfium-help.txt
+          if ($LASTEXITCODE -ne 0) { throw 'pdfium-cli --help failed' }
+
+      - name: Generate deterministic one-page PDF
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          from pathlib import Path
+
+          objects = [
+              b'<< /Type /Catalog /Pages 2 0 R >>',
+              b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+              b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+              b'<< /Length 57 >>\nstream\nBT /F1 24 Tf 72 720 Td (ECO PDF RENDER 123) Tj ET\nendstream',
+              b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+          ]
+          out = bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
+          offsets = [0]
+          for i, obj in enumerate(objects, 1):
+              offsets.append(len(out))
+              out += f'{i} 0 obj\n'.encode() + obj + b'\nendobj\n'
+          xref = len(out)
+          out += f'xref\n0 {len(objects)+1}\n'.encode()
+          out += b'0000000000 65535 f \n'
+          for off in offsets[1:]:
+              out += f'{off:010d} 00000 n \n'.encode()
+          out += f'trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+          Path('known.pdf').write_bytes(out)
+          Path('malformed.pdf').write_bytes(b'%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\n')
+          '@ | python -
+          if (!(Test-Path known.pdf)) { throw 'Known PDF generation failed' }
+
+      - name: Render, benchmark and prove malformed-input rejection
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          function Run-Render([string]$outName) {
+            $psi = [System.Diagnostics.ProcessStartInfo]::new()
+            $psi.FileName = (Resolve-Path '.\pdfium.exe')
+            $psi.Arguments = "render --pages 1 --file-type png --max-width 1200 `"$((Resolve-Path '.\known.pdf').Path)`" `"$((Join-Path (Get-Location) $outName))`""
+            $psi.UseShellExecute = $false
+            $psi.RedirectStandardOutput = $true
+            $psi.RedirectStandardError = $true
+            $psi.CreateNoWindow = $true
+            $p = [System.Diagnostics.Process]::new()
+            $p.StartInfo = $psi
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            if (-not $p.Start()) { throw 'Could not start pdfium-cli' }
+            if (-not $p.WaitForExit(60000)) {
+              try { $p.Kill($true) } catch {}
+              throw 'pdfium-cli render exceeded 60-second qualification limit'
+            }
+            $sw.Stop()
+            $stdout = $p.StandardOutput.ReadToEnd()
+            $stderr = $p.StandardError.ReadToEnd()
+            if ($p.ExitCode -ne 0) { throw "pdfium-cli render failed: $stderr $stdout" }
+            if (!(Test-Path $outName)) { throw "Rendered PNG missing: $outName" }
+            return [pscustomobject]@{
+              Milliseconds = $sw.ElapsedMilliseconds
+              PeakBytes = $p.PeakWorkingSet64
+              OutputBytes = (Get-Item $outName).Length
+            }
+          }
+
+          $runs = @()
+          $runs += Run-Render 'render-1.png'
+          $runs += Run-Render 'render-2.png'
+          $runs += Run-Render 'render-3.png'
+
+          @'
+          from pathlib import Path
+          import struct
+          for name in ['render-1.png','render-2.png','render-3.png']:
+              data = Path(name).read_bytes()
+              if not data.startswith(b'\x89PNG\r\n\x1a\n'):
+                  raise SystemExit(f'{name}: invalid PNG signature')
+              if len(data) < 24:
+                  raise SystemExit(f'{name}: truncated PNG')
+              width, height = struct.unpack('>II', data[16:24])
+              if width < 500 or height < 500 or width > 1200 or height > 2000:
+                  raise SystemExit(f'{name}: implausible dimensions {width}x{height}')
+          '@ | python -
+
+          $psi = [System.Diagnostics.ProcessStartInfo]::new()
+          $psi.FileName = (Resolve-Path '.\pdfium.exe')
+          $psi.Arguments = "render --pages 1 --file-type png --max-width 1200 `"$((Resolve-Path '.\malformed.pdf').Path)`" `"$((Join-Path (Get-Location) 'bad.png'))`""
+          $psi.UseShellExecute = $false
+          $psi.RedirectStandardOutput = $true
+          $psi.RedirectStandardError = $true
+          $psi.CreateNoWindow = $true
+          $bad = [System.Diagnostics.Process]::new()
+          $bad.StartInfo = $psi
+          if (-not $bad.Start()) { throw 'Could not start malformed-PDF test' }
+          if (-not $bad.WaitForExit(15000)) {
+            try { $bad.Kill($true) } catch {}
+            throw 'Malformed PDF caused pdfium-cli to exceed 15-second bound'
+          }
+          if ($bad.ExitCode -eq 0) { throw 'Malformed PDF was accepted as a successful render' }
+          if (Test-Path bad.png) { Remove-Item -Force bad.png }
+
+          $avgMs = [math]::Round((($runs | Measure-Object -Property Milliseconds -Average).Average), 2)
+          $maxMs = ($runs | Measure-Object -Property Milliseconds -Maximum).Maximum
+          $peakBytes = ($runs | Measure-Object -Property PeakBytes -Maximum).Maximum
+          $peakMiB = [math]::Round($peakBytes / 1MB, 2)
+          $outBytes = ($runs | Measure-Object -Property OutputBytes -Maximum).Maximum
+
+          $receipt = @"
+          # pdfium-cli Windows WebAssembly render qualification
+
+          Date: 2026-09-04
+
+          Status: **PASS — GitHub-hosted Windows runner qualification only.** This is not low-spec Acer evidence and does not approve integration or release.
+
+          - Upstream: `klippa-app/pdfium-cli`
+          - Licence: MIT; upstream states embedded Wazero and PDFium are Apache-2.0.
+          - Release: `v0.11.2`
+          - Exact source tag commit: `260c846dbbd180fdc478a2771e9dae9914164846`
+          - Asset: `pdfium-webassembly-windows-amd64`
+          - Asset bytes: `16988160`
+          - Asset SHA-256: `b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f`
+          - Packaging: single Windows PE; no separately installed PDFium runtime required for the WebAssembly release type.
+          - Known one-page PDF: rendered to PNG successfully three times at max width 1200 px.
+          - Mean render process time on GitHub runner: `${avgMs} ms`
+          - Slowest of three runs: `${maxMs} ms`
+          - Maximum observed process peak working set: `${peakMiB} MiB`
+          - Maximum rendered PNG bytes: `${outBytes}`
+          - Malformed PDF: non-zero exit within 15 seconds; no output retained.
+          - No ECO executable or pdfium-cli binary was uploaded as an Actions artifact.
+
+          Decision boundary: qualify further as an isolated, hash-pinned local rendering runtime. Before ECO adoption, repeat on the controlling low-spec Windows baseline and add runtime re-verification plus page/output bounds in ECO.
+          "@
+          New-Item -ItemType Directory -Force -Path docs\foss\qualification | Out-Null
+          Set-Content -LiteralPath docs\foss\qualification\PDFIUM_CLI_RENDER_QUALIFICATION_20260904.md -Value $receipt -Encoding utf8
+
+      - name: Commit text-only qualification receipt
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'ECO GitHub qualification bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/foss/qualification/PDFIUM_CLI_RENDER_QUALIFICATION_20260904.md
+          git diff --cached --check
+          git commit -m 'Record pdfium-cli render qualification'
+          git push origin HEAD:ops/pdfium-cli-render-qualification-20260904
