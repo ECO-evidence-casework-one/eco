@@ -37,6 +37,7 @@ const (
 	msgVerifyDone     = WM_APP + 8
 	msgPreviewReady   = WM_APP + 9
 	msgMatterDone     = WM_APP + 10
+	msgRuntimeDone    = WM_APP + 11
 )
 
 type hitRegion struct {
@@ -72,6 +73,7 @@ type application struct {
 	previewErr                                                                string
 	matterCreated                                                             string
 	matterErr                                                                 string
+	runtimeNotice                                                             string
 	pendingCitationRegion                                                     *eco.NormalizedRegion
 }
 
@@ -343,6 +345,17 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 				invalidate(hw)
 			}
 		}
+		invalidate(hwnd)
+		return 0
+	case msgRuntimeDone:
+		app.mu.Lock()
+		notice := app.runtimeNotice
+		app.runtimeNotice = ""
+		app.importing = false
+		app.progress = eco.ImportProgress{}
+		app.mu.Unlock()
+		app.refreshView()
+		messageBox(hwnd, "Local OCR runtime ready", notice, MB_OK|MB_ICONINFORMATION)
 		invalidate(hwnd)
 		return 0
 	case msgMatterDone:
@@ -875,6 +888,11 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 	w2 := (right - x - gapB) / 2
 	a.drawButton(hdc, "backup", "Create encrypted backup", RECT{x, buttonTop + 52, x + w2, buttonTop + 94}, true)
 	a.drawButton(hdc, "restore", "Restore encrypted backup", RECT{x + w2 + gapB, buttonTop + 52, right, buttonTop + 94}, false)
+	tesseractLabel := "Locate verified Tesseract runtime"
+	if reg, err := a.vault.RegisteredTesseractRuntimeBundle(); err == nil {
+		tesseractLabel = "Tesseract " + reg.Version + " — verified runtime registered"
+	}
+	a.drawButton(hdc, "tesseractRuntime", tesseractLabel, RECT{x, buttonTop + 104, right, buttonTop + 146}, false)
 	if a.processing() {
 		a.drawProgress(hdc, RECT{x, buttonTop - 68, right, buttonTop - 10})
 	}
@@ -937,6 +955,8 @@ func (a *application) handleClick(x, y int32, double bool) {
 				a.verifyEvidence()
 			case "openVault":
 				exec.Command("explorer.exe", a.vault.Root).Start()
+			case "tesseractRuntime":
+				a.locateTesseractRuntime()
 			case "lowSensory":
 				go func() {
 					_, _ = a.vault.ToggleLowSensory()
@@ -1460,6 +1480,37 @@ func (a *application) createQuickMatter() {
 	}()
 }
 
+func (a *application) locateTesseractRuntime() {
+	root := openFolderDialogWithTitle(a.hwnd, "Select the extracted ECO Tesseract Wave 4 runtime folder")
+	if root == "" {
+		return
+	}
+	a.mu.Lock()
+	if a.importing {
+		a.mu.Unlock()
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	a.importing = true
+	a.progress = eco.ImportProgress{Name: filepath.Base(root), Stage: "Verifying complete Tesseract runtime"}
+	a.mu.Unlock()
+	a.setPage("settings")
+	go func() {
+		registration, err := a.vault.RegisterTesseractRuntimeBundle(root)
+		if err != nil {
+			a.mu.Lock()
+			a.lastErr = err.Error()
+			a.mu.Unlock()
+			procPostMessageW.Call(a.hwnd, msgImportError, 0, 0)
+			return
+		}
+		a.mu.Lock()
+		a.runtimeNotice = fmt.Sprintf("ECO verified the complete GitHub-built Tesseract runtime.\r\n\r\nVersion: %s\r\nRuntime: %s\r\n\r\nThe executable, DLLs, eng/osd language data and Wave 4 control receipts will be re-verified before OCR is allowed to run.", registration.Version, registration.Root)
+		a.mu.Unlock()
+		procPostMessageW.Call(a.hwnd, msgRuntimeDone, 0, 0)
+	}()
+}
+
 func (a *application) reviewCount() int {
 	n := 0
 	for _, e := range a.view.Evidence {
@@ -1804,8 +1855,15 @@ func droppedPaths(hdrop uintptr) []string {
 }
 
 func openFolderDialog(owner uintptr) string {
+	return openFolderDialogWithTitle(owner, "Add an evidence folder — symbolic links will not be followed")
+}
+
+func openFolderDialogWithTitle(owner uintptr, title string) string {
+	if strings.TrimSpace(title) == "" {
+		title = "Select a folder"
+	}
 	display := make([]uint16, 260)
-	bi := BROWSEINFO{HwndOwner: owner, PszDisplayName: &display[0], LpszTitle: utf16Ptr("Add an evidence folder — symbolic links will not be followed"), UlFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX}
+	bi := BROWSEINFO{HwndOwner: owner, PszDisplayName: &display[0], LpszTitle: utf16Ptr(title), UlFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX}
 	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
 	if pidl == 0 {
 		return ""

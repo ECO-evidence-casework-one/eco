@@ -352,6 +352,13 @@ func (v *Vault) OCRImageWithRegisteredTesseract(evidenceID, language string) err
 }
 
 func (v *Vault) OCRImageWithRegisteredTesseractContext(ctx context.Context, evidenceID, language string) error {
+	bundle, bundleErr := v.VerifyRegisteredTesseractRuntimeBundleContext(ctx)
+	if bundleErr == nil {
+		return v.OCRImageWithTesseractRuntimeContext(ctx, evidenceID, bundle.Executable, language, bundle.TessdataDir)
+	}
+	if !errors.Is(bundleErr, os.ErrNotExist) {
+		return bundleErr
+	}
 	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "tesseract")
 	if err != nil {
 		return err

@@ -21,6 +21,14 @@ var tesseractLanguagePattern = regexp.MustCompile(`^[A-Za-z0-9_+-]{1,100}$`)
 // download and no network access. The caller must provide the exact local
 // executable and a verified source receipt.
 func RunTesseractOCR(ctx context.Context, executable, imagePath, language string, source SourceReceipt, imageWidth, imageHeight int) (OCRReceipt, []SourceSegment, error) {
+	return runTesseractOCR(ctx, executable, imagePath, language, "", source, imageWidth, imageHeight)
+}
+
+func RunTesseractOCRWithTessdata(ctx context.Context, executable, imagePath, language, tessdataDir string, source SourceReceipt, imageWidth, imageHeight int) (OCRReceipt, []SourceSegment, error) {
+	return runTesseractOCR(ctx, executable, imagePath, language, tessdataDir, source, imageWidth, imageHeight)
+}
+
+func runTesseractOCR(ctx context.Context, executable, imagePath, language, tessdataDir string, source SourceReceipt, imageWidth, imageHeight int) (OCRReceipt, []SourceSegment, error) {
 	if ctx == nil {
 		return OCRReceipt{}, nil, errors.New("OCR context is required")
 	}
@@ -55,7 +63,7 @@ func RunTesseractOCR(ctx context.Context, executable, imagePath, language string
 	defer os.RemoveAll(tempDir)
 
 	outputBase := filepath.Join(tempDir, "ocr")
-	args := tesseractOCRArgs(inputPath, outputBase, language)
+	args := tesseractOCRArgsWithTessdata(inputPath, outputBase, language, tessdataDir)
 	cmd := exec.CommandContext(ctx, exePath, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -91,7 +99,15 @@ func RunTesseractOCR(ctx context.Context, executable, imagePath, language string
 }
 
 func tesseractOCRArgs(inputPath, outputBase, language string) []string {
-	return []string{inputPath, outputBase, "-l", language, "tsv"}
+	return tesseractOCRArgsWithTessdata(inputPath, outputBase, language, "")
+}
+
+func tesseractOCRArgsWithTessdata(inputPath, outputBase, language, tessdataDir string) []string {
+	args := []string{inputPath, outputBase}
+	if strings.TrimSpace(tessdataDir) != "" {
+		args = append(args, "--tessdata-dir", tessdataDir)
+	}
+	return append(args, "-l", language, "tsv")
 }
 
 func tesseractVersion(ctx context.Context, executable string) (string, error) {
