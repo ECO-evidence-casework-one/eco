@@ -24,3 +24,11 @@ That historical record is not authoritative for later source commits or a future
 ## Release authority
 
 P0 issue #15 controls the future actual-build SBOM, licence, notice and provenance package. No executable, public binary, ordinary-user test or release is approved by this source-level notice file.
+
+
+## emersion/go-mbox — MBOX message framing
+
+- Upstream: `https://github.com/emersion/go-mbox`
+- Exact acquired commit: `1345da99f1254a23f517ffdc979f92359442473d`
+- Licence: MIT.
+- ECO use: bounded, read-only MBOX message framing before ECO's existing MIME/email extraction.

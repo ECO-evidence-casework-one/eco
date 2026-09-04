@@ -213,6 +213,8 @@ func typeFromExtension(ext string) string {
 		return "odp"
 	case ".eml":
 		return "eml"
+	case ".mbox", ".mbx":
+		return "mbox"
 	case ".zip":
 		return "zip"
 	case ".7z":
@@ -256,7 +258,7 @@ func looksText(b []byte) bool {
 
 func isTextFamily(t string) bool {
 	switch t {
-	case "text", "markdown", "csv", "json", "xml", "html", "rtf", "eml":
+	case "text", "markdown", "csv", "json", "xml", "html", "rtf", "eml", "mbox":
 		return true
 	}
 	return false

@@ -21,6 +21,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	mbox "github.com/emersion/go-mbox"
 )
 
 const maxExtractBytes = int64(24 * 1024 * 1024)
@@ -50,6 +52,8 @@ func ExtractReadable(path, typ string) (string, []SourceSegment, []string) {
 		text, err = extractOpenDocument(path)
 	case "eml":
 		text, err = extractEML(path)
+	case "mbox":
+		text, err = extractMBOX(path)
 	case "zip":
 		text, err = inspectZIP(path)
 	default:
@@ -383,13 +387,23 @@ func extractOpenDocument(path string) (string, error) {
 	return xmlText(d, map[string]bool{"p": true, "h": true, "table-row": true}), nil
 }
 
+const (
+	maxMBOXScanBytes    = int64(256 * 1024 * 1024)
+	maxMBOXMessageBytes = int64(8 * 1024 * 1024)
+	maxMBOXMessages     = 10000
+)
+
 func extractEML(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	msg, err := mail.ReadMessage(bufio.NewReader(io.LimitReader(f, maxExtractBytes)))
+	return extractMailReader(io.LimitReader(f, maxExtractBytes))
+}
+
+func extractMailReader(r io.Reader) (string, error) {
+	msg, err := mail.ReadMessage(bufio.NewReader(r))
 	if err != nil {
 		return "", err
 	}
@@ -418,6 +432,7 @@ func extractEML(path string) (string, error) {
 				s := string(d)
 				if strings.Contains(pct, "html") {
 					s = tagRE.ReplaceAllString(scriptRE.ReplaceAllString(s, " "), "\n")
+					s = html.UnescapeString(s)
 				}
 				b.WriteString(s)
 				b.WriteByte('\n')
@@ -428,6 +443,73 @@ func extractEML(path string) (string, error) {
 		b.Write(d)
 	}
 	return b.String(), nil
+}
+
+func extractMBOX(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	reader := mbox.NewReader(io.LimitReader(f, maxMBOXScanBytes))
+	var out strings.Builder
+	messages := 0
+	for messages < maxMBOXMessages {
+		messageReader, nextErr := reader.NextMessage()
+		if nextErr == io.EOF {
+			break
+		}
+		if nextErr != nil {
+			if messages == 0 {
+				return "", nextErr
+			}
+			fmt.Fprintf(&out, "[Mailbox parsing stopped after message %d: %s]\n", messages, boundMailboxDiagnostic(nextErr.Error()))
+			break
+		}
+		messages++
+		raw, readErr := io.ReadAll(io.LimitReader(messageReader, maxMBOXMessageBytes+1))
+		if readErr != nil {
+			fmt.Fprintf(&out, "Message %d\n[Message could not be read safely: %s]\n\n", messages, boundMailboxDiagnostic(readErr.Error()))
+			continue
+		}
+		if int64(len(raw)) > maxMBOXMessageBytes {
+			fmt.Fprintf(&out, "Message %d\n[Message exceeds ECO's 8 MiB automatic-reading limit and was not decoded.]\n\n", messages)
+			continue
+		}
+		text, parseErr := extractMailReader(bytes.NewReader(raw))
+		if parseErr != nil {
+			fmt.Fprintf(&out, "Message %d\n[Message headers/body could not be decoded safely: %s]\n\n", messages, boundMailboxDiagnostic(parseErr.Error()))
+			continue
+		}
+		fmt.Fprintf(&out, "Message %d\n%s\n\n", messages, strings.TrimSpace(text))
+		if out.Len() >= int(maxExtractBytes) {
+			out.WriteString("[Mailbox readable preview reached ECO's 24 MiB extracted-text bound.]\n")
+			break
+		}
+	}
+	if messages >= maxMBOXMessages {
+		fmt.Fprintf(&out, "[Mailbox preview reached the %d-message automatic-reading limit.]\n", maxMBOXMessages)
+	}
+	if info.Size() > maxMBOXScanBytes {
+		fmt.Fprintf(&out, "[Mailbox is larger than ECO's %s automatic scan window; later content was not read in this preview.]\n", HumanBytes(maxMBOXScanBytes))
+	}
+	if messages == 0 && strings.TrimSpace(out.String()) == "" {
+		return "", fmt.Errorf("mailbox contains no readable mbox messages")
+	}
+	return out.String(), nil
+}
+
+func boundMailboxDiagnostic(text string) string {
+	text = strings.TrimSpace(text)
+	runes := []rune(text)
+	if len(runes) > 384 {
+		return string(runes[:384]) + "…"
+	}
+	return text
 }
 
 func inspectZIP(path string) (string, error) {
