@@ -1,5 +1,6 @@
 name: Apply native PDF reader integration
 
+# One-shot controlled integration runner; script repair verified 2026-09-04.
 on:
   push:
     branches:
