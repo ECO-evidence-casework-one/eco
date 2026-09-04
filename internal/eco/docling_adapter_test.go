@@ -1,6 +1,7 @@
 package eco
 
 import (
+	"bytes"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -65,10 +66,17 @@ func TestRequireAbsoluteDirectory(t *testing.T) {
 }
 
 func TestBoundedBufferDoesNotGrowPastLimit(t *testing.T) {
-	var target strings.Builder
-	_ = target
-	var b boundedBuffer
-	// Use the real bytes.Buffer path while keeping the test explicit.
-	buf := new(strings.Builder)
-	_ = buf
+	var target bytes.Buffer
+	writer := &boundedBuffer{buf: &target, max: 5}
+	payload := []byte("0123456789")
+	n, err := writer.Write(payload)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if n != len(payload) {
+		t.Fatalf("writer must report the input consumed; got %d want %d", n, len(payload))
+	}
+	if target.String() != "01234" {
+		t.Fatalf("diagnostic buffer exceeded bound or stored wrong prefix: %q", target.String())
+	}
 }
