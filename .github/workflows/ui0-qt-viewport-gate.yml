@@ -1,0 +1,104 @@
+name: UI-0 Qt viewport consumer gate
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/ui0-qt-viewport-gate.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qt-viewport-consumer:
+    name: Qt clean consumer viewport + sticky composer
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      # Reuse the exact sticky-composer Qt artifact from presentation-gate run 31197014779.
+      # It already passed packaging, runtime closure and clean-consumer UIA/search/text gates.
+      # This job does not rebuild Qt.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ECO_UI0_QT_WINDOWS
+          path: consumer/qt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          run-id: 31197014779
+      - name: Test 1024x640 sticky composer reachability
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          Add-Type @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class EcoWindowProbe {
+              [DllImport("user32.dll", SetLastError=true)]
+              public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+          }
+          '@
+
+          function Find-Root([int]$processId) {
+            $desktop = [System.Windows.Automation.AutomationElement]::RootElement
+            $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$processId)
+            return $desktop.FindFirst([System.Windows.Automation.TreeScope]::Children,$condition)
+          }
+          function Find-ByName($root,[string]$name) {
+            $condition = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::NameProperty,$name)
+            return $root.FindFirst([System.Windows.Automation.TreeScope]::Descendants,$condition)
+          }
+
+          $savedPath = $env:PATH
+          $p = $null
+          try {
+            $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+            $exe = (Resolve-Path 'consumer/qt/ECO_UI0_QT.exe').Path
+            $p = Start-Process -FilePath $exe -WorkingDirectory (Split-Path $exe) -PassThru
+            $deadline=(Get-Date).AddSeconds(15); $root=$null
+            do {
+              Start-Sleep -Milliseconds 250
+              if ($p.HasExited) { throw "Qt exited early: $($p.ExitCode)" }
+              $root=Find-Root $p.Id
+            } while ($null -eq $root -and (Get-Date) -lt $deadline)
+            if ($null -eq $root) { throw 'No accessible Qt top-level window.' }
+
+            $hwnd=[IntPtr][int]$root.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::NativeWindowHandleProperty)
+            if ($hwnd.ToInt64() -eq 0) { throw 'Qt UIA root has no native window handle.' }
+            if (-not [EcoWindowProbe]::SetWindowPos($hwnd,[IntPtr]::Zero,20,20,1024,640,0x0040)) { throw 'SetWindowPos failed.' }
+            Start-Sleep -Seconds 1
+            $root=Find-Root $p.Id
+            if ($null -eq $root) { throw 'Qt UIA root disappeared after resize.' }
+
+            $composer=Find-ByName $root 'AI message'
+            if ($null -eq $composer) { throw 'Sticky AI composer is missing from the accessibility tree at 1024x640.' }
+            if ($composer.Current.IsOffscreen) { throw 'Sticky AI composer is off-screen at 1024x640.' }
+            if (-not $composer.Current.IsKeyboardFocusable) { throw 'Sticky AI composer is not keyboard-focusable.' }
+
+            $windowRect=$root.Current.BoundingRectangle
+            $composerRect=$composer.Current.BoundingRectangle
+            if ($composerRect.Width -le 20 -or $composerRect.Height -le 20) { throw 'Sticky AI composer has an unusably small bounding rectangle.' }
+            if ($composerRect.Left -lt $windowRect.Left -or $composerRect.Right -gt $windowRect.Right -or $composerRect.Top -lt $windowRect.Top -or $composerRect.Bottom -gt $windowRect.Bottom) {
+              throw "Sticky AI composer extends outside the 1024x640 application window. Window=$windowRect Composer=$composerRect"
+            }
+
+            $composer.SetFocus()
+            Start-Sleep -Milliseconds 250
+            $focused=[System.Windows.Automation.AutomationElement]::FocusedElement
+            if ($null -eq $focused -or $focused.Current.Name -ne 'AI message') { throw 'Sticky AI composer did not accept keyboard focus.' }
+
+            $send=Find-ByName $root 'Send AI message'
+            if ($null -eq $send -or $send.Current.IsOffscreen) { throw 'Sticky Send button is missing or off-screen at 1024x640.' }
+
+            "PASS: Qt sticky composer viewport gate"
+            "window=1024x640"
+            "composer_visible=PASS"
+            "composer_inside_window=PASS"
+            "composer_keyboard_focus=PASS"
+            "send_visible=PASS"
+          }
+          finally {
+            if ($null -ne $p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+            $env:PATH=$savedPath
+          }
