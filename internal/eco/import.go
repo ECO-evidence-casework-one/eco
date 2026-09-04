@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"time"
 )
 
 func (v *Vault) ImportFile(path string, progress func(ImportProgress)) (EvidenceItem, bool, error) {
@@ -36,19 +37,29 @@ func (v *Vault) ImportFileContext(ctx context.Context, path string, progress fun
 		if existing.SHA256 != intakeHash || !preservationUsable(existing) {
 			continue
 		}
-		if _, verifyErr := v.verifyPreservedObject(existing.ID, existing.ObjectFile, existing.SHA256, existing.Size); verifyErr != nil {
+		if existing.Size != sourceInfo.Size() {
+			return EvidenceItem{}, false, errors.New("SHA-256 matched existing evidence but byte sizes differ; refusing unsafe deduplication")
+		}
+		preservedReceipt, verifyErr := v.verifyPreservedObject(existing.ID, existing.ObjectFile, existing.SHA256, existing.Size)
+		if verifyErr != nil {
 			v.markEvidenceVerificationFailure(existing.ID, verifyErr)
 			continue
 		}
 		if progress != nil {
 			progress(ImportProgress{Path: path, Name: info.Name(), Stage: "Revalidating duplicate source", Total: info.Size()})
 		}
-		duplicateHash, _, _, sourceErr := fingerprintSource(ctx, path, sourceInfo, nil)
+		duplicateHash, _, duplicateInfo, sourceErr := fingerprintSource(ctx, path, sourceInfo, nil)
 		if sourceErr != nil {
 			return EvidenceItem{}, false, sourceErr
 		}
 		if duplicateHash != intakeHash {
 			return EvidenceItem{}, false, errSourceChanged
+		}
+		if duplicateInfo.Size() != existing.Size {
+			return EvidenceItem{}, false, errors.New("duplicate source size changed or conflicts with retained evidence")
+		}
+		if err := v.recordDuplicateOccurrence(existing, path, duplicateInfo, duplicateHash, time.Now().UTC(), preservedReceipt); err != nil {
+			return EvidenceItem{}, false, err
 		}
 		return existing, true, nil
 	}
