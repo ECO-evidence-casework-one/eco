@@ -123,6 +123,10 @@ try {
     if ($tamperedExit -eq 0) {
         throw "Cosign incorrectly accepted a tampered release envelope"
     }
+    # The non-zero native exit above is the expected result being asserted.
+    # Clear it after the assertion so PowerShell does not report the successful
+    # negative-control test itself as the workflow step's final exit status.
+    $global:LASTEXITCODE = 0
 
     Write-Host "Cosign private release-envelope rehearsal: PASS"
     Write-Host "Artifact SHA-256: $exeHash"
