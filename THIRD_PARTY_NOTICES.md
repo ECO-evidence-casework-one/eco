@@ -24,3 +24,12 @@ That historical record is not authoritative for later source commits or a future
 ## Release authority
 
 P0 issue #15 controls the future actual-build SBOM, licence, notice and provenance package. No executable, public binary, ordinary-user test or release is approved by this source-level notice file.
+
+
+## Qualified optional PDF page-rendering runtime (not bundled)
+
+- `klippa-app/pdfium-cli` release `v0.11.2`, exact source-tag commit `260c846dbbd180fdc478a2771e9dae9914164846`.
+- ECO accepts only the single-file Windows WebAssembly asset `pdfium-webassembly-windows-amd64`, 16,988,160 bytes, SHA-256 `b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f`.
+- `pdfium-cli` is MIT licensed. Upstream states its embedded Wazero and PDFium components are Apache-2.0 licensed.
+- The renderer is an optional caller-located local executable. It is not committed into this source repository and ECO does not download it at runtime.
+- ECO re-verifies the executable before each use, materialises only a freshly verified temporary reading copy of the preserved PDF, renders a bounded temporary PNG, and deletes both temporary derivatives afterwards.
