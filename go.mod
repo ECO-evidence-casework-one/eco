@@ -6,6 +6,7 @@ require github.com/shirou/gopsutil/v4 v4.25.3
 
 require (
 	github.com/ebitengine/purego v0.8.2 // indirect
+	github.com/emersion/go-mbox v0.0.0-20250604181414-1345da99f125
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/ledongthuc/pdf v0.0.0-20260903153007-b3c860c23753
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect

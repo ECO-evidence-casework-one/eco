@@ -33,3 +33,11 @@ P0 issue #15 controls the future actual-build SBOM, licence, notice and provenan
 - Licence: BSD-3-Clause; verbatim licence retained at `third_party/ledongthuc_pdf/LICENSE`.
 - ECO compatibility change: the vendored local module declares Go 1.23 instead of upstream's Go 1.24.1 module directive; qualified source files are otherwise copied from the exact upstream commit.
 - Purpose: bounded, page-aware native-text extraction from PDFs. Scanned/image-only PDFs still require a separately registered local OCR path.
+
+
+## emersion/go-mbox — MBOX message framing
+
+- Upstream: `https://github.com/emersion/go-mbox`
+- Exact acquired commit: `1345da99f1254a23f517ffdc979f92359442473d`
+- Licence: MIT.
+- ECO use: bounded, read-only MBOX message framing before ECO's existing MIME/email extraction.
