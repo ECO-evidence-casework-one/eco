@@ -1,0 +1,46 @@
+name: Apply MBOX reader integration
+
+on:
+  push:
+    branches:
+      - integration/mbox-reader-20260904
+    paths:
+      - .github/workflows/apply-mbox-reader.yml
+      - scripts/apply_mbox_reader.py
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: integration/mbox-reader-20260904
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+      - name: Apply and qualify MBOX reader
+        shell: bash
+        env:
+          GOPROXY: direct
+        run: |
+          set -euo pipefail
+          python3 scripts/apply_mbox_reader.py
+          go mod edit -require=github.com/emersion/go-mbox@v0.0.0-20250604181414-1345da99f125
+          go mod tidy
+          gofmt -w internal/eco/filetype.go internal/eco/extract.go internal/eco/mbox_extract_test.go
+          go test ./...
+          go vet ./...
+          python3 scripts/check_source_policy.py
+          git diff --check
+          git config user.name 'ECO GitHub integration bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add go.mod go.sum internal/eco/filetype.go internal/eco/extract.go internal/eco/mbox_extract_test.go docs/foss/MBOX_READER_ADAPTATION.md THIRD_PARTY_NOTICES.md
+          git commit -m 'Integrate bounded MBOX reader [emersion-go-mbox]'
+          git push origin HEAD:integration/mbox-reader-20260904
