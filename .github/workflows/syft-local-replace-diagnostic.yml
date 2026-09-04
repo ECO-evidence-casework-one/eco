@@ -1,0 +1,56 @@
+name: Diagnose Syft local replace coverage
+
+on:
+  push:
+    branches:
+      - ops/syft-local-replace-diagnostic-20260904
+    paths:
+      - .github/workflows/syft-local-replace-diagnostic.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+      - name: Build diagnostic executable
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          go build -trimpath -o dist/ECO.exe ./cmd/eco
+          if ($LASTEXITCODE -ne 0) { throw 'go build failed' }
+          go version -m dist/ECO.exe | Select-String -Pattern 'ledongthuc|=>'
+      - name: Install pinned Syft and compare binary/source catalogs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $archive = Join-Path $env:RUNNER_TEMP 'syft_1.51.1_windows_amd64.zip'
+          Invoke-WebRequest -Uri 'https://github.com/anchore/syft/releases/download/v1.51.1/syft_1.51.1_windows_amd64.zip' -OutFile $archive
+          $actual = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne '5e4bc3e6b6344b4625de0f7aa5351aaa72856d11d78462972de0a101ee2c1c8f') { throw "Syft checksum mismatch: $actual" }
+          $toolDir = Join-Path $env:RUNNER_TEMP 'syft-v1.51.1'
+          Expand-Archive -LiteralPath $archive -DestinationPath $toolDir
+          $syft = Join-Path $toolDir 'syft.exe'
+          $env:SYFT_CHECK_FOR_APP_UPDATE = 'false'
+          $env:HTTP_PROXY = $null; $env:HTTPS_PROXY = $null; $env:ALL_PROXY = $null
+          & $syft scan 'file:dist/ECO.exe' -o 'syft-json=dist/binary.syft.json'
+          if ($LASTEXITCODE -ne 0) { throw 'binary Syft scan failed' }
+          & $syft scan 'dir:.' -o 'syft-json=dist/source.syft.json'
+          if ($LASTEXITCODE -ne 0) { throw 'source Syft scan failed' }
+          foreach ($pair in @(@('binary','dist/binary.syft.json'), @('source','dist/source.syft.json'))) {
+            $doc = Get-Content -LiteralPath $pair[1] -Raw | ConvertFrom-Json
+            $hits = @($doc.artifacts | Where-Object { [string]$_.name -match 'ledongthuc|third_party' })
+            Write-Host "=== $($pair[0]) matches: $($hits.Count) ==="
+            foreach ($hit in $hits) {
+              Write-Host ("name={0} version={1} type={2} purl={3}" -f $hit.name,$hit.version,$hit.type,$hit.purl)
+            }
+          }
