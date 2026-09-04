@@ -1,0 +1,49 @@
+name: FOSS donor acquisition audit
+
+on:
+  push:
+    branches:
+      - integration/foss-acquisition-wave1-20260904
+    paths:
+      - '.github/workflows/foss-donor-audit.yml'
+      - 'scripts/foss/**'
+      - 'docs/foss/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acquire-and-inventory:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout ECO source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Clone approved donor source and inventory licences
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'ECO_FOSS_DONORS'
+          & ./scripts/foss/acquire-donors.ps1 -Root $root
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $csv = Get-ChildItem (Join-Path $root 'REPORTS') -Filter 'donor_inventory_*.csv' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $csv) { throw 'Donor inventory CSV was not produced.' }
+          Write-Host '--- ECO FOSS DONOR INVENTORY ---'
+          Get-Content -LiteralPath $csv.FullName
+
+      - name: Fail if required donor acquisition failed
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'ECO_FOSS_DONORS'
+          $json = Get-ChildItem (Join-Path $root 'REPORTS') -Filter 'donor_inventory_*.json' | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+          if (-not $json) { throw 'Donor inventory JSON was not produced.' }
+          $items = Get-Content -Raw -LiteralPath $json.FullName | ConvertFrom-Json
+          $failed = @($items | Where-Object status -eq 'FAILED')
+          if ($failed.Count -gt 0) {
+            $failed | Format-Table name, repo, error -AutoSize | Out-String | Write-Host
+            throw "$($failed.Count) required donor acquisitions failed."
+          }
+          $acquired = @($items | Where-Object status -eq 'ACQUIRED')
+          if ($acquired.Count -lt 14) { throw "Expected at least 14 acquired donor repositories; got $($acquired.Count)." }
+          Write-Host "PASS: acquired and inventoried $($acquired.Count) donor repositories."
