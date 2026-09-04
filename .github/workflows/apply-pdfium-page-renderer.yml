@@ -1,5 +1,6 @@
 name: Apply qualified pdfium-cli page renderer
 
+# Controlled rerun after current-main citation-anchor repair.
 on:
   push:
     branches:
