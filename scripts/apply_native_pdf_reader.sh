@@ -171,6 +171,7 @@ func boundPDFExtractDiagnostic(text string) string {
 }
 
 '''
+pdf_func = pdf_func.replace(r'\t', '\t')
 s = s.replace(func_anchor, pdf_func + func_anchor, 1)
 p.write_text(s, encoding='utf-8')
 PY
