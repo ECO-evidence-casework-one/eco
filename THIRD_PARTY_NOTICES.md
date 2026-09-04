@@ -24,3 +24,12 @@ That historical record is not authoritative for later source commits or a future
 ## Release authority
 
 P0 issue #15 controls the future actual-build SBOM, licence, notice and provenance package. No executable, public binary, ordinary-user test or release is approved by this source-level notice file.
+
+
+## ledongthuc/pdf — native PDF reader
+
+- Upstream: `https://github.com/ledongthuc/pdf`
+- Exact source commit: `b3c860c2375335b0bc6676c430107a553725991d`
+- Licence: BSD-3-Clause; verbatim licence retained at `third_party/ledongthuc_pdf/LICENSE`.
+- ECO compatibility change: the vendored local module declares Go 1.23 instead of upstream's Go 1.24.1 module directive; qualified source files are otherwise copied from the exact upstream commit.
+- Purpose: bounded, page-aware native-text extraction from PDFs. Scanned/image-only PDFs still require a separately registered local OCR path.

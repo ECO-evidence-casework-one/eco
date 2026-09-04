@@ -21,6 +21,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	pdf "github.com/ledongthuc/pdf"
 )
 
 const maxExtractBytes = int64(24 * 1024 * 1024)
@@ -52,6 +54,8 @@ func ExtractReadable(path, typ string) (string, []SourceSegment, []string) {
 		text, err = extractEML(path)
 	case "zip":
 		text, err = inspectZIP(path)
+	case "pdf":
+		return extractPDFReadable(path)
 	default:
 		return "", nil, warnings
 	}
@@ -65,6 +69,115 @@ func ExtractReadable(path, typ string) (string, []SourceSegment, []string) {
 		warnings = append(warnings, "Extracted text was bounded to 24 MiB for this preview.")
 	}
 	return text, segmentText(text), warnings
+}
+
+const (
+	maxNativePDFPages      = 10000
+	maxNativePDFSegments   = 20000
+	maxNativePDFInputBytes = int64(512 * 1024 * 1024)
+)
+
+func extractPDFReadable(path string) (text string, segments []SourceSegment, warnings []string) {
+	defer func() {
+		if recover() != nil {
+			text = ""
+			segments = nil
+			warnings = []string{"The original PDF was preserved, but native PDF parsing stopped safely after an unexpected parser failure."}
+		}
+	}()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction could not open the reading copy: " + err.Error()}
+	}
+	if !info.Mode().IsRegular() {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction requires a regular file reading copy."}
+	}
+	if info.Size() > maxNativePDFInputBytes {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction was skipped because the file exceeds ECO's 512 MiB parser safety bound."}
+	}
+
+	f, reader, err := pdf.Open(path)
+	if err != nil {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction could not open its structure: " + boundPDFExtractDiagnostic(err.Error())}
+	}
+	defer f.Close()
+
+	pages := reader.NumPage()
+	if pages <= 0 {
+		return "", nil, []string{"The original PDF was preserved, but no readable PDF pages were declared."}
+	}
+	if pages > maxNativePDFPages {
+		return "", nil, []string{fmt.Sprintf("The original PDF was preserved, but native PDF extraction was skipped because it declares %d pages (limit %d).", pages, maxNativePDFPages)}
+	}
+
+	var out strings.Builder
+	ordinal := 1
+	bounded := false
+	for pageIndex := 1; pageIndex <= pages; pageIndex++ {
+		page := reader.Page(pageIndex)
+		pageText, pageErr := page.GetPlainText(nil)
+		if pageErr != nil {
+			warnings = append(warnings, fmt.Sprintf("PDF page %d native text extraction did not complete: %s", pageIndex, boundPDFExtractDiagnostic(pageErr.Error())))
+			continue
+		}
+		pageText = normalizeText(pageText)
+		if pageText == "" {
+			continue
+		}
+
+		header := fmt.Sprintf("Page %d\n", pageIndex)
+		separator := ""
+		if out.Len() > 0 {
+			separator = "\n\n"
+		}
+		remaining := int(maxExtractBytes) - out.Len() - len(separator) - len(header)
+		if remaining <= 0 {
+			bounded = true
+			break
+		}
+		if len(pageText) > remaining {
+			pageText = strings.ToValidUTF8(pageText[:remaining], "�")
+			bounded = true
+		}
+		out.WriteString(separator)
+		out.WriteString(header)
+		out.WriteString(pageText)
+
+		for _, seg := range segmentText(pageText) {
+			if len(segments) >= maxNativePDFSegments {
+				bounded = true
+				break
+			}
+			seg.ID = fmt.Sprintf("SEG-PDF-%04d", ordinal)
+			seg.Ordinal = ordinal
+			seg.Page = pageIndex
+			seg.PageHint = fmt.Sprintf("Page %d", pageIndex)
+			seg.Origin = "pdf-native"
+			segments = append(segments, seg)
+			ordinal++
+		}
+		if bounded {
+			break
+		}
+	}
+	if bounded {
+		warnings = append(warnings, "Native PDF text extraction reached ECO's bounded text/segment limit; the preserved original remains authoritative.")
+	}
+	text = normalizeText(out.String())
+	if text == "" && len(warnings) == 0 {
+		warnings = append(warnings, "The PDF contains no extractable native text. A registered local OCR path may be required for scanned pages.")
+	}
+	return text, segments, warnings
+}
+
+func boundPDFExtractDiagnostic(text string) string {
+	text = strings.TrimSpace(text)
+	runes := []rune(text)
+	if len(runes) > 512 {
+		return string(runes[:512]) + "…"
+	}
+	return text
 }
 
 func extractPlainFamily(path, typ string) (string, error) {
