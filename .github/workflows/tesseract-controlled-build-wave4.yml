@@ -60,34 +60,34 @@ jobs:
           foreach ($d in $deps) {
             $licDir = Join-Path $control ('licenses/' + $d.Name)
             New-Item -ItemType Directory -Force -Path $licDir | Out-Null
-            $lic = Get-ChildItem -LiteralPath $d.Path -File | Where-Object { $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE)' }
-            if (-not $lic) { throw "No root licence/notice file found for $($d.Name)" }
+            $lic = @(Get-ChildItem -LiteralPath $d.Path -File | Where-Object { $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE)' })
+            if ($lic.Count -eq 0 -and $d.Name -eq 'leptonica') {
+              $leptReadme = Join-Path $d.Path 'README.html'
+              if (-not (Test-Path -LiteralPath $leptReadme -PathType Leaf)) { throw 'Leptonica README.html licence source is missing' }
+              $leptText = Get-Content -LiteralPath $leptReadme -Raw
+              if ($leptText -notmatch 'Redistribution and use in source and binary forms') { throw 'Leptonica README.html does not contain the expected software redistribution terms' }
+              Copy-Item -LiteralPath $leptReadme -Destination $licDir
+              continue
+            }
+            if ($lic.Count -eq 0) { throw "No root licence/notice file found for $($d.Name)" }
             foreach ($f in $lic) { Copy-Item -LiteralPath $f.FullName -Destination $licDir }
           }
 
           $prefix = $install
           $prefixEsc = $prefix.Replace('\','/')
 
-          # zlib-ng in zlib compatibility mode; shared runtime.
           Run 'configure zlib-ng' { cmake -S (Join-Path $src 'zlib-ng') -B (Join-Path $src 'zlib-ng/build') -A x64 -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DZLIB_COMPAT=ON -DZLIB_ENABLE_TESTS=OFF -DWITH_GTEST=OFF -DBUILD_SHARED_LIBS=ON }
           Run 'build/install zlib-ng' { cmake --build (Join-Path $src 'zlib-ng/build') --config Release --target install --parallel 2 }
 
-          # PNG support from GitHub source.
           Run 'configure libpng' { cmake -S (Join-Path $src 'libpng') -B (Join-Path $src 'libpng/build') -A x64 -DCMAKE_PREFIX_PATH="$prefixEsc" -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DPNG_TESTS=OFF -DPNG_SHARED=ON -DPNG_STATIC=OFF }
           Run 'build/install libpng' { cmake --build (Join-Path $src 'libpng/build') --config Release --target install --parallel 2 }
 
-          # JPEG support from GitHub source.
           Run 'configure libjpeg-turbo' { cmake -S (Join-Path $src 'libjpeg-turbo') -B (Join-Path $src 'libjpeg-turbo/build') -A x64 -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DENABLE_SHARED=ON -DENABLE_STATIC=OFF -DWITH_TURBOJPEG=OFF -DWITH_TESTS=OFF }
           Run 'build/install libjpeg-turbo' { cmake --build (Join-Path $src 'libjpeg-turbo/build') --config Release --target install --parallel 2 }
 
-          # Leptonica is deliberately built only against the GitHub-sourced
-          # PNG/JPEG/zlib stack. TIFF/WebP/GIF/OpenJPEG are optional and omitted.
           Run 'configure leptonica' { cmake -S (Join-Path $src 'leptonica') -B (Join-Path $src 'leptonica/build') -A x64 -DCMAKE_PREFIX_PATH="$prefixEsc" -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DSW_BUILD=OFF -DBUILD_PROG=OFF -DBUILD_SHARED_LIBS=ON }
           Run 'build/install leptonica' { cmake --build (Join-Path $src 'leptonica/build') --config Release --target install --parallel 2 }
 
-          # Exact ECO-approved Tesseract source commit. No training tools,
-          # graphics, OpenMP, curl or archive dependency is required for ECO's
-          # local image-to-TSV OCR path.
           Run 'configure tesseract' { cmake -S (Join-Path $src 'tesseract') -B (Join-Path $src 'tesseract/build') -A x64 -DCMAKE_PREFIX_PATH="$prefixEsc" -DCMAKE_INSTALL_PREFIX="$prefixEsc" -DBUILD_SHARED_LIBS=ON -DBUILD_TRAINING_TOOLS=OFF -DGRAPHICS_DISABLED=ON -DOPENMP_BUILD=OFF -DENABLE_LTO=ON }
           Run 'build/install tesseract' { cmake --build (Join-Path $src 'tesseract/build') --config Release --target install --parallel 2 }
 
@@ -107,12 +107,8 @@ jobs:
 
           Run 'tesseract version smoke test' { & $tesseractExe.FullName --version }
           $langs = & $tesseractExe.FullName --list-langs 2>&1 | Out-String
-          if ($LASTEXITCODE -ne 0 -or $langs -notmatch '(?m)^eng\s*$' -or $langs -notmatch '(?m)^osd\s*$') {
-            throw "Tesseract language smoke test failed: $langs"
-          }
+          if ($LASTEXITCODE -ne 0 -or $langs -notmatch '(?m)^eng\s*$' -or $langs -notmatch '(?m)^osd\s*$') { throw "Tesseract language smoke test failed: $langs" }
 
-          # Actual OCR smoke test on a locally generated PNG. This proves the
-          # executable, Leptonica image decoding and English traineddata work together.
           Add-Type -AssemblyName System.Drawing
           $bmp = New-Object System.Drawing.Bitmap 900,180
           $g = [System.Drawing.Graphics]::FromImage($bmp)
