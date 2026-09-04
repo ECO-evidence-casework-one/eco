@@ -29,6 +29,7 @@ func TestLlamaCPPWorkflowCarriesResourceAssessmentIntoAudit(t *testing.T) {
 				record = candidate
 				break
 			}
+		}
 		if record.EvidenceID == "" {
 			t.Fatal("fake runner did not receive expected grounded wording")
 		}
