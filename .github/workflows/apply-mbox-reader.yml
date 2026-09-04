@@ -1,5 +1,6 @@
 name: Apply MBOX reader integration
 
+# Controlled rerun after generator repair.
 on:
   push:
     branches:
