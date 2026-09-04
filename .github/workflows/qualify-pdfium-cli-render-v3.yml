@@ -1,0 +1,109 @@
+name: Measure pdfium renderer memory and native runtime
+
+on:
+  push:
+    branches:
+      - ops/pdfium-cli-render-qualification-20260904
+    paths:
+      - .github/workflows/qualify-pdfium-cli-render-v3.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ops/pdfium-cli-render-qualification-20260904
+          fetch-depth: 0
+
+      - name: Verify assets and measure live process memory
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest -Uri 'https://github.com/klippa-app/pdfium-cli/releases/download/v0.11.2/pdfium-webassembly-windows-amd64' -OutFile pdfium-wasm.exe
+          Invoke-WebRequest -Uri 'https://github.com/klippa-app/pdfium-cli/releases/download/v0.11.2/pdfium-native-windows-amd64' -OutFile pdfium-native.exe
+          $wasmHash=(Get-FileHash pdfium-wasm.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $nativeHash=(Get-FileHash pdfium-native.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ((Get-Item pdfium-wasm.exe).Length -ne 16988160 -or $wasmHash -ne 'b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f') { throw 'WASM asset verification failed' }
+          if ((Get-Item pdfium-native.exe).Length -ne 31034735 -or $nativeHash -ne '93033804cce3cc4e5fc425abaec3d3ce9f37736d3600dbeb1e5f1cc676816a39') { throw 'Native asset verification failed' }
+
+          @'
+          from pathlib import Path
+          objects=[b'<< /Type /Catalog /Pages 2 0 R >>',b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>',b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',b'<< /Length 57 >>\nstream\nBT /F1 24 Tf 72 720 Td (ECO PDF RENDER 123) Tj ET\nendstream',b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>']
+          out=bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n'); offsets=[0]
+          for i,obj in enumerate(objects,1): offsets.append(len(out)); out+=f'{i} 0 obj\n'.encode()+obj+b'\nendobj\n'
+          xref=len(out); out+=f'xref\n0 {len(objects)+1}\n'.encode()+b'0000000000 65535 f \n'
+          for off in offsets[1:]: out+=f'{off:010d} 00000 n \n'.encode()
+          out+=f'trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode(); Path('known.pdf').write_bytes(out)
+          '@ | python -
+
+          function Measure-Pdfium([string]$exe,[string]$output,[int]$timeoutMs) {
+            $psi=[System.Diagnostics.ProcessStartInfo]::new(); $psi.FileName=(Resolve-Path $exe)
+            foreach($arg in @('render','--pages','1','--file-type','png','--max-width','1200',(Resolve-Path '.\known.pdf').Path,(Join-Path (Get-Location) $output))) { $psi.ArgumentList.Add($arg) }
+            $psi.UseShellExecute=$false; $psi.RedirectStandardOutput=$true; $psi.RedirectStandardError=$true; $psi.CreateNoWindow=$true
+            $p=[System.Diagnostics.Process]::new(); $p.StartInfo=$psi; $sw=[System.Diagnostics.Stopwatch]::StartNew(); $maxWorking=0L
+            try { [void]$p.Start() } catch { return [pscustomobject]@{start_ok=$false; exit_code=$null; milliseconds=0; max_working_bytes=0; output_bytes=0; diagnostic=$_.Exception.Message} }
+            while(-not $p.HasExited) {
+              $p.Refresh(); if($p.WorkingSet64 -gt $maxWorking){$maxWorking=$p.WorkingSet64}
+              if($sw.ElapsedMilliseconds -gt $timeoutMs){ try{$p.Kill($true)}catch{}; return [pscustomobject]@{start_ok=$true; exit_code=$null; milliseconds=$sw.ElapsedMilliseconds; max_working_bytes=$maxWorking; output_bytes=0; diagnostic='timeout'} }
+              Start-Sleep -Milliseconds 20
+            }
+            $p.WaitForExit(); $sw.Stop(); $p.Refresh(); if($p.PeakWorkingSet64 -gt $maxWorking){$maxWorking=$p.PeakWorkingSet64}
+            $stdout=$p.StandardOutput.ReadToEnd(); $stderr=$p.StandardError.ReadToEnd(); $bytes=0
+            if(Test-Path $output){$bytes=(Get-Item $output).Length}
+            [pscustomobject]@{start_ok=$true; exit_code=$p.ExitCode; milliseconds=$sw.ElapsedMilliseconds; max_working_bytes=$maxWorking; output_bytes=$bytes; diagnostic=(($stderr+' '+$stdout).Trim())}
+          }
+
+          $wasmRuns=@()
+          $wasmRuns+=Measure-Pdfium '.\pdfium-wasm.exe' 'wasm-1.png' 60000
+          $wasmRuns+=Measure-Pdfium '.\pdfium-wasm.exe' 'wasm-2.png' 60000
+          $wasmRuns+=Measure-Pdfium '.\pdfium-wasm.exe' 'wasm-3.png' 60000
+          foreach($r in $wasmRuns){ if(-not $r.start_ok -or $r.exit_code -ne 0 -or $r.output_bytes -le 0){ throw "WASM render qualification failed: $($r|ConvertTo-Json -Compress)" } }
+          $avgMs=[math]::Round((($wasmRuns|Measure-Object milliseconds -Average).Average),2)
+          $maxMs=($wasmRuns|Measure-Object milliseconds -Maximum).Maximum
+          $maxWorking=($wasmRuns|Measure-Object max_working_bytes -Maximum).Maximum
+          $peakMiB=[math]::Round($maxWorking/1MB,2)
+          $maxOutput=($wasmRuns|Measure-Object output_bytes -Maximum).Maximum
+          if($peakMiB -le 0){ throw 'Live memory sampling still returned zero' }
+
+          $native=Measure-Pdfium '.\pdfium-native.exe' 'native.png' 30000
+          $nativeStatus='failed-or-unavailable'
+          if($native.start_ok -and $native.exit_code -eq 0 -and $native.output_bytes -gt 0){$nativeStatus='render-pass'}
+          Write-Host "PDFIUM_WASM_METRICS avg_ms=$avgMs max_ms=$maxMs peak_mib=$peakMiB max_png_bytes=$maxOutput"
+          Write-Host "PDFIUM_NATIVE_STATUS $nativeStatus exit=$($native.exit_code) ms=$($native.milliseconds) diag=$($native.diagnostic)"
+
+          $lines=@(
+            '# pdfium-cli Windows renderer qualification', '', 'Date: 2026-09-04', '',
+            'Status: PASS for the pinned WebAssembly Windows renderer on a GitHub-hosted Windows runner. This is not low-spec Acer evidence and does not approve release.', '',
+            '- Upstream: klippa-app/pdfium-cli',
+            '- Licence: MIT; upstream states embedded Wazero and PDFium are Apache-2.0.',
+            '- Release: v0.11.2',
+            '- Exact source tag commit: 260c846dbbd180fdc478a2771e9dae9914164846',
+            '- WebAssembly asset: pdfium-webassembly-windows-amd64',
+            '- WebAssembly bytes: 16988160',
+            '- WebAssembly SHA-256: b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f',
+            ('- Mean one-page 1200px render time: {0} ms' -f $avgMs),
+            ('- Slowest of three WebAssembly renders: {0} ms' -f $maxMs),
+            ('- Maximum live working set observed: {0} MiB' -f $peakMiB),
+            ('- Maximum rendered PNG bytes: {0}' -f $maxOutput), '',
+            '- Native comparison asset: pdfium-native-windows-amd64',
+            '- Native asset bytes: 31034735',
+            '- Native asset SHA-256: 93033804cce3cc4e5fc425abaec3d3ce9f37736d3600dbeb1e5f1cc676816a39',
+            ('- Native clean-runner result: {0}' -f $nativeStatus),
+            ('- Native diagnostic: {0}' -f (($native.diagnostic -replace '[\r\n]+',' ') -replace '\s+',' ')), '',
+            'Decision: prefer the single-file WebAssembly release for ECO adapter work unless low-spec testing proves it unusably slow. The native route is not preferred if it requires external runtime libraries.'
+          )
+          New-Item -ItemType Directory -Force docs\foss\qualification|Out-Null
+          $lines|Set-Content -Encoding utf8 docs\foss\qualification\PDFIUM_CLI_RENDER_QUALIFICATION_20260904.md
+
+      - name: Commit final text-only qualification receipt
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'; git config user.name 'ECO GitHub qualification bot'; git config user.email 'actions@users.noreply.github.com'
+          git add docs/foss/qualification/PDFIUM_CLI_RENDER_QUALIFICATION_20260904.md; git diff --cached --check
+          git commit -m 'Complete pdfium-cli renderer qualification'; git push origin HEAD:ops/pdfium-cli-render-qualification-20260904
