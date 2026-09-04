@@ -1,0 +1,176 @@
+name: Qualify actual Tesseract Wave 4 runtime
+
+on:
+  push:
+    branches:
+      - ops/tesseract-runtime-artifact-qualification-20260904
+    paths:
+      - .github/workflows/qualify-actual-tesseract-wave4.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+
+      - name: Download and verify exact Wave 4 artifact
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $work = Join-Path $env:RUNNER_TEMP 'eco-wave4-actual'
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          $outer = Join-Path $work 'wave4-artifact.zip'
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+            'User-Agent' = 'ECO-Wave4-Qualification'
+          }
+          Invoke-WebRequest -Headers $headers -Uri 'https://api.github.com/repos/ECO-evidence-casework-one/eco/actions/artifacts/9939304279/zip' -OutFile $outer -MaximumRedirection 10
+          $outerHash = (Get-FileHash -LiteralPath $outer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($outerHash -ne 'd18fec356179df7ddb752d8ba67ef17021ec876cc8a887724b09791199085331') {
+            throw "Wave 4 Actions artifact digest mismatch: $outerHash"
+          }
+          $outerDir = Join-Path $work 'outer'
+          Expand-Archive -LiteralPath $outer -DestinationPath $outerDir
+          $inner = Join-Path $outerDir 'ECO_TESSERACT_WINDOWS_X64_WAVE4_20260904.zip'
+          if (-not (Test-Path -LiteralPath $inner -PathType Leaf)) { throw 'Wave 4 inner runtime ZIP is missing' }
+          $innerHash = (Get-FileHash -LiteralPath $inner -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($innerHash -ne '26d90693819d1b1ad0b2a35593a5555bb16d6d6f0f1482541ab7eacd531bb8b0') {
+            throw "Wave 4 inner runtime ZIP digest mismatch: $innerHash"
+          }
+          $bundle = Join-Path $work 'bundle'
+          Expand-Archive -LiteralPath $inner -DestinationPath $bundle
+          "ECO_WAVE4_BUNDLE=$bundle" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Generate deterministic OCR test image
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Add-Type -AssemblyName System.Drawing
+          $path = Join-Path $env:RUNNER_TEMP 'eco-wave4-actual-ocr.png'
+          $bmp = New-Object System.Drawing.Bitmap 900,180
+          $g = [System.Drawing.Graphics]::FromImage($bmp)
+          try {
+            $g.Clear([System.Drawing.Color]::White)
+            $font = New-Object System.Drawing.Font('Arial',48,[System.Drawing.FontStyle]::Bold)
+            try { $g.DrawString('ECO OCR TEST 123',$font,[System.Drawing.Brushes]::Black,20,45) } finally { $font.Dispose() }
+            $bmp.Save($path,[System.Drawing.Imaging.ImageFormat]::Png)
+          } finally { $g.Dispose(); $bmp.Dispose() }
+          "ECO_WAVE4_TEST_IMAGE=$path" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Prove ECO accepts, executes and tamper-rejects actual bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @'
+          //go:build windows
+
+          package eco
+
+          import (
+            "context"
+            "crypto/sha256"
+            "encoding/hex"
+            "os"
+            "path/filepath"
+            "strings"
+            "testing"
+            "time"
+          )
+
+          func TestActualWave4RuntimeBundleEndToEnd(t *testing.T) {
+            bundle := os.Getenv("ECO_WAVE4_BUNDLE")
+            imagePath := os.Getenv("ECO_WAVE4_TEST_IMAGE")
+            if bundle == "" || imagePath == "" {
+              t.Fatal("Wave 4 qualification paths are missing")
+            }
+            vault, err := OpenVault(t.TempDir())
+            if err != nil {
+              t.Fatal(err)
+            }
+            registration, err := vault.RegisterTesseractRuntimeBundle(bundle)
+            if err != nil {
+              t.Fatalf("ECO rejected the exact Wave 4 runtime: %v", err)
+            }
+            if registration.Root == "" || registration.Executable == "" || registration.TessdataDir == "" {
+              t.Fatalf("runtime registration is incomplete: %+v", registration)
+            }
+            verified, err := vault.VerifyRegisteredTesseractRuntimeBundle()
+            if err != nil {
+              t.Fatalf("registered Wave 4 runtime did not re-verify: %v", err)
+            }
+            if verified.Version != registration.Version {
+              t.Fatalf("runtime version changed across verification: %q != %q", verified.Version, registration.Version)
+            }
+
+            imageBytes, err := os.ReadFile(imagePath)
+            if err != nil {
+              t.Fatal(err)
+            }
+            sum := sha256.Sum256(imageBytes)
+            source := SourceReceipt{
+              EvidenceID: "WAVE4-QUALIFICATION",
+              ObjectFile: "WAVE4-QUALIFICATION.png",
+              SHA256: hex.EncodeToString(sum[:]),
+              Size: int64(len(imageBytes)),
+              VerifiedAt: time.Now().UTC(),
+            }
+            receipt, segments, err := RunTesseractOCRWithTessdata(
+              context.Background(),
+              registration.Executable,
+              imagePath,
+              "eng",
+              registration.TessdataDir,
+              source,
+              900,
+              180,
+            )
+            if err != nil {
+              t.Fatalf("ECO could not execute OCR through the verified Wave 4 bundle: %v", err)
+            }
+            if receipt.Status != "ready" || len(segments) == 0 {
+              t.Fatalf("unexpected OCR result: status=%q segments=%d", receipt.Status, len(segments))
+            }
+            var text strings.Builder
+            for _, segment := range segments {
+              text.WriteString(segment.Text)
+              text.WriteByte(' ')
+            }
+            recognised := text.String()
+            if !strings.Contains(recognised, "ECO") || !strings.Contains(recognised, "123") {
+              t.Fatalf("unexpected OCR text from actual Wave 4 runtime: %q", recognised)
+            }
+
+            tamperPath := filepath.Join(bundle, "runtime", "bin", "tesseract55.dll")
+            f, err := os.OpenFile(tamperPath, os.O_APPEND|os.O_WRONLY, 0)
+            if err != nil {
+              t.Fatal(err)
+            }
+            if _, err := f.Write([]byte{0}); err != nil {
+              f.Close()
+              t.Fatal(err)
+            }
+            if err := f.Close(); err != nil {
+              t.Fatal(err)
+            }
+            if _, err := vault.VerifyRegisteredTesseractRuntimeBundle(); err == nil {
+              t.Fatal("ECO accepted a tampered Wave 4 runtime")
+            }
+          }
+          '@ | Set-Content -LiteralPath 'internal/eco/tesseract_bundle_actual_windows_test.go' -Encoding utf8
+          go test ./internal/eco -run '^TestActualWave4RuntimeBundleEndToEnd$' -count=1 -v
+          if ($LASTEXITCODE -ne 0) { throw 'actual Wave 4 ECO qualification failed' }
