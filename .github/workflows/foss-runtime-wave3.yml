@@ -41,7 +41,7 @@ jobs:
 
           fetch 'pdfcpu_0.15.0_Windows_x86_64.zip' \
             'https://github.com/pdfcpu/pdfcpu/releases/download/v0.15.0/pdfcpu_0.15.0_Windows_x86_64.zip' \
-            '9809d993108dcf604aabe31568090859964833757ff930d2cd2c2a75d7317f88'
+            '9809a70ee60ba78252628cc9738b284fbebf22bc2616ae903fb89b807e75a8a6'
 
           fetch 'restic_0.19.1_windows_amd64.zip' \
             'https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_windows_amd64.zip' \
@@ -75,7 +75,7 @@ jobs:
           import hashlib, json, pathlib, sys
           root = pathlib.Path(sys.argv[1])
           packages = [
-            dict(name='pdfcpu', role='ECO local PDF inspection/runtime candidate', version='v0.15.0', asset='pdfcpu_0.15.0_Windows_x86_64.zip', sha256='9809d993108dcf604aabe31568090859964833757ff930d2cd2c2a75d7317f88', licence='Apache-2.0', status='official-windows-package-acquired'),
+            dict(name='pdfcpu', role='ECO local PDF inspection/runtime candidate', version='v0.15.0', asset='pdfcpu_0.15.0_Windows_x86_64.zip', sha256='9809a70ee60ba78252628cc9738b284fbebf22bc2616ae903fb89b807e75a8a6', licence='Apache-2.0', status='official-windows-package-acquired'),
             dict(name='restic', role='backup/restore engine candidate', version='v0.19.1', asset='restic_0.19.1_windows_amd64.zip', sha256='da948ad707ed690426473aaba2046cd61f8f90f6f0e7dab6be0d5796531de67d', licence='BSD-2-Clause', status='official-windows-package-acquired'),
             dict(name='litestream', role='SQLite replication/recovery candidate', version='v0.5.17', asset='litestream-0.5.17-windows-x86_64.zip', sha256='6f5532687d71c452e0099a9087e51da65f9935664fb11549abc0a5a34cb1d34e', licence='Apache-2.0', status='official-windows-package-acquired-with-upstream-support-warning', warning='Upstream states Windows binaries are provided for convenience but Windows is not an officially supported platform.'),
             dict(name='llama.cpp', role='local CPU LLM runtime', version='b10621', source_commit='c1d0e7a004015f23bc0233470b747b596f29b264', asset='llama-b10621-bin-win-cpu-x64.zip', sha256='0e8b65e650e369f70f8307d890508886f171ef4fb00facccddd4a1b7ffdaca51', licence='MIT', status='official-nightly-windows-cpu-package-acquired', warning='This runnable package is from upstream prerelease/nightly b10621 and does not match the later Wave 1 default-branch source snapshot.'),
