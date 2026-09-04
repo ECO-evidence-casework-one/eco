@@ -95,8 +95,16 @@ func (v *Vault) ocrmyPDFSource(evidenceID string) (EvidenceItem, PreservationRec
 	return EvidenceItem{}, PreservationRecord{}, errors.New("OCRmyPDF extraction is blocked because the committed preservation record is missing or inconsistent")
 }
 
+func ocrmyPDFReceiptMatchesItem(item EvidenceItem, source SourceReceipt) bool {
+	return source.EvidenceID == item.ID &&
+		source.ObjectFile == item.ObjectFile &&
+		source.SHA256 == item.SHA256 &&
+		source.Size == item.Size &&
+		!source.VerifiedAt.IsZero()
+}
+
 func validateOCRmyPDFResult(item EvidenceItem, result OCRmyPDFResult) error {
-	if result.Source.ObjectFile != item.ObjectFile || result.Source.SHA256 != item.SHA256 || result.Source.VerifiedAt.IsZero() {
+	if !ocrmyPDFReceiptMatchesItem(item, result.Source) {
 		return errors.New("OCRmyPDF result is not bound to the verified preserved PDF")
 	}
 	if strings.TrimSpace(result.EngineVersion) == "" || len([]rune(result.EngineVersion)) > maxOCRIdentityText {
@@ -145,7 +153,7 @@ func (v *Vault) applyOCRmyPDFSidecar(evidenceID string, result OCRmyPDFResult) e
 	if !found {
 		return os.ErrNotExist
 	}
-	if !preservationUsable(source) || source.DetectedType != "pdf" || result.Source.ObjectFile != source.ObjectFile || result.Source.SHA256 != source.SHA256 {
+	if !preservationUsable(source) || source.DetectedType != "pdf" || !ocrmyPDFReceiptMatchesItem(source, result.Source) {
 		return errors.New("OCRmyPDF result source changed before commit")
 	}
 	if _, err := v.verifyPreservedObject(source.ID, source.ObjectFile, source.SHA256, source.Size); err != nil {
@@ -160,7 +168,7 @@ func (v *Vault) applyOCRmyPDFSidecar(evidenceID string, result OCRmyPDFResult) e
 		if item.ID != evidenceID {
 			continue
 		}
-		if !preservationUsable(*item) || item.DetectedType != "pdf" || result.Source.ObjectFile != item.ObjectFile || result.Source.SHA256 != item.SHA256 {
+		if !preservationUsable(*item) || item.DetectedType != "pdf" || !ocrmyPDFReceiptMatchesItem(*item, result.Source) {
 			return errors.New("OCRmyPDF source changed before result persistence")
 		}
 
