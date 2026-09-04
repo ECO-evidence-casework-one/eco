@@ -45,24 +45,33 @@ jobs:
           $control = Join-Path $bundle 'CONTROL'
           New-Item -ItemType Directory -Force -Path $sources,$control | Out-Null
 
+          $inventoryFile = Get-ChildItem -LiteralPath (Join-Path $root 'REPORTS') -Filter 'donor_inventory_*.json' |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+          if (-not $inventoryFile) { throw 'Acquisition inventory is missing.' }
+          $inventory = @(Get-Content -LiteralPath $inventoryFile.FullName -Raw | ConvertFrom-Json)
+          $acquired = @($inventory | Where-Object status -eq 'ACQUIRED')
+          if ($acquired.Count -ne 15) { throw "Expected 15 acquired inventory rows, got $($acquired.Count)." }
+
           $archiveRows = @()
-          foreach ($dir in (Get-ChildItem -LiteralPath (Join-Path $root 'SOURCE') -Directory | Sort-Object Name)) {
-            $commit = (& git -C $dir.FullName rev-parse HEAD | Select-Object -First 1).Trim()
-            if ($LASTEXITCODE -ne 0 -or $commit -notmatch '^[0-9a-f]{40}$') {
-              throw "Could not resolve exact commit for $($dir.Name)."
+          foreach ($item in ($acquired | Sort-Object name)) {
+            $name = [string]$item.name
+            $dirPath = [string]$item.path
+            $commit = [string]$item.commit
+            if ($commit -notmatch '^[0-9a-f]{40}$') { throw "Inventory commit is invalid for $name." }
+            if (-not (Test-Path -LiteralPath (Join-Path $dirPath '.git') -PathType Container)) {
+              throw "Acquired checkout is missing for $name."
             }
-            $safeName = ($dir.Name -replace '[^A-Za-z0-9._-]','_')
+            $safeName = ($name -replace '[^A-Za-z0-9._-]','_')
             $archiveName = "$safeName-$($commit.Substring(0,12)).tar.gz"
             $archivePath = Join-Path $sources $archiveName
-            Push-Location $dir.FullName
-            try {
-              & git archive --format=tar.gz "--output=$archivePath" HEAD
-              if ($LASTEXITCODE -ne 0) { throw "git archive failed for $($dir.Name)." }
-            }
-            finally { Pop-Location }
+            & git -C $dirPath archive --format=tar.gz "--output=$archivePath" $commit
+            if ($LASTEXITCODE -ne 0) { throw "git archive failed for $name at $commit." }
             $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash.ToLowerInvariant()
             $archiveRows += [pscustomobject]@{
-              name = $dir.Name
+              name = $name
+              repo = [string]$item.repo
+              expected_license = [string]$item.expected_license
               commit = $commit
               archive = "SOURCES/$archiveName"
               archive_sha256 = $archiveHash
@@ -81,9 +90,6 @@ jobs:
           $hashLines = foreach ($row in $archiveRows) { "$($row.archive_sha256)  $($row.archive)" }
           $hashLines | Set-Content -LiteralPath (Join-Path $bundle 'SHA256SUMS.txt') -Encoding ascii
 
-          $inventoryFile = Get-ChildItem -LiteralPath (Join-Path $root 'REPORTS') -Filter 'donor_inventory_*.json' |
-            Sort-Object LastWriteTime -Descending |
-            Select-Object -First 1
           $inventoryHash = (Get-FileHash -LiteralPath $inventoryFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
           $complete = [ordered]@{
             schema = 1
@@ -95,7 +101,7 @@ jobs:
             exact_commit_archives = $true
             acquisition_inventory_sha256 = $inventoryHash
             artifact_contains_git_directories = $false
-            note = 'Each source tarball was produced with git archive from the exact acquired commit. Licence snapshots and acquisition reports are included.'
+            note = 'Each source tarball was produced with git archive from the exact commit already recorded by the successful acquisition step. Licence snapshots and acquisition reports are included.'
           }
           $complete | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath (Join-Path $bundle 'HARVEST_COMPLETE.json') -Encoding utf8
 
