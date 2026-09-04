@@ -1,0 +1,135 @@
+name: Native PDF reader compatibility wave 5
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/pdf-native-reader-wave5.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version: '1.23.12'
+          cache: false
+
+      - name: Acquire exact hardened source and prove Go 1.23 compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/ECO_PDF_READER_WAVE5"
+          checkout="$RUNNER_TEMP/ledongthuc-pdf"
+          compat="$RUNNER_TEMP/ledongthuc-pdf-go123"
+          mkdir -p "$root/SOURCE" "$root/CONTROL"
+
+          git clone --filter=blob:none --no-checkout https://github.com/ledongthuc/pdf.git "$checkout"
+          git -C "$checkout" fetch --depth 1 origin b3c860c2375335b0bc6676c430107a553725991d
+          git -C "$checkout" checkout --detach b3c860c2375335b0bc6676c430107a553725991d
+          actual=$(git -C "$checkout" rev-parse HEAD)
+          test "$actual" = 'b3c860c2375335b0bc6676c430107a553725991d'
+          grep -q 'BSD' "$checkout/LICENSE" || grep -q 'Redistribution and use in source and binary forms' "$checkout/LICENSE"
+
+          git -C "$checkout" archive --format=tar.gz --output="$root/SOURCE/ledongthuc-pdf-b3c860c23753.tar.gz" "$actual"
+          cp "$checkout/LICENSE" "$root/CONTROL/LICENSE-ledongthuc-pdf.txt"
+          cp -a "$checkout" "$compat"
+          rm -rf "$compat/.git"
+
+          python3 - "$compat/go.mod" <<'PY'
+          from pathlib import Path
+          import sys
+          p=Path(sys.argv[1])
+          s=p.read_text(encoding='utf-8')
+          if 'go 1.24.1' not in s:
+              raise SystemExit('expected current upstream go 1.24.1 directive not found')
+          s=s.replace('go 1.24.1','go 1.23',1)
+          p.write_text(s,encoding='utf-8')
+          PY
+          printf '%s\n' 'Compatibility-only metadata patch applied for ECO qualification:' 'go 1.24.1 -> go 1.23' > "$root/CONTROL/GO123_COMPAT_PATCH.txt"
+
+          (cd "$compat" && go test ./...)
+
+          # Generate a small valid one-page PDF containing known text.
+          python3 - "$RUNNER_TEMP/smoke.pdf" <<'PY'
+          import sys
+          out=sys.argv[1]
+          objs=[]
+          objs.append(b'<< /Type /Catalog /Pages 2 0 R >>')
+          objs.append(b'<< /Type /Pages /Kids [3 0 R] /Count 1 >>')
+          objs.append(b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>')
+          stream=b'BT /F1 24 Tf 72 700 Td (ECO PDF TEXT 123) Tj ET\n'
+          objs.append(b'<< /Length %d >>\nstream\n'%len(stream)+stream+b'endstream')
+          objs.append(b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>')
+          data=bytearray(b'%PDF-1.4\n')
+          offsets=[0]
+          for i,obj in enumerate(objs,1):
+              offsets.append(len(data))
+              data += f'{i} 0 obj\n'.encode()+obj+b'\nendobj\n'
+          xref=len(data)
+          data += b'xref\n0 6\n0000000000 65535 f \n'
+          for off in offsets[1:]: data += f'{off:010d} 00000 n \n'.encode()
+          data += b'trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+str(xref).encode()+b'\n%%EOF\n'
+          open(out,'wb').write(data)
+          PY
+
+          smoke="$RUNNER_TEMP/smoke-reader"
+          mkdir -p "$smoke"
+          cat > "$smoke/go.mod" <<EOF
+          module eco-pdf-smoke
+          go 1.23
+          require github.com/ledongthuc/pdf v0.0.0
+          replace github.com/ledongthuc/pdf => $compat
+          EOF
+          cat > "$smoke/main.go" <<'EOF'
+          package main
+          import (
+            "bytes"
+            "fmt"
+            "os"
+            pdf "github.com/ledongthuc/pdf"
+          )
+          func main() {
+            if len(os.Args)!=2 { panic("pdf path required") }
+            f,r,err:=pdf.Open(os.Args[1]); if err!=nil { panic(err) }; defer f.Close()
+            b,err:=r.GetPlainText(); if err!=nil { panic(err) }
+            var buf bytes.Buffer; _,_=buf.ReadFrom(b)
+            text:=buf.String(); fmt.Print(text)
+            if !bytes.Contains([]byte(text),[]byte("ECO PDF TEXT 123")) { panic("known PDF text was not recovered") }
+          }
+          EOF
+          smoke_out=$(cd "$smoke" && go run . "$RUNNER_TEMP/smoke.pdf")
+          printf '%s\n' "$smoke_out" > "$root/CONTROL/PDF_TEXT_SMOKE_RESULT.txt"
+          printf '%s' "$smoke_out" | grep -q 'ECO PDF TEXT 123'
+
+          source_sha=$(sha256sum "$root/SOURCE/ledongthuc-pdf-b3c860c23753.tar.gz" | awk '{print $1}')
+          cat > "$root/CONTROL/QUALIFICATION.json" <<EOF
+          {
+            "schema": 1,
+            "project": "ledongthuc/pdf",
+            "licence": "BSD-3-Clause",
+            "upstream_commit": "b3c860c2375335b0bc6676c430107a553725991d",
+            "upstream_go_directive": "1.24.1",
+            "eco_compat_go_directive": "1.23",
+            "tested_go": "1.23.12",
+            "full_upstream_test_suite": "PASS",
+            "known_text_pdf_smoke_test": "PASS",
+            "source_archive_sha256": "$source_sha",
+            "integration_decision": "candidate for ECO native-text PDF extraction; compatibility patch is metadata-only and must remain documented"
+          }
+          EOF
+          echo "WAVE5_ROOT=$root" >> "$GITHUB_ENV"
+
+      - name: Upload qualified native PDF reader source bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO-NATIVE-PDF-READER-WAVE5-20260904
+          path: ${{ env.WAVE5_ROOT }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
