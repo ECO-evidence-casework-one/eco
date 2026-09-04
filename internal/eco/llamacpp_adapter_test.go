@@ -1,6 +1,7 @@
 package eco
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -51,7 +52,11 @@ func TestOfflineLlamaCPPEnvironmentDropsArgumentAndNetworkInjection(t *testing.T
 }
 
 func TestLlamaCPPEmissionParserIsStrict(t *testing.T) {
-	valid := []byte(`{"answer":"The hearing date is in the source.","claims":[{"kind":"value","text":"12 August 2026","evidence_id":"EVD-1","segment_id":"SEG-1"}]}`)
+	valid := []byte(`{"answer":"placeholder"}`)
+	valid = []byte(`{"answer":"The hearing date is in the source.","claims":[{"kind":"value","text":"12 August 2026","evidence_id":"EVD-1","segment_id":"SEG-1"}]}`)
+	// Raw literals above deliberately illustrate what must not be accepted;
+	// use proper JSON bytes for the actual positive case.
+	valid = []byte("{\"answer\":\"The hearing date is in the source.\",\"claims\":[{\"kind\":\"value\",\"text\":\"12 August 2026\",\"evidence_id\":\"EVD-1\",\"segment_id\":\"SEG-1\"}]}")
 	emission, err := parseLlamaCPPEmission(valid)
 	if err != nil {
 		t.Fatal(err)
@@ -62,8 +67,8 @@ func TestLlamaCPPEmissionParserIsStrict(t *testing.T) {
 	bad := [][]byte{
 		[]byte("```json\n" + string(valid) + "\n```"),
 		append(append([]byte(nil), valid...), []byte(" trailing prose")...),
-		[]byte(`{"answer":"x","claims":[{"kind":"presence","evidence_id":"E","segment_id":"S"}],"unexpected":true}`),
-		[]byte(`{"answer":"","claims":[]}`),
+		[]byte("{\"answer\":\"x\",\"claims\":[{\"kind\":\"presence\",\"evidence_id\":\"E\",\"segment_id\":\"S\"}],\"unexpected\":true}"),
+		[]byte("{\"answer\":\"\",\"claims\":[]}"),
 	}
 	for i, data := range bad {
 		if _, err := parseLlamaCPPEmission(data); err == nil {
@@ -127,12 +132,15 @@ func TestInspectLlamaCPPModelRequiresLocalGGUF(t *testing.T) {
 }
 
 func TestLlamaLimitedCaptureFlagsOverflow(t *testing.T) {
-	var target strings.Builder
-	_ = target
-	var buf bytesBufferForTest
-	_ = buf
+	var buf bytes.Buffer
+	capture := &llamaLimitedCapture{buf: &buf, max: 5}
+	if n, err := capture.Write([]byte("123456789")); err != nil || n != 9 {
+		t.Fatalf("unexpected capture write: n=%d err=%v", n, err)
+	}
+	if !capture.overflow {
+		t.Fatal("expected bounded capture to flag overflow")
+	}
+	if buf.String() != "12345" {
+		t.Fatalf("bounded capture retained unexpected data: %q", buf.String())
+	}
 }
-
-// Keep overflow behaviour covered without exposing the adapter's bytes.Buffer.
-// The actual buffer type is exercised through this small helper test below.
-type bytesBufferForTest struct{}
