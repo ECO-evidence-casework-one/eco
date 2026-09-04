@@ -1,0 +1,116 @@
+name: FOSS Windows runtime/tool packages wave 3
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/foss-runtime-wave3.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Download exact official GitHub Windows packages and verify SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/ECO_FOSS_WINDOWS_WAVE3"
+          pkg="$root/PACKAGES"
+          mkdir -p "$pkg" "$root/CONTROL"
+
+          fetch() {
+            name="$1"; url="$2"; expected="$3"
+            target="$pkg/$name"
+            echo "Downloading $name"
+            curl --fail --location --retry 3 --silent --show-error "$url" --output "$target"
+            actual=$(sha256sum "$target" | awk '{print $1}')
+            if [ "$actual" != "$expected" ]; then
+              echo "SHA-256 mismatch for $name" >&2
+              echo "expected=$expected" >&2
+              echo "actual=$actual" >&2
+              exit 1
+            fi
+          }
+
+          fetch 'pdfcpu_0.15.0_Windows_x86_64.zip' \
+            'https://github.com/pdfcpu/pdfcpu/releases/download/v0.15.0/pdfcpu_0.15.0_Windows_x86_64.zip' \
+            '9809d993108dcf604aabe31568090859964833757ff930d2cd2c2a75d7317f88'
+
+          fetch 'restic_0.19.1_windows_amd64.zip' \
+            'https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_windows_amd64.zip' \
+            'da948ad707ed690426473aaba2046cd61f8f90f6f0e7dab6be0d5796531de67d'
+
+          fetch 'litestream-0.5.17-windows-x86_64.zip' \
+            'https://github.com/benbjohnson/litestream/releases/download/v0.5.17/litestream-0.5.17-windows-x86_64.zip' \
+            '6f5532687d71c452e0099a9087e51da65f9935664fb11549abc0a5a34cb1d34e'
+
+          fetch 'litestream-0.5.17-windows-x86_64.zip.sbom.json' \
+            'https://github.com/benbjohnson/litestream/releases/download/v0.5.17/litestream-0.5.17-windows-x86_64.zip.sbom.json' \
+            '2fa406a6839483e6b968619783a2782af64041136edbaa993a759df2dd7c209c'
+
+          fetch 'llama-b10621-bin-win-cpu-x64.zip' \
+            'https://github.com/ggml-org/llama.cpp/releases/download/b10621/llama-b10621-bin-win-cpu-x64.zip' \
+            '0e8b65e650e369f70f8307d890508886f171ef4fb00facccddd4a1b7ffdaca51'
+
+          fetch 'cosign-windows-amd64.exe' \
+            'https://github.com/sigstore/cosign/releases/download/v3.1.3/cosign-windows-amd64.exe' \
+            '9fe59be0eca1271873ce019061335eb1ac419b7059202e797828467ddabe33be'
+
+          fetch 'syft_1.51.1_windows_amd64.zip' \
+            'https://github.com/anchore/syft/releases/download/v1.51.1/syft_1.51.1_windows_amd64.zip' \
+            '5e4bc3e6b6344b4625de0f7aa5351aaa72856d11d78462972de0a101ee2c1c8f'
+
+          fetch 'gitleaks_8.30.1_windows_x64.zip' \
+            'https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip' \
+            'd29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e'
+
+          python3 - "$root" <<'PY'
+          import hashlib, json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          packages = [
+            dict(name='pdfcpu', role='ECO local PDF inspection/runtime candidate', version='v0.15.0', asset='pdfcpu_0.15.0_Windows_x86_64.zip', sha256='9809d993108dcf604aabe31568090859964833757ff930d2cd2c2a75d7317f88', licence='Apache-2.0', status='official-windows-package-acquired'),
+            dict(name='restic', role='backup/restore engine candidate', version='v0.19.1', asset='restic_0.19.1_windows_amd64.zip', sha256='da948ad707ed690426473aaba2046cd61f8f90f6f0e7dab6be0d5796531de67d', licence='BSD-2-Clause', status='official-windows-package-acquired'),
+            dict(name='litestream', role='SQLite replication/recovery candidate', version='v0.5.17', asset='litestream-0.5.17-windows-x86_64.zip', sha256='6f5532687d71c452e0099a9087e51da65f9935664fb11549abc0a5a34cb1d34e', licence='Apache-2.0', status='official-windows-package-acquired-with-upstream-support-warning', warning='Upstream states Windows binaries are provided for convenience but Windows is not an officially supported platform.'),
+            dict(name='llama.cpp', role='local CPU LLM runtime', version='b10621', source_commit='c1d0e7a004015f23bc0233470b747b596f29b264', asset='llama-b10621-bin-win-cpu-x64.zip', sha256='0e8b65e650e369f70f8307d890508886f171ef4fb00facccddd4a1b7ffdaca51', licence='MIT', status='official-nightly-windows-cpu-package-acquired', warning='This runnable package is from upstream prerelease/nightly b10621 and does not match the later Wave 1 default-branch source snapshot.'),
+            dict(name='cosign', role='release signing/verification build tool', version='v3.1.3', asset='cosign-windows-amd64.exe', sha256='9fe59be0eca1271873ce019061335eb1ac419b7059202e797828467ddabe33be', licence='Apache-2.0', status='official-windows-package-acquired'),
+            dict(name='syft', role='SBOM build/release tool', version='v1.51.1', asset='syft_1.51.1_windows_amd64.zip', sha256='5e4bc3e6b6344b4625de0f7aa5351aaa72856d11d78462972de0a101ee2c1c8f', licence='Apache-2.0', status='official-windows-package-acquired'),
+            dict(name='gitleaks', role='secret scanning development/build tool', version='v8.30.1', asset='gitleaks_8.30.1_windows_x64.zip', sha256='d29144deff3a68aa93ced33dddf84b7fdc26070add4aa0f4513094c8332afc4e', licence='MIT', status='official-windows-package-acquired'),
+          ]
+          build_required = [
+            dict(name='tesseract', source_commit='fb87a84b6e3384b424b2169c76de9031046861e9', licence='Apache-2.0', status='source-acquired-controlled-windows-build-required', reason='No upstream standalone Windows x64 package selected; do not substitute an unreviewed third-party build.'),
+            dict(name='docling', source_commit='b2d333e12260fc9cb74d8e8748b0d45505afcabb', licence='MIT', status='source-acquired-controlled-windows-build-or-environment-required', reason='Python application/runtime dependencies require a controlled local package/environment rather than an arbitrary binary.'),
+            dict(name='ocrmypdf', source_commit='196072acef056aa11b63e60564d98762bd38f638', licence='MPL-2.0', status='source-acquired-controlled-windows-build-or-environment-required', reason='Python application with external OCR/PDF dependencies; no arbitrary third-party Windows bundle selected.'),
+            dict(name='PaddleOCR', source_commit='2661c7c0ef5c613e8f93c6e93b2e052399f0f854', licence='Apache-2.0', status='source-acquired-controlled-windows-environment-required', reason='Large Python/model stack; package only after resource and model licensing qualification.'),
+          ]
+          for p in packages:
+              path = root/'PACKAGES'/p['asset']
+              if not path.is_file(): raise SystemExit(f'missing {path}')
+              h=hashlib.sha256(path.read_bytes()).hexdigest()
+              if h != p['sha256']: raise SystemExit(f'final hash mismatch for {p["name"]}')
+              p['bytes']=path.stat().st_size
+          manifest={'schema':1,'platform':'windows-x86_64/amd64','packages':packages,'source_only_build_required':build_required,'rules':['Only official upstream GitHub release assets are included.','Every included package SHA-256 is verified before artifact upload.','Source-only items are not replaced with third-party binaries.','Acquisition does not itself approve end-user bundling or public release.']}
+          (root/'WINDOWS_PACKAGE_MANIFEST.json').write_text(json.dumps(manifest, indent=2)+'\n', encoding='utf-8')
+          with (root/'SHA256SUMS.txt').open('w', encoding='ascii') as f:
+              for p in packages:
+                  f.write(f"{p['sha256']}  PACKAGES/{p['asset']}\n")
+              f.write('2fa406a6839483e6b968619783a2782af64041136edbaa993a759df2dd7c209c  PACKAGES/litestream-0.5.17-windows-x86_64.zip.sbom.json\n')
+          (root/'CONTROL'/'README.txt').write_text('Wave 3 contains official upstream Windows x64/amd64 GitHub release packages needed for ECO runtime, recovery, and build/release tooling. Source-only engines remain in the controlled-build queue; no third-party substitute binaries are included.\n', encoding='utf-8')
+          PY
+
+          echo "WAVE3_ROOT=$root" >> "$GITHUB_ENV"
+
+      - name: Upload complete Wave 3 Windows package bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO-FOSS-WINDOWS-WAVE3-20260904
+          path: ${{ env.WAVE3_ROOT }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 6
