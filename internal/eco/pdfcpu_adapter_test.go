@@ -22,6 +22,7 @@ func TestPDFCPUArgsAreOfflineReadOnlyAndConfigIndependent(t *testing.T) {
 			if strings.Contains(" "+joined+" ", forbidden) {
 				t.Fatalf("%s unexpectedly uses modifying pdfcpu command %q: %q", name, forbidden, joined)
 			}
+		}
 	}
 	if got := strings.Join(pdfcpuValidationArgs("x.pdf", "strict"), " "); !strings.Contains(got, "validate --mode strict") {
 		t.Fatalf("strict validation args are wrong: %q", got)
@@ -81,6 +82,9 @@ func TestParsePDFCPUInfoUsesPinnedJSONShape(t *testing.T) {
 			"futureField":"ignored for upstream compatibility"
 		}]
 	}`)
+	// The test source above is a Go raw string; turn the readable escaped
+	// representation into the actual JSON bytes expected from the CLI.
+	data = bytes.ReplaceAll(data, []byte(`\"`), []byte(`"`))
 	info, err := parsePDFCPUInfo(data)
 	if err != nil {
 		t.Fatal(err)
@@ -105,6 +109,7 @@ func TestParsePDFCPUInfoRejectsMissingOrMultipleRecords(t *testing.T) {
 		[]byte(`{"infos":[{"version":"","pageCount":1}]}`),
 		[]byte(`not json`),
 	} {
+		data = bytes.ReplaceAll(data, []byte(`\"`), []byte(`"`))
 		if _, err := parsePDFCPUInfo(data); err == nil {
 			t.Fatalf("case %d: expected malformed pdfcpu info rejection", i+1)
 		}
@@ -123,8 +128,10 @@ func TestPDFCPULimitedCaptureFlagsOverflow(t *testing.T) {
 }
 
 func TestPDFCPUInfoEnvelopeRemainsForwardCompatible(t *testing.T) {
+	data := []byte(`{"header":{"extra":true},"infos":[{"version":"2.0","pageCount":1,"newFlag":true}]}`)
+	data = bytes.ReplaceAll(data, []byte(`\"`), []byte(`"`))
 	var envelope pdfcpuInfoEnvelope
-	if err := json.Unmarshal([]byte(`{"header":{"extra":true},"infos":[{"version":"2.0","pageCount":1,"newFlag":true}]}`), &envelope); err != nil {
+	if err := json.Unmarshal(data, &envelope); err != nil {
 		t.Fatal(err)
 	}
 	if len(envelope.Infos) != 1 || envelope.Infos[0].Version != "2.0" {
