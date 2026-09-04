@@ -1,5 +1,6 @@
 name: Apply verified Tesseract runtime bundle integration
 
+# Controlled rerun after helper-name collision repair.
 on:
   push:
     branches:
