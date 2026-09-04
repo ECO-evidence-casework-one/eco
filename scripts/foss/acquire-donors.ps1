@@ -26,14 +26,18 @@ $donors = @(
     [pscustomobject]@{ Name='PaddleOCR'; Repo='https://github.com/PaddlePaddle/PaddleOCR.git'; Role='advanced-ocr-layout'; Mode='optional-large-external-engine'; ExpectedLicense='Apache-2.0'; Large=$true }
 )
 
-function Invoke-Git([string[]]$Args, [string]$WorkingDirectory = $null) {
+function Invoke-Git {
+    param(
+        [Parameter(Mandatory=$true)][string[]]$GitArgs,
+        [string]$WorkingDirectory = $null
+    )
     if ($WorkingDirectory) {
         Push-Location $WorkingDirectory
     }
     try {
-        $output = & git @Args 2>&1
+        $output = & git @GitArgs 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw "git $($Args -join ' ') failed:`n$($output -join [Environment]::NewLine)"
+            throw "git $($GitArgs -join ' ') failed:`n$($output -join [Environment]::NewLine)"
         }
         return $output
     }
@@ -69,23 +73,23 @@ foreach ($donor in $donors) {
     Write-Host "`n=== $($donor.Name) ===" -ForegroundColor Cyan
     try {
         if (-not (Test-Path (Join-Path $dest '.git'))) {
-            Invoke-Git @('clone','--depth','1',$donor.Repo,$dest) | Out-Host
+            Invoke-Git -GitArgs @('clone','--depth','1',$donor.Repo,$dest) | Out-Host
         }
         elseif ($Refresh) {
-            $dirty = (Invoke-Git @('status','--porcelain') $dest) -join ''
+            $dirty = (Invoke-Git -GitArgs @('status','--porcelain') -WorkingDirectory $dest) -join ''
             if ($dirty) {
                 throw 'Existing checkout is dirty; refusing to refresh it automatically.'
             }
-            Invoke-Git @('fetch','--depth','1','origin') $dest | Out-Host
-            $defaultRef = (Invoke-Git @('symbolic-ref','refs/remotes/origin/HEAD') $dest | Select-Object -First 1).Trim()
+            Invoke-Git -GitArgs @('fetch','--depth','1','origin') -WorkingDirectory $dest | Out-Host
+            $defaultRef = (Invoke-Git -GitArgs @('symbolic-ref','refs/remotes/origin/HEAD') -WorkingDirectory $dest | Select-Object -First 1).Trim()
             $defaultBranch = $defaultRef -replace '^refs/remotes/origin/',''
-            Invoke-Git @('checkout',$defaultBranch) $dest | Out-Host
-            Invoke-Git @('reset','--hard',"origin/$defaultBranch") $dest | Out-Host
+            Invoke-Git -GitArgs @('checkout',$defaultBranch) -WorkingDirectory $dest | Out-Host
+            Invoke-Git -GitArgs @('reset','--hard',"origin/$defaultBranch") -WorkingDirectory $dest | Out-Host
         }
 
-        $commit = (Invoke-Git @('rev-parse','HEAD') $dest | Select-Object -First 1).Trim()
-        $branch = (Invoke-Git @('branch','--show-current') $dest | Select-Object -First 1).Trim()
-        $origin = (Invoke-Git @('remote','get-url','origin') $dest | Select-Object -First 1).Trim()
+        $commit = (Invoke-Git -GitArgs @('rev-parse','HEAD') -WorkingDirectory $dest | Select-Object -First 1).Trim()
+        $branch = (Invoke-Git -GitArgs @('branch','--show-current') -WorkingDirectory $dest | Select-Object -First 1).Trim()
+        $origin = (Invoke-Git -GitArgs @('remote','get-url','origin') -WorkingDirectory $dest | Select-Object -First 1).Trim()
 
         $licenseFiles = Get-ChildItem -LiteralPath $dest -File -ErrorAction SilentlyContinue |
             Where-Object { $_.Name -match '^(LICENSE|LICENCE|COPYING|NOTICE)(\..*)?$' }
