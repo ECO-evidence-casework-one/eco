@@ -82,7 +82,7 @@ type TesseractRuntimeRegistration struct {
 	AuditChangeID          string    `json:"audit_change_id,omitempty"`
 }
 
-func requireAbsoluteDirectory(path, label string) (string, error) {
+func requireAbsoluteTesseractDirectory(path, label string) (string, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", fmt.Errorf("%s path is required", label)
@@ -106,7 +106,7 @@ func requireAbsoluteDirectory(path, label string) (string, error) {
 }
 
 func resolveTesseractBundleRoot(path string) (string, error) {
-	root, err := requireAbsoluteDirectory(path, "Tesseract runtime bundle")
+	root, err := requireAbsoluteTesseractDirectory(path, "Tesseract runtime bundle")
 	if err != nil {
 		return "", err
 	}
@@ -116,10 +116,10 @@ func resolveTesseractBundleRoot(path string) (string, error) {
 			root = parent
 		}
 	}
-	if _, err := requireAbsoluteDirectory(filepath.Join(root, "runtime"), "Tesseract runtime directory"); err != nil {
+	if _, err := requireAbsoluteTesseractDirectory(filepath.Join(root, "runtime"), "Tesseract runtime directory"); err != nil {
 		return "", err
 	}
-	if _, err := requireAbsoluteDirectory(filepath.Join(root, "control"), "Tesseract control directory"); err != nil {
+	if _, err := requireAbsoluteTesseractDirectory(filepath.Join(root, "control"), "Tesseract control directory"); err != nil {
 		return "", err
 	}
 	return root, nil
@@ -298,7 +298,7 @@ func verifyTesseractRuntimeBundleFiles(path string) (tesseractBundleVerification
 	if _, err := requireAbsoluteRegularFile(executable, "Tesseract executable"); err != nil {
 		return tesseractBundleVerification{}, err
 	}
-	if _, err := requireAbsoluteDirectory(tessdata, "Tesseract tessdata directory"); err != nil {
+	if _, err := requireAbsoluteTesseractDirectory(tessdata, "Tesseract tessdata directory"); err != nil {
 		return tesseractBundleVerification{}, err
 	}
 	return tesseractBundleVerification{
