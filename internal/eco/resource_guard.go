@@ -20,16 +20,16 @@ const (
 	resourceMiB = uint64(1024 * 1024)
 	resourceGiB = uint64(1024) * resourceMiB
 
-	defaultResourceSampleInterval          = 150 * time.Millisecond
-	maxResourceSampleInterval              = 2 * time.Second
-	defaultCriticalAvailableMemoryBytes    = 256 * resourceMiB
-	defaultWarningAvailableMemoryBytes     = 1 * resourceGiB
-	defaultCriticalDiskFreeBytes           = 256 * resourceMiB
-	defaultWarningDiskFreeBytes            = 1 * resourceGiB
-	defaultCriticalMemoryUsedPercent       = 98.0
-	defaultWarningMemoryUsedPercent        = 92.0
-	defaultWarningCPUUsedPercent           = 95.0
-	localModelAdvisoryMemoryHeadroomBytes  = 512 * resourceMiB
+	defaultResourceSampleInterval         = 150 * time.Millisecond
+	maxResourceSampleInterval             = 2 * time.Second
+	defaultCriticalAvailableMemoryBytes   = 256 * resourceMiB
+	defaultWarningAvailableMemoryBytes    = 1 * resourceGiB
+	defaultCriticalDiskFreeBytes          = 256 * resourceMiB
+	defaultWarningDiskFreeBytes           = 1 * resourceGiB
+	defaultCriticalMemoryUsedPercent      = 98.0
+	defaultWarningMemoryUsedPercent       = 92.0
+	defaultWarningCPUUsedPercent          = 95.0
+	localModelAdvisoryMemoryHeadroomBytes = 512 * resourceMiB
 )
 
 type ResourceSnapshot struct {
@@ -111,10 +111,11 @@ func LlamaCPPResourcePolicy(modelSize int64) EngineResourcePolicy {
 	policy := DefaultEngineResourcePolicy("llama.cpp", os.TempDir())
 	if modelSize > 0 {
 		modelBytes := uint64(modelSize)
-		if modelBytes <= math.MaxUint64-localModelAdvisoryMemoryHeadroomBytes {
+		maxUint64 := ^uint64(0)
+		if modelBytes <= maxUint64-localModelAdvisoryMemoryHeadroomBytes {
 			policy.AdvisoryMemoryBytes = modelBytes + localModelAdvisoryMemoryHeadroomBytes
 		} else {
-			policy.AdvisoryMemoryBytes = math.MaxUint64
+			policy.AdvisoryMemoryBytes = maxUint64
 		}
 		policy.AdvisoryReason = "available RAM is below the GGUF file size plus conservative headroom; this is an advisory only because runtime memory use depends on model/layout settings"
 	}
