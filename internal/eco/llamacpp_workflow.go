@@ -9,12 +9,13 @@ import (
 )
 
 type LlamaCPPAnswerResult struct {
-	Question      QuestionRecord   `json:"question"`
-	Grounding     GroundingReport  `json:"grounding"`
-	EngineVersion string           `json:"engine_version"`
-	ModelName     string           `json:"model_name"`
-	ModelSHA256   string           `json:"model_sha256"`
-	ContextID     string           `json:"context_id"`
+	Question      QuestionRecord    `json:"question"`
+	Grounding     GroundingReport   `json:"grounding"`
+	EngineVersion string            `json:"engine_version"`
+	ModelName     string            `json:"model_name"`
+	ModelSHA256   string            `json:"model_sha256"`
+	ContextID     string            `json:"context_id"`
+	Resources     ResourceAssessment `json:"resources"`
 }
 
 type llamaCPPRunner func(context.Context, string, string, GroundingContext) (LlamaCPPModelResult, error)
@@ -53,7 +54,16 @@ func (v *Vault) askWithLlamaCPPRunner(ctx context.Context, question string, scop
 
 	modelResult, err := runner(ctx, executable, modelPath, grounding)
 	if err != nil {
-		return LlamaCPPAnswerResult{EngineVersion: modelResult.EngineVersion, ModelName: modelResult.ModelName, ModelSHA256: modelResult.ModelSHA256, ContextID: grounding.ContextID}, err
+		if modelResult.Resources.Blocked {
+			_ = v.recordLlamaResourceBlock(question, modelResult, grounding)
+		}
+		return LlamaCPPAnswerResult{
+			EngineVersion: modelResult.EngineVersion,
+			ModelName:     modelResult.ModelName,
+			ModelSHA256:   modelResult.ModelSHA256,
+			ContextID:     grounding.ContextID,
+			Resources:     modelResult.Resources,
+		}, err
 	}
 	report, citations, err := v.VerifyGroundingEmission(grounding, modelResult.Emission)
 	result := LlamaCPPAnswerResult{
@@ -62,6 +72,7 @@ func (v *Vault) askWithLlamaCPPRunner(ctx context.Context, question string, scop
 		ModelName:     modelResult.ModelName,
 		ModelSHA256:   modelResult.ModelSHA256,
 		ContextID:     grounding.ContextID,
+		Resources:     modelResult.Resources,
 	}
 	if err != nil {
 		_ = v.recordLlamaGroundingRejection(question, modelResult, grounding, "verification_error")
@@ -145,6 +156,26 @@ func countVerifiedEvidenceForScope(ws Workspace, scopeIDs []string) int {
 	return count
 }
 
+func addResourceAuditDetails(details map[string]any, assessment ResourceAssessment) {
+	level := strings.TrimSpace(assessment.Level)
+	if level == "" {
+		level = "not-recorded"
+	}
+	details["resource_level"] = level
+	details["resource_blocked"] = assessment.Blocked
+	details["resource_warning_count"] = len(assessment.Warnings)
+	if assessment.Snapshot.MemorySampled {
+		details["memory_available_bytes"] = assessment.Snapshot.MemoryAvailableBytes
+		details["memory_used_percent"] = assessment.Snapshot.MemoryUsedPercent
+	}
+	if assessment.Snapshot.DiskSampled {
+		details["disk_free_bytes"] = assessment.Snapshot.DiskFreeBytes
+	}
+	if assessment.Snapshot.CPUSampled {
+		details["cpu_used_percent"] = assessment.Snapshot.CPUUsedPercent
+	}
+}
+
 func (v *Vault) persistLlamaQuestion(rec QuestionRecord, model LlamaCPPModelResult, grounding GroundingContext, report GroundingReport) error {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -153,18 +184,20 @@ func (v *Vault) persistLlamaQuestion(rec QuestionRecord, model LlamaCPPModelResu
 	oldUpdatedAt := v.Workspace.UpdatedAt
 	oldBuildID := v.Workspace.BuildID
 	v.Workspace.Questions = append([]QuestionRecord{rec}, v.Workspace.Questions...)
-	v.addChangeUnlocked("local-ai", "grounded-local-ai-question", "Released a local llama.cpp answer after deterministic source grounding", map[string]any{
-		"question_id":              rec.ID,
-		"receipt_id":               rec.ReceiptID,
-		"context_id":               grounding.ContextID,
-		"engine":                   "llama.cpp",
-		"engine_version":           truncate(model.EngineVersion, maxOCRIdentityText),
-		"model_name":               truncate(model.ModelName, maxOCRIdentityText),
-		"model_sha256":             model.ModelSHA256,
-		"grounded_claims":          len(report.Checks),
-		"semantic_truth_verified":  false,
-		"model_draft_released":     false,
-	})
+	details := map[string]any{
+		"question_id":             rec.ID,
+		"receipt_id":              rec.ReceiptID,
+		"context_id":              grounding.ContextID,
+		"engine":                  "llama.cpp",
+		"engine_version":          truncate(model.EngineVersion, maxOCRIdentityText),
+		"model_name":              truncate(model.ModelName, maxOCRIdentityText),
+		"model_sha256":            model.ModelSHA256,
+		"grounded_claims":         len(report.Checks),
+		"semantic_truth_verified": false,
+		"model_draft_released":    false,
+	}
+	addResourceAuditDetails(details, model.Resources)
+	v.addChangeUnlocked("local-ai", "grounded-local-ai-question", "Released a local llama.cpp answer after deterministic source grounding", details)
 	if err := v.saveUnlocked(); err != nil {
 		v.Workspace.Questions = oldQuestions
 		v.Workspace.Changes = oldChanges
@@ -181,17 +214,45 @@ func (v *Vault) recordLlamaGroundingRejection(question string, model LlamaCPPMod
 	oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
 	oldUpdatedAt := v.Workspace.UpdatedAt
 	oldBuildID := v.Workspace.BuildID
-	v.addChangeUnlocked("local-ai", "local-ai-grounding-rejected", "Rejected a local llama.cpp emission before answer release", map[string]any{
-		"question":                 truncate(question, 300),
-		"context_id":               grounding.ContextID,
-		"engine":                   "llama.cpp",
-		"engine_version":           truncate(model.EngineVersion, maxOCRIdentityText),
-		"model_name":               truncate(model.ModelName, maxOCRIdentityText),
-		"model_sha256":             model.ModelSHA256,
-		"reason":                   reason,
-		"model_draft_released":     false,
-		"semantic_truth_verified":  false,
-	})
+	details := map[string]any{
+		"question":                truncate(question, 300),
+		"context_id":              grounding.ContextID,
+		"engine":                  "llama.cpp",
+		"engine_version":          truncate(model.EngineVersion, maxOCRIdentityText),
+		"model_name":              truncate(model.ModelName, maxOCRIdentityText),
+		"model_sha256":            model.ModelSHA256,
+		"reason":                  reason,
+		"model_draft_released":    false,
+		"semantic_truth_verified": false,
+	}
+	addResourceAuditDetails(details, model.Resources)
+	v.addChangeUnlocked("local-ai", "local-ai-grounding-rejected", "Rejected a local llama.cpp emission before answer release", details)
+	if err := v.saveUnlocked(); err != nil {
+		v.Workspace.Changes = oldChanges
+		v.Workspace.UpdatedAt = oldUpdatedAt
+		v.Workspace.BuildID = oldBuildID
+		return err
+	}
+	return nil
+}
+
+func (v *Vault) recordLlamaResourceBlock(question string, model LlamaCPPModelResult, grounding GroundingContext) error {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
+	oldUpdatedAt := v.Workspace.UpdatedAt
+	oldBuildID := v.Workspace.BuildID
+	details := map[string]any{
+		"question":      truncate(question, 300),
+		"context_id":    grounding.ContextID,
+		"engine":        "llama.cpp",
+		"engine_version": truncate(model.EngineVersion, maxOCRIdentityText),
+		"model_name":    truncate(model.ModelName, maxOCRIdentityText),
+		"model_sha256":  model.ModelSHA256,
+		"generation_started": false,
+	}
+	addResourceAuditDetails(details, model.Resources)
+	v.addChangeUnlocked("local-ai", "local-ai-resource-blocked", "Blocked local llama.cpp launch because host resources were critically constrained", details)
 	if err := v.saveUnlocked(); err != nil {
 		v.Workspace.Changes = oldChanges
 		v.Workspace.UpdatedAt = oldUpdatedAt

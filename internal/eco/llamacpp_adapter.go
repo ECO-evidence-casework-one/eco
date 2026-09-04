@@ -46,10 +46,11 @@ const llamaCPPEmissionSchema = `{
 }`
 
 type LlamaCPPModelResult struct {
-	Emission      GroundingEmission `json:"emission"`
-	EngineVersion string            `json:"engine_version"`
-	ModelName     string            `json:"model_name"`
-	ModelSHA256   string            `json:"model_sha256"`
+	Emission      GroundingEmission  `json:"emission"`
+	EngineVersion string             `json:"engine_version"`
+	ModelName     string             `json:"model_name"`
+	ModelSHA256   string             `json:"model_sha256"`
+	Resources     ResourceAssessment `json:"resources"`
 }
 
 // RunLlamaCPP invokes a caller-selected local llama-cli executable with a
@@ -76,27 +77,34 @@ func RunLlamaCPP(ctx context.Context, executable, modelPath string, grounding Gr
 	if err != nil {
 		return LlamaCPPModelResult{}, err
 	}
+	partial := LlamaCPPModelResult{ModelName: model.Name, ModelSHA256: model.SHA256}
+	resources, err := CheckLocalEngineResources(ctx, LlamaCPPResourcePolicy(model.Size))
+	partial.Resources = resources
+	if err != nil {
+		return partial, err
+	}
 	version, err := llamaCPPVersion(ctx, exePath)
 	if err != nil {
-		return LlamaCPPModelResult{}, err
+		return partial, err
 	}
+	partial.EngineVersion = version
 	prompt, err := buildLlamaCPPPrompt(grounding)
 	if err != nil {
-		return LlamaCPPModelResult{}, err
+		return partial, err
 	}
 
 	workDir, err := os.MkdirTemp("", "eco-llamacpp-")
 	if err != nil {
-		return LlamaCPPModelResult{}, fmt.Errorf("create bounded llama.cpp workspace: %w", err)
+		return partial, fmt.Errorf("create bounded llama.cpp workspace: %w", err)
 	}
 	defer os.RemoveAll(workDir)
 	promptPath := filepath.Join(workDir, "prompt.txt")
 	schemaPath := filepath.Join(workDir, "grounding-emission.schema.json")
 	if err := os.WriteFile(promptPath, []byte(prompt), 0600); err != nil {
-		return LlamaCPPModelResult{}, fmt.Errorf("write llama.cpp prompt: %w", err)
+		return partial, fmt.Errorf("write llama.cpp prompt: %w", err)
 	}
 	if err := os.WriteFile(schemaPath, []byte(llamaCPPEmissionSchema), 0600); err != nil {
-		return LlamaCPPModelResult{}, fmt.Errorf("write llama.cpp JSON schema: %w", err)
+		return partial, fmt.Errorf("write llama.cpp JSON schema: %w", err)
 	}
 
 	args := llamaCPPArgs(model.Path, promptPath, schemaPath)
@@ -114,28 +122,24 @@ func RunLlamaCPP(ctx context.Context, executable, modelPath string, grounding Gr
 		if message == "" {
 			message = err.Error()
 		}
-		return LlamaCPPModelResult{}, fmt.Errorf("llama.cpp generation failed: %s", message)
+		return partial, fmt.Errorf("llama.cpp generation failed: %s", message)
 	}
 	if outCapture.overflow {
-		return LlamaCPPModelResult{}, errors.New("llama.cpp output exceeded ECO's safe size limit")
+		return partial, errors.New("llama.cpp output exceeded ECO's safe size limit")
 	}
 	if errCapture.overflow {
-		return LlamaCPPModelResult{}, errors.New("llama.cpp diagnostics exceeded ECO's safe size limit")
+		return partial, errors.New("llama.cpp diagnostics exceeded ECO's safe size limit")
 	}
 	if err := modelStillMatches(model); err != nil {
-		return LlamaCPPModelResult{}, err
+		return partial, err
 	}
 
 	emission, err := parseLlamaCPPEmission(stdout.Bytes())
 	if err != nil {
-		return LlamaCPPModelResult{}, err
+		return partial, err
 	}
-	return LlamaCPPModelResult{
-		Emission:      emission,
-		EngineVersion: version,
-		ModelName:     model.Name,
-		ModelSHA256:   model.SHA256,
-	}, nil
+	partial.Emission = emission
+	return partial, nil
 }
 
 type llamaCPPModelReceipt struct {
