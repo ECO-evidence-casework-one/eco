@@ -31,18 +31,18 @@ var localToolSpecs = map[string]localToolSpec{
 }
 
 type LocalToolRegistration struct {
-	Kind         string    `json:"kind"`
-	Executable   string    `json:"executable"`
-	SHA256       string    `json:"sha256"`
-	Size         int64     `json:"size"`
-	Version      string    `json:"version"`
-	Upstream     string    `json:"upstream"`
-	License      string    `json:"license"`
-	RegisteredAt time.Time `json:"registered_at"`
-	AuditChangeID string   `json:"audit_change_id,omitempty"`
+	Kind          string    `json:"kind"`
+	Executable    string    `json:"executable"`
+	SHA256        string    `json:"sha256"`
+	Size          int64     `json:"size"`
+	Version       string    `json:"version"`
+	Upstream      string    `json:"upstream"`
+	License       string    `json:"license"`
+	RegisteredAt  time.Time `json:"registered_at"`
+	AuditChangeID string    `json:"audit_change_id,omitempty"`
 }
 
-type localToolVersionProbe func(context.Context, string) (string, error)
+type localToolVersionProbe func(context.Context, string, string) (string, error)
 
 func canonicalLocalToolKind(kind string) (localToolSpec, error) {
 	kind = strings.ToLower(strings.TrimSpace(kind))
