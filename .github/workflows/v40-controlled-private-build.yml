@@ -1,0 +1,89 @@
+name: V40 controlled private Windows build
+
+on:
+  push:
+    branches:
+      - development/v40-integrated-synthetic-ai-candidate
+    paths:
+      - '.github/workflows/v40-controlled-private-build.yml'
+      - 'build-input/v40/**'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/v40-controlled-private-build.yml'
+      - 'build-input/v40/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v40-controlled-private-windows-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and verify private synthetic candidate
+    runs-on: windows-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout exact tested ref
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - name: Set up Go 1.23
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.x'
+          check-latest: false
+          cache: false
+
+      - name: Reconstruct and correct controlled private build script
+        shell: pwsh
+        run: |
+          $b = New-Object System.Text.StringBuilder
+          $parts = @(
+            "build-input/v40/private-build.part00",
+            "build-input/v40/private-build.part01",
+            "build-input/v40/private-build.part020",
+            "build-input/v40/private-build.part021",
+            "build-input/v40/private-build.part022",
+            "build-input/v40/private-build.part03"
+          )
+          foreach ($p in $parts) {
+            [void]$b.Append((Get-Content -Raw $p).Trim())
+          }
+          $scriptPath = "build-input/v40/private-build.ps1"
+          [IO.File]::WriteAllBytes(
+            $scriptPath,
+            [Convert]::FromBase64String($b.ToString())
+          )
+          $stagedHash = (Get-FileHash -Algorithm SHA256 $scriptPath).Hash.ToLowerInvariant()
+          if ($stagedHash -ne "6f04845f501d3d312220dc55f626d04a2a7cd2b10faa20474c5f2f82ee8df0d6") {
+            throw "Staged private build script hash mismatch: $stagedHash"
+          }
+          $hotfixPath = "build-input/v40/v40-msys-runtime-hotfix.ps1"
+          $hotfixHash = (Get-FileHash -Algorithm SHA256 $hotfixPath).Hash.ToLowerInvariant()
+          if ($hotfixHash -ne "3ae9ba4aee404ba29ca045daf3b4bf9046f8775a9949ae2546cdfa73e5cb8ead") {
+            throw "Runtime and llama hotfix hash mismatch: $hotfixHash"
+          }
+          & $hotfixPath -TargetPath $scriptPath
+
+      - name: Build genuine offline synthetic candidate
+        shell: pwsh
+        run: ./build-input/v40/private-build.ps1
+
+      - name: Upload private controlled handoff and diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO_V40_SYNTHETIC_AI_PRIVATE_HANDOFF
+          path: |
+            v40-private-build/handoff
+            v40-private-build/logs
+          if-no-files-found: warn
+          retention-days: 1
+          compression-level: 0
+          include-hidden-files: false
