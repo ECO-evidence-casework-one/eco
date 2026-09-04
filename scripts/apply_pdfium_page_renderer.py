@@ -504,10 +504,10 @@ locate_func = choose_anchor + r'''func (a *application) locatePDFRenderer() {
 '''
 s = s.replace(choose_anchor, locate_func, 1)
 
-citation_anchor = '''\t\ta.mu.Lock()\n\t\tif c.Region != nil {\n\t\t\tregion := *c.Region\n\t\t\ta.pendingCitationRegion = &region\n\t\t} else {\n\t\t\ta.pendingCitationRegion = nil\n\t\t}\n\t\ta.mu.Unlock()\n'''
+citation_anchor = '''\t\t\ta.mu.Lock()\n\t\t\tif c.Region != nil {\n\t\t\t\tregion := *c.Region\n\t\t\t\ta.pendingCitationRegion = &region\n\t\t\t} else {\n\t\t\t\ta.pendingCitationRegion = nil\n\t\t\t}\n\t\t\ta.mu.Unlock()\n'''
 if citation_anchor not in s:
     raise SystemExit('citation pending-region anchor not found')
-citation_repl = '''\t\ta.mu.Lock()\n\t\tif c.Region != nil {\n\t\t\tregion := *c.Region\n\t\t\ta.pendingCitationRegion = &region\n\t\t} else {\n\t\t\ta.pendingCitationRegion = nil\n\t\t}\n\t\ta.pendingCitationPage = c.Page\n\t\ta.mu.Unlock()\n'''
+citation_repl = '''\t\t\ta.mu.Lock()\n\t\t\tif c.Region != nil {\n\t\t\t\tregion := *c.Region\n\t\t\t\ta.pendingCitationRegion = &region\n\t\t\t} else {\n\t\t\t\ta.pendingCitationRegion = nil\n\t\t\t}\n\t\t\ta.pendingCitationPage = c.Page\n\t\t\ta.mu.Unlock()\n'''
 s = s.replace(citation_anchor, citation_repl, 1)
 
 preview_anchor = '\te := a.view.Evidence[a.selected]\n\tif e.Image != nil {\n'
