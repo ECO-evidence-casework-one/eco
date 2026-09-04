@@ -82,8 +82,8 @@ func TestOCRmyPDFWorkflowUsesVerifiedReadingCopyAndPreservesExistingReading(t *t
 	if seenPath == "" || seenPath == item.SourcePath || !strings.Contains(filepath.Base(seenPath), "verified-reading-") {
 		t.Fatalf("OCRmyPDF runner did not receive ECO's verified reading copy: %q", seenPath)
 	}
-	if seenSource.ObjectFile != item.ObjectFile || seenSource.SHA256 != item.SHA256 {
-		t.Fatalf("OCRmyPDF runner did not receive preserved source receipt: %+v", seenSource)
+	if seenSource.EvidenceID != item.ID || seenSource.ObjectFile != item.ObjectFile || seenSource.SHA256 != item.SHA256 || seenSource.Size != item.Size {
+		t.Fatalf("OCRmyPDF runner did not receive complete preserved source receipt: %+v", seenSource)
 	}
 	if result.PageCount != 3 || result.OCRPages != 2 || len(result.Segments) != 2 {
 		t.Fatalf("unexpected OCRmyPDF result: %+v", result)
@@ -193,13 +193,31 @@ func TestOCRmyPDFWorkflowRejectsForgedSourceBinding(t *testing.T) {
 	}
 }
 
+func TestValidateOCRmyPDFResultRejectsForgedReceiptIDOrSize(t *testing.T) {
+	now := time.Now().UTC()
+	item := EvidenceItem{ID: "EVD-1", ObjectFile: "EVD-1.ecoobj", SHA256: strings.Repeat("a", 64), Size: 10}
+	source := SourceReceipt{EvidenceID: item.ID, ObjectFile: item.ObjectFile, SHA256: item.SHA256, Size: item.Size, VerifiedAt: now}
+	for name, mutate := range map[string]func(*OCRmyPDFResult){
+		"evidence-id": func(r *OCRmyPDFResult) { r.Source.EvidenceID = "EVD-other" },
+		"size":        func(r *OCRmyPDFResult) { r.Source.Size++ },
+	} {
+		t.Run(name, func(t *testing.T) {
+			result := fakeOCRmyPDFResult(t, source, "OCR text")
+			mutate(&result)
+			if err := validateOCRmyPDFResult(item, result); err == nil || !strings.Contains(err.Error(), "not bound") {
+				t.Fatalf("expected forged %s receipt rejection, got %v", name, err)
+			}
+		})
+	}
+}
+
 func TestValidateOCRmyPDFResultRejectsInventedGeometryAndConfidence(t *testing.T) {
 	now := time.Now().UTC()
 	item := EvidenceItem{
-		ID: "EVD-1", ObjectFile: "EVD-1.ecoobj", SHA256: strings.Repeat("a", 64),
+		ID: "EVD-1", ObjectFile: "EVD-1.ecoobj", SHA256: strings.Repeat("a", 64), Size: 1,
 		DetectedType: "pdf", SourceVerified: true, SourceVerifiedAt: now, Preservation: preservationCommitted,
 	}
-	source := SourceReceipt{EvidenceID: item.ID, ObjectFile: item.ObjectFile, SHA256: item.SHA256, Size: 1, VerifiedAt: now}
+	source := SourceReceipt{EvidenceID: item.ID, ObjectFile: item.ObjectFile, SHA256: item.SHA256, Size: item.Size, VerifiedAt: now}
 	result := fakeOCRmyPDFResult(t, source, "OCR text")
 	region := NormalizedRegion{X: 0, Y: 0, Width: 1, Height: 1}
 	result.Segments[0].Region = &region
