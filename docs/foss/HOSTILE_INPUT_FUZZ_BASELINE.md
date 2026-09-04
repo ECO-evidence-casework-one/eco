@@ -15,4 +15,15 @@ Initial fuzz boundaries:
 
 Inputs are capped to 1 MiB during mutation runs, and each target asserts a bounded-output invariant where the parser returns text. These targets are intended to detect panics, hangs, unbounded expansion and unsafe parser assumptions; they do not replace deterministic regression tests, preserved-original controls, or the main Windows release-integrity gates.
 
+## Qualification result
+
+A separate Go 1.23.12 qualification run (`33893969593`) first passed deterministic seed tests and then fuzzed each boundary for approximately 20 seconds with two workers:
+
+- ZIP preflight/inspection: 114,860 mutated executions, 28 new interesting inputs, PASS;
+- EML/MIME reader: 107,571 mutated executions, 80 new interesting inputs, PASS;
+- XML/Office readable-text parser: 233,430 mutated executions, 71 new interesting inputs, PASS;
+- file-type sniffer: 467,989 mutated executions, 107 new interesting inputs, PASS.
+
+Total: 923,850 mutated executions across the four boundaries with no crash or asserted bound violation.
+
 SQLite corruption fuzzing is intentionally not part of the current ECO baseline because current ECO does not use SQLite. That older reconnaissance item is therefore obsolete unless SQLite is introduced later.
