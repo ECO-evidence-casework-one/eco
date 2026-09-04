@@ -33,13 +33,13 @@ type GroundingRecord struct {
 // trusted is intentionally not serialised: model output cannot recreate or
 // authorise a context by copying JSON back to ECO.
 type GroundingContext struct {
-	ContextID                   string            `json:"context_id"`
-	Question                    string            `json:"question"`
-	Records                     []GroundingRecord `json:"records"`
-	SuspiciousSourcesExcluded   int               `json:"suspicious_sources_excluded"`
-	LowConfidenceSourcesExcluded int              `json:"low_confidence_sources_excluded"`
-	SourceVerificationFailures  int               `json:"source_verification_failures"`
-	trusted                     map[string]groundingTrustedSource
+	ContextID                    string            `json:"context_id"`
+	Question                     string            `json:"question"`
+	Records                      []GroundingRecord `json:"records"`
+	SuspiciousSourcesExcluded    int               `json:"suspicious_sources_excluded"`
+	LowConfidenceSourcesExcluded int               `json:"low_confidence_sources_excluded"`
+	SourceVerificationFailures   int               `json:"source_verification_failures"`
+	trusted                      map[string]groundingTrustedSource
 }
 
 type groundingTrustedSource struct {
@@ -172,6 +172,9 @@ func (v *Vault) VerifyGroundingEmission(ctx GroundingContext, emission Grounding
 	if ctx.ContextID == "" || len(ctx.trusted) == 0 || groundingContextID(ctx.trusted) != ctx.ContextID {
 		return report, nil, errors.New("grounding context is missing, reconstructed or mutated")
 	}
+	if err := validateGroundingContextRecords(ctx); err != nil {
+		return report, nil, err
+	}
 	if strings.TrimSpace(emission.Answer) == "" {
 		return report, nil, errors.New("grounding answer is required")
 	}
@@ -271,6 +274,25 @@ func (v *Vault) VerifyGroundingEmission(ctx GroundingContext, emission Grounding
 		return report, nil, nil
 	}
 	return report, citations, nil
+}
+
+func validateGroundingContextRecords(ctx GroundingContext) error {
+	if len(ctx.Records) != len(ctx.trusted) {
+		return errors.New("grounding context records no longer match the trusted source set")
+	}
+	seen := make(map[string]bool, len(ctx.Records))
+	for _, record := range ctx.Records {
+		key := groundingKey(record.EvidenceID, record.SegmentID)
+		if seen[key] {
+			return errors.New("grounding context contains duplicate shown source IDs")
+		}
+		seen[key] = true
+		trusted, ok := ctx.trusted[key]
+		if !ok || record.Display != trusted.Label || record.Text != trusted.ShownText || record.Page != trusted.Page || record.Origin != trusted.Origin || record.Confidence != trusted.Confidence {
+			return errors.New("grounding context shown records were mutated after retrieval")
+		}
+	}
+	return nil
 }
 
 func validateGroundingClaim(claim GroundingClaim, index int) error {
