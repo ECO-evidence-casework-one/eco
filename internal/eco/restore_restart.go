@@ -17,7 +17,7 @@ var ErrWorkspaceRecoveryRequired = errors.New("workspace recovery requires an ex
 // restart. Checkpoint names are warning evidence only, never trusted paths for
 // automatic activation, deletion or migration. A healthy populated workspace
 // can still open with its historical pre-restore checkpoints retained.
-// Reset (.previous-*) recovery is deliberately outside this restore-only slice.
+// A retained .previous-* reset archive likewise requires an explicit choice.
 func CheckWorkspaceRecoveryState(root string) error {
 	if root == "" {
 		return errors.New("empty workspace root")
@@ -40,19 +40,23 @@ func CheckWorkspaceRecoveryState(root string) error {
 		return fmt.Errorf("inspect recovery checkpoint directory: %w", err)
 	}
 	defer parent.Close()
-	prefix := filepath.Base(absolute) + ".pre-restore-"
+	prefixes := []string{filepath.Base(absolute) + ".pre-restore-", filepath.Base(absolute) + ".previous-"}
 	for {
 		entries, readErr := parent.ReadDir(128)
 		for _, entry := range entries {
 			name := entry.Name()
-			matches := strings.HasPrefix(name, prefix)
-			if runtime.GOOS == "windows" {
-				matches = strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix))
+			matches := false
+			for _, prefix := range prefixes {
+				if runtime.GOOS == "windows" {
+					matches = matches || strings.HasPrefix(strings.ToLower(name), strings.ToLower(prefix))
+				} else {
+					matches = matches || strings.HasPrefix(name, prefix)
+				}
 			}
 			if matches {
 				// Even a link or incomplete entry blocks initialisation. The
 				// explicit Open-existing flow must validate the selected folder.
-				return fmt.Errorf("%w: the active workspace has no committed metadata, but a pre-restore entry remains at %q. Nothing was created or replaced. Preserve all copies and use Open existing to select and verify the original checkpoint", ErrWorkspaceRecoveryRequired, filepath.Join(filepath.Dir(absolute), name))
+				return fmt.Errorf("%w: the active workspace has no committed metadata, but a retained workspace checkpoint remains at %q. Nothing was created or replaced. Preserve all copies and use Open existing to select and verify the original checkpoint", ErrWorkspaceRecoveryRequired, filepath.Join(filepath.Dir(absolute), name))
 			}
 		}
 		if readErr != nil {

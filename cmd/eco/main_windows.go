@@ -288,13 +288,13 @@ func chooseExistingWorkspace() (string, bool) {
 }
 
 func startCleanCandidate(candidate string) (string, bool) {
-	archive, err := eco.ArchiveDevelopmentWorkspaceForCleanStart(candidate)
+	archive, err := eco.StartCleanDevelopmentWorkspace(candidate)
 	if err != nil {
 		messageBox(0, "ECO could not start clean", err.Error(), MB_OK|MB_ICONERROR)
 		return "", false
 	}
 	if archive != "" {
-		messageBox(0, "Prior candidate workspace preserved", "ECO did not delete the previous workspace. It was preserved at:\r\n\r\n"+archive+"\r\n\r\nA fresh candidate workspace will now be created.", MB_OK|MB_ICONINFORMATION)
+		messageBox(0, "Prior candidate workspace preserved", "ECO did not delete the previous workspace. It was preserved at:\r\n\r\n"+archive+"\r\n\r\nA fresh candidate workspace has been created.", MB_OK|MB_ICONINFORMATION)
 	}
 	return candidate, true
 }

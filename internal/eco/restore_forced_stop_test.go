@@ -127,7 +127,11 @@ func killRestoreAtBoundary(t *testing.T, phase, root, backup, marker string) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestRestoreForcedStopChild$")
+	childTest := "TestRestoreForcedStopChild"
+	if strings.HasPrefix(phase, "reset_") {
+		childTest = "TestResetForcedStopChild"
+	}
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^"+childTest+"$")
 	cmd.Env = append(os.Environ(), "ECO_TEST_FORCED_RESTORE=1", "ECO_TEST_RESTORE_PHASE="+phase,
 		"ECO_TEST_RESTORE_ROOT="+root, "ECO_TEST_RESTORE_BACKUP="+backup, "ECO_TEST_RESTORE_CLOSED="+marker)
 	stdout, err := cmd.StdoutPipe()

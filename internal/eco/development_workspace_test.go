@@ -75,6 +75,16 @@ func TestArchiveDevelopmentWorkspaceForCleanStartPreservesOldState(t *testing.T)
 		t.Fatal(err)
 	}
 
+	refused, refusal := OpenVault(root)
+	if refused != nil {
+		_ = refused.Close()
+	}
+	if !errors.Is(refusal, ErrWorkspaceRecoveryRequired) {
+		t.Fatalf("archived route did not require an explicit new-state choice: %v", refusal)
+	}
+	if _, err := StartCleanDevelopmentWorkspace(root); err != nil {
+		t.Fatal(err)
+	}
 	fresh, err := OpenVault(root)
 	if err != nil {
 		t.Fatal(err)

@@ -47,8 +47,9 @@ func ValidateExistingWorkspaceRoot(root string) error {
 
 // ArchiveDevelopmentWorkspaceForCleanStart preserves an existing development
 // workspace by renaming that exact owned directory to a sibling archive. It
-// never deletes the workspace. A later OpenVault(root) can then create a fresh
-// candidate workspace at the original route.
+// never deletes the workspace. OpenVault does not silently recreate an archived
+// route. Use StartCleanDevelopmentWorkspace for an explicitly requested fresh
+// workspace, or OpenVault(archive) to select the preserved prior state.
 func ArchiveDevelopmentWorkspaceForCleanStart(root string) (string, error) {
 	if root == "" {
 		return "", errors.New("empty workspace root")
