@@ -1,234 +1,120 @@
 # Current ECO release gate
 
-**Gate record:** `ECO-RELEASE-GATE-20260804-011`  
-**Updated:** 4 August 2026, approximately 14:28 BST / 15:28 CEST  
+**Gate record:** `ECO-RELEASE-GATE-20260905-012`  
+**Updated:** 5 September 2026  
 **Canonical public status:** [`../../CURRENT_STATUS.md`](../../CURRENT_STATUS.md)  
-**Baseline `main` reviewed for this record:** `9c98588387f5aed6f33371fefbf1eacbc514a5e9`  
-**Live canonical source:** the repository's current `main` ref  
-**Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
-**Approved public V40 source release:** none  
+**Baseline `main` reviewed for this record:** `34e96faea669ed29e4c8f63b3c333ee642f29dbf`  
+**Post-merge CI:** run `33957055962` — all normal jobs passed  
+**Approved public source release:** none  
 **Approved signed end-user executable:** none
 
 ## Controlling decision
 
-ECO remains a source-development project only. The baseline SHA identifies the exact tree reviewed when this gate record was prepared; it is not intended to self-reference a future squash commit.
+ECO remains a source-development project only. The September GitHub/FOSS stack is now part of canonical `main`, and several capabilities have materially advanced, but the public/real-evidence release gates remain closed.
 
-No branch, workflow, synthetic prototype, runner-built executable, governance record, deadline or audit pack currently authorises:
+No current source, workflow, Acer test, runner-built executable, model/runtime adapter or governance record authorises:
 
 - real, sensitive or irreplaceable evidence use;
-- current Ask ECO or local-model use with public or real evidence;
-- a public V40 source tag or pre-alpha release;
-- ordinary-user executable testing;
-- public executable distribution;
-- signing, release-candidate or stable-release status;
-- institutional, healthcare, justice-sector or EU supply or deployment.
+- reliable professional, clinical, forensic or high-consequence AI claims;
+- ordinary-user public executable distribution;
+- release-candidate or stable-release status;
+- institutional, healthcare, justice-sector or EU/EEA supply/deployment.
+
+## Newly qualified canonical capabilities
+
+PR #122 merged the combined qualified stack as `34e96faea669ed29e4c8f63b3c333ee642f29dbf`. The exact combined source passed complete CI before merge and again on `main` after merge. Canonical `main` now includes:
+
+- native PDF text extraction from a qualified BSD-3-Clause Go reader;
+- optional exact-qualified `pdfium-cli` page rendering;
+- bounded multi-page PDF preview navigation;
+- Tesseract OCR plus verified complete Windows runtime-bundle registration;
+- bounded MBOX reading using MIT `emersion/go-mbox`;
+- permanent hostile-input fuzz targets for MBOX, ZIP, EML/MIME, XML/Office text and file sniffing;
+- approved-local-runtime registration and re-verification controls;
+- Gitleaks secret scanning;
+- gopsutil resource pressure guard;
+- deterministic Windows build checks;
+- Syft SBOM generation/reconciliation;
+- private Cosign signing/tamper rehearsal.
+
+The controlling 8 GB Acer PDF qualifier also passed with median render 8103 ms, worst render 8319 ms and peak renderer working set 291.4 MiB, within the pre-set limits.
 
 ## Gate matrix
 
 | Gate | Current position |
 |---|---|
-| Preserved evidence/source truth | Issue #3 open; issue #12 still blocks complete Ask/restore/source consistency |
-| Workspace ownership | Issue #4 open; PR #72 documentation-only and held |
-| First usable native Matter journey | PR #71 is design-only and held |
-| M1.18 integration | P0 issue #65 blocks every adapter/model/runtime/IPC/Ask ECO/evidence/persistence connection |
-| Offline AI controller | Issue #5 open |
-| Responsiveness | Issue #6 open |
-| Accessibility | Issue #7 blocks public preview |
-| Exact source navigation | Issue #8 open; filename-only citations are insufficient |
-| Diagnostic privacy/offline claims | Issue #14 open |
-| Actual-build provenance | P0 issue #15 open |
-| Intended purpose and public claims | Issues #16, #20 and #46 open |
-| Publisher/steward | Issue #17 open; no organisation appointed; official source and binary release blocked |
-| Public runnable artifacts | P0 issue #24 open; four historical artifacts remain live |
-| V40 target | Issue #69 open; 9 August is a target, not a waiver |
+| Preserved evidence/source truth | **OPEN P0 — issue #3.** Many new workflows use freshly verified preserved objects, but issue acceptance is not fully closed. |
+| Workspace ownership / clean state | **OPEN P0 — issue #4.** PR #72 has useful stale primitives but is not mergeable wholesale. |
+| Offline AI reliability | **OPEN P0 — issue #5.** Grounding/llama.cpp controls exist; full issue acceptance remains incomplete. |
+| Responsiveness | **OPEN P1 — issue #6.** |
+| Accessibility | **OPEN P1 — issue #7.** Blocks public preview. |
+| Page-aware search/source navigation | **OPEN P1 — issue #8.** PDF page navigation is implemented; full search/highlight/receipt/accessibility acceptance is not. |
+| Ask verification / restore serialisation | **OPEN P1 — issue #12.** |
+| Diagnostic privacy / final offline claims | **OPEN P0 — issue #14.** |
+| Final packaged-build provenance | **OPEN P0 — issue #15.** CI rehearsal is strong but does not equal a final packaged Authenticode-signed release. |
+| Intended purpose / claims | **OPEN — issues #16, #20, #23 and #46.** |
+| Publisher/steward | **OPEN P1 — issue #17.** No accountable legal publisher/steward is appointed. |
+| Public runnable-artifact controls | **OPEN P0 — issue #24.** The four historical artifacts now report `expired: true`, but remaining acceptance items are open. |
+| M1.18 hardening | **CLOSED — issue #65.** Older text saying it blocks all integration is obsolete. |
+| Former V40 target | **SUPERSEDED — issue #69.** Historical control record only; not a current delivery deadline or app-parent instruction. |
 
-Issue #27 is closed only for the exact Windows native-command and failure-stage controls it covers. It does not approve an executable.
+## Historical artifact correction
 
-## Active draft lanes
+The four unsigned Actions artifacts that earlier control records described as live have now been rechecked through their originating workflow-run inventories. All four report `expired: true`:
 
-### PR #72 — Workspace Ownership V2
+| Artifact ID | Origin run | Current status |
+|---|---:|---|
+| `8854774165` | `30810944362` | expired |
+| `8856536245` | `30815339549` | expired |
+| `8863951645` | `30833597696` | expired |
+| `8865678638` | `30838068198` | expired |
 
-- Head: `a6bc1f0898d529b5f9eebab76f757e0926f85f86`.
-- Scope: two new architecture/testing documents only.
-- Run: `30905573823`.
-- Actual tested checkout: synthetic merge `24241f9addf2e6d5f1d68d721b0c5aa492abf228`.
-- Artifact inventory: empty.
-- Decision: **HOLD**.
+Issue #24 remains open because expiry alone does not prove manual-dispatch no-artifact behaviour, private-handoff controls, future release-automation gating or every stale-branch reconciliation requirement.
 
-Required corrections:
+## Stale branch controls
 
-1. rewrite OW-01 so stale-CAS defence does not violate full-lifetime exclusive ownership;
-2. bind expected state to authenticated revision/generation, metadata digest, audit/state-chain head, target identity and owner transaction;
-3. distinguish safe retained-object continuation from forbidden pathname redirection;
-4. correct workflow and reviewer evidence terminology.
+### PR #71
 
-No issue #4 property is implemented or proved by PR #72.
+PR #71 remains open/draft but belongs to the superseded V40 application direction. Issue #69 explicitly says the V40 shell is rejected as an application parent. Do not revive or merge PR #71 as the product baseline.
 
-### PR #71 — V40 Matter journey
+### PR #72
 
-- Head: `05983719b29be02f44ef2b4e7ec09a8166514aa6`.
-- Scope: one synthetic offline HTML prototype and two design/testing records.
-- Run: `30905512134`.
-- Actual tested checkout: synthetic merge `6016792666d7ad7d7e8b6413ad27c1213c44a5d0`.
-- Artifact inventory: empty.
-- Decision: **HOLD**.
+PR #72 remains open/draft. It has useful ownership primitives and hostile tests, but it predates current `main`, is not complete for issue #4, and must not be merged wholesale. Reuse small proven components only after reimplementation/requalification against current `main`.
 
-Required corrections:
+### Issue #65
 
-- keyboard-operable controls instead of pointer-only cards;
-- no dead or misleading visible controls;
-- correct modal focus management and focus return;
-- accessible progress/live-status semantics and narrow/high-zoom resilience;
-- exact page/region-aware citations with OCR provenance and navigation;
-- issue #65 as a hard prerequisite for M1.18;
-- core accessibility failures treated as release blockers;
-- qualified offline wording until issue #14 passes.
+Issue #65 is closed. Its closure removes the old blanket M1.18 block, but it does not approve real evidence, public release, professional/high-consequence outputs or final model packaging.
 
-The prototype is not native implementation, accessibility evidence or release evidence.
+## Current binary-release gate
 
-### Superseded PR #11
+A public executable remains blocked until one exact final candidate proves, at minimum:
 
-PR #11 is closed unmerged and superseded. Its stale branch must not be revived, merged or copied wholesale. Useful work may be selectively reimplemented only from current `main` after the PR #72 contract is corrected and reviewed.
+- issue #3/#4 state and source-integrity requirements;
+- issue #6/#7 usability, responsiveness and accessibility requirements;
+- issue #8/#12 search/source navigation and Ask/restore consistency requirements where applicable;
+- issue #14 privacy-safe diagnostics and final network/offline evidence;
+- issue #15 final packaged-content SBOM/licences/provenance and corresponding source;
+- issue #16/#20/#23/#46 intended-purpose, wording and prohibited-output controls;
+- issue #17 accountable publisher/steward responsibility;
+- issue #24 controlled distribution and release-automation requirements;
+- exact clean-machine execution and Acer-baseline application qualification;
+- version metadata, final installer/uninstaller where used, rollback/uninstall behaviour and long-duration stability;
+- trusted Authenticode signing of the complete final artefact with no post-signing mutation;
+- explicit release approval for the exact final SHA-256.
 
-## Development sequence
+CI Cosign rehearsal does not substitute for Authenticode publisher identity.
 
-Issue #53 controls the sequence:
+## Current source-development sequence
 
-1. correct and prove workspace ownership;
-2. implement the native first usable Matter journey;
-3. correct issue #65;
-4. connect one controlled assistance seam;
-5. qualify one exact V40 candidate.
-
-No new disconnected engine milestone is authorised.
-
-## Public V40 source-release gate — issue #69
-
-A V40 source tag/release remains blocked until one exact candidate passes all applicable gates.
-
-### Workspace and evidence integrity
-
-- one writable owner for the full Vault lifetime across processes and aliases;
-- stale-save rejection against the exact authenticated state;
-- safe alias, junction, bind-mount, parent and root handling;
-- descriptor/handle-bound cleanup;
-- owned concurrent creation and first launch;
-- complete persistence rollback;
-- issue #3 preservation, migration, restore and reset regressions.
-
-### Native product journey
-
-- genuinely empty first launch;
-- guided native Matter creation;
-- responsive synthetic intake with truthful progress and cancellation;
-- current position, evidence status and next actions;
-- close/reopen continuity without contamination;
-- complete truthful What's New record;
-- no dead, fake or placeholder controls.
-
-### Accessibility and source navigation
-
-- keyboard-only completion;
-- visible and logical focus, including modal behaviour;
-- no inaccessible clipping or unreachable scrolling;
-- assistive-technology exposure of controls, errors and progress;
-- at least one screen-reader result;
-- exact page/region-aware citations and source navigation.
-
-Core accessibility failures cannot be converted into a narrowed public preview.
-
-### Source, provenance, claims and accountability
-
-- exact release commit frozen and compared with its reviewed base;
-- correctly classified Linux and Windows evidence;
-- empty unapproved-runnable-artifact inventory;
-- current README, limitations, changelog and release notes;
-- exact source manifest, current SBOM and notices;
-- no personal data, real evidence, credentials, private workspace or model file;
-- truthful pre-alpha, synthetic-only, unsigned and limitation wording;
-- issue #14 claims bounded to exact tested evidence;
-- a named accountable publisher/steward has formally accepted official source publishing, withdrawal, security-response, complaints and continuity duties, satisfying issue #17.
-
-The 9 August target cannot turn an OPEN or FAIL item into a pass.
-
-## M1.18 integration gate — issue #65
-
-M1.18 may remain on `main` only as isolated unused source while issue #65 is enforced.
-
-Before any connection, evidence must prove:
-
-- unconditional zeroing of orchestrator-owned sensitive byte buffers;
-- no-op, erroring or panicking erasers cannot produce a successful receipt;
-- API-boundary strings are documented truthfully as non-overwritable;
-- concrete process supervision bounds non-cooperative workers and cleanup;
-- callback lifetime is enforced or receipt counts are explicitly observational;
-- no accepted/fallback output is released while ownership remains unresolved.
-
-## Public executable distribution — issue #24
-
-Current workflows may build privately on the hosted runner but must not intentionally publish the executable.
-
-These unsigned historical artifacts remain live and prohibited:
-
-| Artifact ID | Run | Expires UTC |
-|---|---|---|
-| `8854774165` | `30810944362` | 10 August 2026 11:49:38 |
-| `8856536245` | `30815339549` | 10 August 2026 12:54:07 |
-| `8863951645` | `30833597696` | 10 August 2026 16:47:05 |
-| `8865678638` | `30838068198` | 10 August 2026 17:45:50 |
-
-Do not download, execute, test or redistribute them.
-
-Issue #24 also remains open for controlled manual-dispatch no-artifact evidence, private test-handoff controls and future release automation gated by issue #15, issue #17, trusted signing and explicit approval.
-
-## Binary-release gate
-
-An executable remains private unless every source-release gate passes and the exact final file also has:
-
-- complete packaged-content inventory;
-- actual-build SBOM, licences and notices;
-- verified runtime/model provenance and corresponding source;
-- deterministic or fully explained reproducibility evidence;
-- malware/dependency checks;
-- clean-machine and Acer-baseline launch, import, close/reopen, memory and crash-recovery evidence;
-- keyboard, scaling and screen-reader qualification on the exact file;
-- trusted Authenticode signing with no post-signing mutation;
-- explicit release approval for that exact hash.
-
-An unsigned label, disclaimer or short retention period does not permit public executable distribution.
-
-## Publisher and organisational gate
-
-The preferred future model is one accountable official publisher/steward that may use controlled and replaceable specialists while retaining final authority and responsibility.
-
-No organisation is appointed, shortlisted or authorised for outreach. Open Knowledge Foundation's deeper public-source review remains `HOLD` and creates no relationship, endorsement or contact authority. A fragmented arrangement with no accountable lead publisher is rejected.
-
-Issue #17 remains open and blocks an official source or binary release until a named legal organisation formally accepts and proves release, withdrawal, security, signing where applicable, continuity, complaints, data-role, contracting, liability, insurance and regulatory duties.
-
-## Evidence classification
-
-Every relevant decision must record:
-
-- branch head and base;
-- actual tested checkout and whether it is a synthetic PR merge;
-- workflow run and jobs;
-- artifact inventory;
-- final merge/squash identity;
-- whether post-merge CI ran;
-- reviewer/control-lane relationship.
-
-Do not use **exact-head**, **post-merge** or **independent** unless the evidence and relationship support those terms.
-
-## Next gate actions
-
-1. Correct PR #72 at a new frozen head and re-review it.
-2. Correct PR #71 at a new frozen head and re-review it.
-3. Implement workspace ownership in small current-main slices with real subprocess evidence.
-4. Implement the native Matter journey without M1.18.
-5. Correct issue #65 before assistance integration.
-6. Recheck the historical artifacts after their expiry window.
-7. Freeze and qualify one exact V40 source candidate only when every applicable gate passes.
+1. Keep canonical status/release records current.
+2. Implement **workspace ownership and clean-state control (#4)** on current `main`, selectively reusing qualified PR #72 primitives.
+3. Close remaining **preserved-source and Ask/restore consistency (#3/#12)** gaps.
+4. Implement **page-aware search/highlighting (#8)** on the qualified PDF/OCR/extraction foundation.
+5. Qualify **responsiveness and accessibility (#6/#7)**, including keyboard-only, high-DPI and Narrator/NVDA evidence.
+6. Close **diagnostic privacy/offline claims (#14)** and cross-surface intended-purpose/claims gates (#16/#20/#23/#46).
+7. Complete **final release packaging/provenance/signing/publisher controls (#15/#17/#24)**.
+8. Treat local generative AI (#5) as a bounded optional feature; do not let model packaging delay the deterministic evidence product.
 
 ## Public-record rule
 
-Use synthetic and non-sensitive information only. Do not publish personal evidence, private workspaces, credentials, private diagnostics, exploit-level instructions, unapproved executables or model files.
+Use synthetic and non-sensitive information only. Do not publish personal evidence, private workspaces, credentials, private diagnostics, exploit-level instructions, unapproved executable/model files or sensitive case material in repository records.
