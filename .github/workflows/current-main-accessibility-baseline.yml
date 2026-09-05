@@ -1,0 +1,138 @@
+name: Measure current native accessibility baseline
+on:
+  push:
+    paths:
+      - .github/workflows/current-main-accessibility-baseline.yml
+permissions:
+  contents: write
+jobs:
+  baseline:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build current ECO
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          go test ./cmd/eco
+          go build -trimpath -ldflags '-H windowsgui' -o "$env:RUNNER_TEMP\ECO-a11y-baseline.exe" ./cmd/eco
+      - name: Inspect child HWND accessibility contracts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $oldLocal = $env:LOCALAPPDATA
+          $env:LOCALAPPDATA = Join-Path $env:RUNNER_TEMP 'eco-a11y-localappdata'
+          New-Item -ItemType Directory -Force -Path $env:LOCALAPPDATA | Out-Null
+          $exe = Join-Path $env:RUNNER_TEMP 'ECO-a11y-baseline.exe'
+          Add-Type -AssemblyName Accessibility
+          $accAssembly = [Accessibility.IAccessible].Assembly.Location
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Collections.Generic;
+          using System.Runtime.InteropServices;
+          using System.Text;
+
+          public sealed class EcoA11yRow {
+              public IntPtr Hwnd { get; set; }
+              public int ControlId { get; set; }
+              public string ClassName { get; set; }
+              public string WindowText { get; set; }
+              public bool Visible { get; set; }
+              public string AccessibleName { get; set; }
+              public string DefaultAction { get; set; }
+              public int Role { get; set; }
+              public int State { get; set; }
+          }
+
+          public static class EcoA11yProbe {
+              private const uint OBJID_CLIENT = 0xFFFFFFFC;
+              private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+              [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lParam);
+              [DllImport("user32.dll")] private static extern bool EnumChildWindows(IntPtr parent, EnumWindowsProc cb, IntPtr lParam);
+              [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+              [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetClassName(IntPtr hwnd, StringBuilder text, int max);
+              [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int max);
+              [DllImport("user32.dll")] private static extern int GetWindowTextLength(IntPtr hwnd);
+              [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+              [DllImport("user32.dll")] private static extern int GetDlgCtrlID(IntPtr hwnd);
+              [DllImport("oleacc.dll")] private static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint objectId, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out Accessibility.IAccessible accessible);
+
+              private static string Class(IntPtr hwnd) { var b=new StringBuilder(256); GetClassName(hwnd,b,b.Capacity); return b.ToString(); }
+              private static string Text(IntPtr hwnd) { int n=GetWindowTextLength(hwnd); var b=new StringBuilder(Math.Max(1,n+1)); GetWindowText(hwnd,b,b.Capacity); return b.ToString(); }
+              private static Accessibility.IAccessible AccessibleFor(IntPtr hwnd) {
+                  Guid iid = typeof(Accessibility.IAccessible).GUID; Accessibility.IAccessible acc; int hr=AccessibleObjectFromWindow(hwnd,OBJID_CLIENT,ref iid,out acc); return hr < 0 ? null : acc;
+              }
+              public static IntPtr MainWindow(uint wantedPid, string wantedClass) {
+                  IntPtr found=IntPtr.Zero; EnumWindows((h,l)=>{ uint pid; GetWindowThreadProcessId(h,out pid); if(pid==wantedPid && Class(h)==wantedClass){ found=h; return false;} return true;},IntPtr.Zero); return found;
+              }
+              public static EcoA11yRow[] Children(IntPtr parent) {
+                  var rows=new List<EcoA11yRow>(); EnumChildWindows(parent,(h,l)=>{ var row=new EcoA11yRow{Hwnd=h,ControlId=GetDlgCtrlID(h),ClassName=Class(h),WindowText=Text(h),Visible=IsWindowVisible(h)}; try { var acc=AccessibleFor(h); if(acc!=null){ object self=0; try{row.AccessibleName=acc.get_accName(self);}catch{} try{row.DefaultAction=acc.get_accDefaultAction(self);}catch{} try{row.Role=Convert.ToInt32(acc.get_accRole(self));}catch{} try{row.State=Convert.ToInt32(acc.get_accState(self));}catch{} } } catch {} rows.Add(row); return true;},IntPtr.Zero); return rows.ToArray();
+              }
+          }
+          '@ -ReferencedAssemblies $accAssembly
+
+          $p = Start-Process -FilePath $exe -PassThru
+          try {
+              $deadline = (Get-Date).AddSeconds(20)
+              $main = [IntPtr]::Zero
+              while ($main -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline -and -not $p.HasExited) {
+                  Start-Sleep -Milliseconds 200
+                  $main = [EcoA11yProbe]::MainWindow([uint32]$p.Id, 'ECO_V25_NATIVE_MAIN')
+              }
+              if ($main -eq [IntPtr]::Zero) { throw 'Current ECO main HWND was not found.' }
+              $rows = @([EcoA11yProbe]::Children($main))
+              $rows | Select-Object ControlId,ClassName,WindowText,Visible,AccessibleName,DefaultAction,Role,State | Format-Table -AutoSize | Out-String | Write-Host
+
+              $expected = @{
+                  1001='Edit'; 1002='Button'; 1003='Edit';
+                  1004='Edit'; 1005='Button'; 1006='Button'; 1007='Button'; 1008='Button'; 1009='Button'
+              }
+              $semanticPass = $true
+              foreach ($id in $expected.Keys) {
+                  $row = @($rows | Where-Object { $_.ControlId -eq $id }) | Select-Object -First 1
+                  if ($null -eq $row -or $row.ClassName -ne $expected[$id] -or $row.Role -eq 0) { $semanticPass = $false }
+              }
+              $paintedLabels = @('Home','Evidence','Matters','Review','Changes','Trust & settings','+  Add files','+  Add folder','Paste image','Open native preview')
+              $missing = @()
+              foreach ($label in $paintedLabels) {
+                  if (-not (@($rows | Where-Object { $_.WindowText -eq $label -or $_.AccessibleName -eq $label }).Count)) { $missing += $label }
+              }
+              $report = @()
+              $report += '# ECO current-main accessibility baseline'
+              $report += ''
+              $report += ('Source commit: `' + $env:GITHUB_SHA + '`')
+              $report += ('Standard child HWNDs inspected: **' + $rows.Count + '**')
+              $report += ('Ask/search native semantic controls: **' + $(if($semanticPass){'PASS'}else{'FAIL'}) + '**')
+              $report += ('Known custom-painted interactive labels with no child HWND semantic peer: **' + $missing.Count + ' / ' + $paintedLabels.Count + '**')
+              $report += ''
+              $report += '## Missing native semantic peers in this baseline'
+              foreach ($label in $missing) { $report += ('- ' + $label) }
+              $report += ''
+              $report += '## Interpretation'
+              $report += '- Existing native EDIT/BUTTON controls expose established Windows accessibility contracts.'
+              $report += '- The listed custom-painted interactions are not represented as child HWND semantic controls and therefore are not qualified for Narrator/NVDA from this evidence.'
+              $report += '- Hosted-runner MSAA evidence is a structural baseline only; physical Windows 11 Narrator/NVDA remains mandatory.'
+              $reportPath = 'docs/testing/CURRENT_MAIN_ACCESSIBILITY_BASELINE_20260905.md'
+              Set-Content -LiteralPath $reportPath -Value ($report -join "`n") -Encoding UTF8
+              if (-not $semanticPass) { throw 'Existing native Ask/search controls failed MSAA semantic baseline.' }
+              Write-Host 'ECO_GATE current_main_native_controls_msaa=PASS'
+              Write-Host ('ECO_GATE current_main_custom_painted_missing_semantics=' + $missing.Count)
+          }
+          finally {
+              if ($p -and -not $p.HasExited) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+              $env:LOCALAPPDATA = $oldLocal
+          }
+      - name: Commit text-only baseline receipt
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git config user.name 'ECO Accessibility Probe'
+          git config user.email 'eco-accessibility-probe@users.noreply.github.com'
+          git add docs/testing/CURRENT_MAIN_ACCESSIBILITY_BASELINE_20260905.md
+          git commit -m 'Record current-main accessibility baseline'
+          git push origin HEAD:ops/current-main-accessibility-baseline-20260905
