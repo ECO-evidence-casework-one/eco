@@ -1,0 +1,25 @@
+@echo off
+setlocal DisableDelayedExpansion
+title ECO private build preparation
+cd /d "%~dp0" || goto failed
+echo ECO PRIVATE BUILD PREPARATION
+echo.
+echo This checks the supplied preparer and manifest before running them.
+echo Only the verified preparer script is unblocked. Windows security stays on.
+echo You will be asked to type BUILD before any build downloads start.
+echo Do not run as administrator. ECO will NOT open automatically.
+echo.
+"%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -ExecutionPolicy RemoteSigned -Command "$ErrorActionPreference='Stop'; try { $p=Join-Path (Get-Location) 'prepare-private-local-build.ps1'; $m=Join-Path (Get-Location) 'private-build-manifest.json'; if ((Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() -cne '__PREPARER_HASH__') { throw 'Preparer fingerprint mismatch. Stop and obtain the unchanged kit.' }; if ((Get-FileHash -LiteralPath $m -Algorithm SHA256).Hash.ToLowerInvariant() -cne '__MANIFEST_HASH__') { throw 'Manifest fingerprint mismatch. Stop and obtain the unchanged kit.' }; Unblock-File -LiteralPath $p; & $p; if (-not $?) { exit 1 } } catch { Write-Host ('PREPARATION STOPPED: '+$_.Exception.Message); exit 1 }"
+if errorlevel 1 goto failed
+echo.
+echo Preparation finished. Send BUILD_RESULT.txt back in the private chat.
+echo Do not open ECO.exe or import personal evidence yet.
+pause
+exit /b 0
+:failed
+echo.
+echo PREPARATION STOPPED. Take a screenshot of this window.
+echo Do not disable Defender, Smart App Control or other Windows protection.
+echo No success is implied by an older BUILD_RESULT.txt.
+pause
+exit /b 1
