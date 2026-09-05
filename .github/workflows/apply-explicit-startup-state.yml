@@ -5,6 +5,7 @@ on:
     branches: [ integration/explicit-development-startup-state-20260905 ]
     paths:
       - scripts/ops/apply_explicit_startup_state.py
+      - scripts/ops/fix_explicit_startup_import.py
       - .github/workflows/apply-explicit-startup-state.yml
 
 permissions:
@@ -25,6 +26,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 scripts/ops/apply_explicit_startup_state.py
+          python3 scripts/ops/fix_explicit_startup_import.py
           gofmt -w internal/eco/development_workspace.go internal/eco/development_workspace_test.go cmd/eco/main_other.go cmd/eco/main_windows.go cmd/eco/winapi_windows.go cmd/eco/ui_regression_test.go
           python3 scripts/check_source_policy.py
           go test ./...
