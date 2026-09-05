@@ -6,15 +6,58 @@ import (
 	"path/filepath"
 )
 
-// StartCleanDevelopmentWorkspace is an explicit user-requested operation.
-// It preserves prior state, creates and owns a new directory, then writes
-// the fresh workspace before returning. A process stop cannot grant a
-// future ordinary OpenVault permission to silently initialise old state.
+// CreateVault is explicit new-state creation, never an existing open.
+// The final directory must be newly created by this call and identified
+// again under exclusive ownership. Existing routes are never adopted.
+func CreateVault(root string) (*Vault, error) {
+	if root == "" {
+		return nil, errors.New("empty workspace root")
+	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	creation, err := acquireWorkspaceCreationOwner(absolute)
+	if err != nil {
+		return nil, err
+	}
+	defer creation.Close()
+	created, err := creation.createMissingHierarchy()
+	if err != nil {
+		cleanupCreatedWorkspaceDirectories(created)
+		return nil, err
+	}
+	var identity workspaceObjectIdentity
+	for _, entry := range created {
+		if entry.path == absolute {
+			identity = entry.identity
+		}
+	}
+	if !identity.valid() {
+		cleanupCreatedWorkspaceDirectories(created)
+		return nil, errors.New("new workspace directory was not created by this operation")
+	}
+	owner, err := acquireWorkspaceRootOwner(absolute)
+	if err != nil {
+		cleanupCreatedWorkspaceDirectories(created)
+		return nil, err
+	}
+	if !identity.equal(owner.identity) {
+		_ = owner.Close()
+		return nil, errors.New("new workspace directory identity changed")
+	}
+	if err := creation.revalidate(); err != nil {
+		_ = owner.Close()
+		return nil, err
+	}
+	return openOwnedVault(owner, true)
+}
+
+// StartCleanDevelopmentWorkspace preserves old state before explicit
+// creation. Incomplete operations leave preserved copies for recovery.
 func StartCleanDevelopmentWorkspace(root string) (string, error) {
 	return startCleanDevelopmentWorkspace(root, nil)
 }
-
-// boundary is a per-call internal test observation seam, never set by UI.
 func startCleanDevelopmentWorkspace(root string, boundary func(string)) (string, error) {
 	if root == "" {
 		return "", errors.New("empty workspace root")
@@ -33,40 +76,7 @@ func startCleanDevelopmentWorkspace(root string, boundary func(string)) (string,
 	if boundary != nil {
 		boundary("reset_archived")
 	}
-	creation, err := acquireWorkspaceCreationOwner(absolute)
-	if err != nil {
-		return fail(err)
-	}
-	defer creation.Close()
-	created, err := creation.createMissingHierarchy()
-	if err != nil {
-		cleanupCreatedWorkspaceDirectories(created)
-		return fail(err)
-	}
-	var identity workspaceObjectIdentity
-	for _, entry := range created {
-		if entry.path == absolute {
-			identity = entry.identity
-		}
-	}
-	if !identity.valid() {
-		cleanupCreatedWorkspaceDirectories(created)
-		return fail(errors.New("clean-start route was not created by this operation"))
-	}
-	owner, err := acquireWorkspaceRootOwner(absolute)
-	if err != nil {
-		cleanupCreatedWorkspaceDirectories(created)
-		return fail(err)
-	}
-	if !identity.equal(owner.identity) {
-		_ = owner.Close()
-		return fail(errors.New("new clean-start directory identity changed"))
-	}
-	if err := creation.revalidate(); err != nil {
-		_ = owner.Close()
-		return fail(err)
-	}
-	fresh, err := openOwnedVault(owner, true)
+	fresh, err := CreateVault(absolute)
 	if err != nil {
 		return fail(err)
 	}

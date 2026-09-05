@@ -27,7 +27,7 @@ func TestEvidenceOccurrencesRecordDistinctDuplicateSourcesWithoutExtraObject(t *
 	if err := os.WriteFile(secondPath, content, 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(root, "vault"))
+	v, err := openTestVault(filepath.Join(root, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestEvidenceOccurrencesPersistAcrossVaultReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	vaultRoot := filepath.Join(root, "vault")
-	v, err := OpenVault(vaultRoot)
+	v, err := openTestVault(vaultRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestEvidenceOccurrencesPersistAcrossVaultReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reopened, err := OpenVault(vaultRoot)
+	reopened, err := openTestVault(vaultRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestEvidenceOccurrencesCountRepeatedVerifiedImports(t *testing.T) {
 	if err := os.WriteFile(path, []byte("same path supplied repeatedly"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(root, "vault"))
+	v, err := openTestVault(filepath.Join(root, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func TestEvidenceOccurrencesSynthesiseLegacyInitialWithoutMigration(t *testing.T
 	if err := os.WriteFile(path, []byte("legacy initial occurrence"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(root, "vault"))
+	v, err := openTestVault(filepath.Join(root, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,7 +187,7 @@ func TestEvidenceOccurrencesRejectMalformedOccurrenceAudit(t *testing.T) {
 	if err := os.WriteFile(path, []byte("malformed occurrence audit test"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(root, "vault"))
+	v, err := openTestVault(filepath.Join(root, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestEvidenceOccurrencesRejectMalformedOccurrenceAudit(t *testing.T) {
 }
 
 func TestEvidenceOccurrencesUnknownEvidenceFails(t *testing.T) {
-	v, err := OpenVault(filepath.Join(t.TempDir(), "vault"))
+	v, err := openTestVault(filepath.Join(t.TempDir(), "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

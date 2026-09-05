@@ -10,7 +10,16 @@ import (
 
 func main() {
 	root := eco.DefaultDevelopmentWorkspaceRoot(os.TempDir())
-	v, err := eco.OpenVault(root)
+	if err := eco.CheckWorkspaceRecoveryState(root); err != nil {
+		panic(err)
+	}
+	var v *eco.Vault
+	var err error
+	if _, checkErr := os.Lstat(root); os.IsNotExist(checkErr) {
+		v, err = eco.CreateVault(root)
+	} else {
+		v, err = eco.OpenVault(root)
+	}
 	if err != nil {
 		panic(err)
 	}

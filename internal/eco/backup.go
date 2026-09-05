@@ -445,7 +445,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	if _, err := os.Lstat(stageRoot); !os.IsNotExist(err) {
 		return RestoreReceipt{}, errors.New("restore staging route is occupied or unreadable; existing entries preserved")
 	}
-	stage, err := OpenVault(stageRoot)
+	stage, err := CreateVault(stageRoot)
 	if err != nil {
 		return RestoreReceipt{}, err
 	}

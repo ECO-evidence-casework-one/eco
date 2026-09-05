@@ -52,10 +52,13 @@ func OpenVault(root string) (*Vault, error) {
 	if err := CheckWorkspaceRecoveryState(root); err != nil {
 		return nil, err
 	}
+	if err := ValidateExistingWorkspaceRoot(root); err != nil {
+		return nil, fmt.Errorf("open existing workspace: %w", err)
+	}
 	if err := preflightWorkspaceFormat(root); err != nil {
 		return nil, err
 	}
-	owner, err := acquireOrCreateWorkspaceRootOwner(root)
+	owner, err := acquireWorkspaceRootOwner(root)
 	if err != nil {
 		return nil, err
 	}
@@ -79,6 +82,9 @@ func openOwnedVault(owner *workspaceOwnerLease, allowFresh bool) (*Vault, error)
 	if !allowFresh {
 		if err := CheckWorkspaceRecoveryState(root); err != nil {
 			return nil, err
+		}
+		if err := ValidateExistingWorkspaceRoot(root); err != nil {
+			return nil, fmt.Errorf("open existing workspace under ownership: %w", err)
 		}
 	}
 	if err := preflightWorkspaceFormat(root); err != nil {

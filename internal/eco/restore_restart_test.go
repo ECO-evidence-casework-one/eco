@@ -70,7 +70,7 @@ func TestRestoreRestartPositiveControls(t *testing.T) {
 				}
 			}
 			if name == "healthy_existing" {
-				v, err := OpenVault(root)
+				v, err := CreateVault(root)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -88,7 +88,13 @@ func TestRestoreRestartPositiveControls(t *testing.T) {
 			if err := CheckWorkspaceRecoveryState(root); err != nil {
 				t.Fatal(err)
 			}
-			v, err := OpenVault(root)
+			var v *Vault
+			var err error
+			if name == "healthy_existing" {
+				v, err = OpenVault(root)
+			} else {
+				v, err = CreateVault(root)
+			}
 			if err != nil {
 				t.Fatal(err)
 			}

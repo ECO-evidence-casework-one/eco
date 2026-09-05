@@ -1,0 +1,43 @@
+{
+  "earlier_qualifier_failure": "33976809090 reproduced both red contract cases then stopped at a non-unique source anchor; no generated product commit. Anchors now scoped to the positive-control function and whole lines.",
+  "run_id": "33976900485",
+  "input_head": "be9432877fd21dabad74a15275ffd0ee7ecefd15",
+  "review_comment": 3941175805,
+  "before": "Both missing and empty ordinary-open cases failed before strict OpenVault",
+  "after_passing_cases": [
+    "TestExplicitCleanStartRefusesLiveOwner",
+    "TestExplicitCleanStartWithRestoreHistory",
+    "TestExplicitCreateRefusesExistingRoutes/empty",
+    "TestExplicitCreateRefusesExistingRoutes/unrelated",
+    "TestExplicitCreateRefusesExistingRoutes/workspace",
+    "TestExplicitCreateThenStrictOpen",
+    "TestResetForcedStopRestart/reset_archived",
+    "TestResetForcedStopRestart/reset_created",
+    "TestRestoreForcedStopRestart/activated",
+    "TestRestoreForcedStopRestart/original_renamed",
+    "TestRestoreForcedStopRestart/original_retargeted",
+    "TestRestoreForcedStopRestart/stage_verified",
+    "TestRestoreForcedStopRestart/staged_renamed",
+    "TestRestoreRestartGuard/checkpoint_is_file",
+    "TestRestoreRestartGuard/empty_active",
+    "TestRestoreRestartGuard/large_parent",
+    "TestRestoreRestartGuard/literal_brackets",
+    "TestRestoreRestartGuard/missing_active",
+    "TestRestoreRestartPositiveControls/healthy_existing",
+    "TestRestoreRestartPositiveControls/new_hierarchy",
+    "TestRestoreRestartPositiveControls/unrelated_checkpoint",
+    "TestStrictOpenNeverCreates/empty",
+    "TestStrictOpenNeverCreates/missing"
+  ],
+  "after_skips": 0,
+  "linux_full_tests": "passed",
+  "go_vet": "passed",
+  "source_policy": "passed",
+  "windows_cross_build": "passed",
+  "native_windows": "pending exact final PR CI",
+  "fixture_migration": "AST call-target changes from OpenVault to openTestVault in pre-existing internal test setup; compatibility helper exists only in _test.go. New strict-open and actual restart cases exercise production OpenVault.",
+  "limits": [
+    "Seven real process-stop phases are not arbitrary power-loss coverage.",
+    "Final W7 failure-reporting/acceptance mapping and W8 actual Acer acceptance remain."
+  ]
+}

@@ -24,7 +24,7 @@ func TestValidateExistingWorkspaceRootIsReadOnly(t *testing.T) {
 
 func TestValidateExistingWorkspaceRootAcceptsClosedVault(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vault")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestValidateExistingWorkspaceRootAcceptsClosedVault(t *testing.T) {
 
 func TestArchiveDevelopmentWorkspaceForCleanStartPreservesOldState(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "candidate")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestArchiveDevelopmentWorkspaceForCleanStartPreservesOldState(t *testing.T)
 	if err := ValidateExistingWorkspaceRoot(archive); err != nil {
 		t.Fatalf("archived workspace is not reopenable: %v", err)
 	}
-	old, err := OpenVault(archive)
+	old, err := openTestVault(archive)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func TestArchiveDevelopmentWorkspaceForCleanStartPreservesOldState(t *testing.T)
 		t.Fatal(err)
 	}
 
-	refused, refusal := OpenVault(root)
+	refused, refusal := openTestVault(root)
 	if refused != nil {
 		_ = refused.Close()
 	}
@@ -85,7 +85,7 @@ func TestArchiveDevelopmentWorkspaceForCleanStartPreservesOldState(t *testing.T)
 	if _, err := StartCleanDevelopmentWorkspace(root); err != nil {
 		t.Fatal(err)
 	}
-	fresh, err := OpenVault(root)
+	fresh, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestArchiveDevelopmentWorkspaceForCleanStartPreservesOldState(t *testing.T)
 
 func TestArchiveDevelopmentWorkspaceRefusesLiveOwner(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "candidate")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}

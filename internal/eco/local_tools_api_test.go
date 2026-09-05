@@ -8,7 +8,7 @@ import (
 
 func TestRegisteredLocalToolsListsCanonicalActiveRegistrations(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -28,7 +28,7 @@ func newRollbackFixture(t *testing.T) rollbackFixture {
 		checkpoint: filepath.Join(parent, "active.pre-restore-synthetic"),
 	}
 	for i, root := range []string{f.root, f.stageRoot} {
-		v, err := OpenVault(root)
+		v, err := openTestVault(root)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -106,7 +106,7 @@ func TestRecoveryRollbackRenameBoundaries(t *testing.T) {
 				if err := v.Close(); err != nil {
 					t.Fatal(err)
 				}
-				reopened, err := OpenVault(root)
+				reopened, err := openTestVault(root)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -194,7 +194,7 @@ func TestRecoveryMetadataWriteInterruption(t *testing.T) {
 	for _, scenario := range []string{"temporary_write_refused", "uncommitted_temporary_metadata"} {
 		t.Run(scenario, func(t *testing.T) {
 			root, key, document := workspaceFormatFixture(t)
-			v, err := OpenVault(root)
+			v, err := openTestVault(root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -233,7 +233,7 @@ func TestRecoveryMetadataWriteInterruption(t *testing.T) {
 			if err := v.Close(); err != nil {
 				t.Fatal(err)
 			}
-			reopened, err := OpenVault(root)
+			reopened, err := openTestVault(root)
 			if err != nil {
 				t.Fatal(err)
 			}

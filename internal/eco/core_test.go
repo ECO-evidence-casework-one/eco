@@ -33,7 +33,7 @@ func TestEncryptedImportDuplicateAndRead(t *testing.T) {
 	src := filepath.Join(d, "letter.txt")
 	content := []byte("The council wrote on 30 July 2026. Please provide the missing attachment by 5 August 2026.")
 	os.WriteFile(src, content, 0600)
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +90,7 @@ func TestDOCXExtractionAndAsk(t *testing.T) {
 	w.Write([]byte(`<?xml version="1.0"?><w:document xmlns:w="x"><w:body><w:p><w:r><w:t>The hearing is on 12 August 2026.</w:t></w:r></w:p><w:p><w:r><w:t>Please send the medical report.</w:t></w:r></w:p></w:body></w:document>`))
 	zw.Close()
 	f.Close()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestPortableBackupIsEncryptedAndStreaming(t *testing.T) {
 	src := filepath.Join(d, "evidence.txt")
 	plain := []byte("Highly distinctive secret evidence wording 73921")
 	os.WriteFile(src, plain, 0600)
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestPortableBackupTransactionalRestoreRoundTrip(t *testing.T) {
 	if err := os.WriteFile(sourceFile, sourceText, 0600); err != nil {
 		t.Fatal(err)
 	}
-	sourceVault, err := OpenVault(filepath.Join(d, "source-vault"))
+	sourceVault, err := openTestVault(filepath.Join(d, "source-vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestPortableBackupTransactionalRestoreRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	activeRoot := filepath.Join(d, "active-vault")
-	activeVault, err := OpenVault(activeRoot)
+	activeVault, err := openTestVault(activeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -215,7 +215,7 @@ func TestPortableBackupWrongPassphraseLeavesActiveVaultUntouched(t *testing.T) {
 	if err := os.WriteFile(file, []byte("protected evidence"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	source, err := OpenVault(filepath.Join(d, "source"))
+	source, err := openTestVault(filepath.Join(d, "source"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func TestPortableBackupWrongPassphraseLeavesActiveVaultUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	active, err := OpenVault(filepath.Join(d, "active"))
+	active, err := openTestVault(filepath.Join(d, "active"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestPortableBackupTamperLeavesActiveVaultUntouched(t *testing.T) {
 	if err := os.WriteFile(file, []byte("tamper protected evidence"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	source, err := OpenVault(filepath.Join(d, "source"))
+	source, err := openTestVault(filepath.Join(d, "source"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestPortableBackupTamperLeavesActiveVaultUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	active, err := OpenVault(filepath.Join(d, "active"))
+	active, err := openTestVault(filepath.Join(d, "active"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -367,7 +367,7 @@ func TestPerceptualImageHashAndReadingModes(t *testing.T) {
 
 func TestAskReceiptRecordsSuspiciousExclusion(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -391,7 +391,7 @@ func TestAskReceiptRecordsSuspiciousExclusion(t *testing.T) {
 
 func TestSnapshotIsStructuralAndIndependent(t *testing.T) {
 	root := t.TempDir()
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}

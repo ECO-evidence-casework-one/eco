@@ -90,7 +90,7 @@ func TestCoordinateCitationHighlightingPresent(t *testing.T) {
 
 func TestDevelopmentStartupStateIsExplicitAndCandidateBound(t *testing.T) {
 	src := windowsSource(t)
-	for _, required := range []string{"chooseDevelopmentWorkspace", "DefaultDevelopmentWorkspaceRoot", "ValidateExistingWorkspaceRoot", "StartCleanDevelopmentWorkspace", "CheckWorkspaceRecoveryState", "Continue this candidate", "Open an existing ECO workspace", "start clean", "defer func() { _ = v.Close() }()"} {
+	for _, required := range []string{"chooseDevelopmentWorkspace", "DefaultDevelopmentWorkspaceRoot", "ValidateExistingWorkspaceRoot", "StartCleanDevelopmentWorkspace", "CheckWorkspaceRecoveryState", "eco.CreateVault", "eco.OpenVault", "createNewCandidate", "Continue this candidate", "Open an existing ECO workspace", "start clean", "defer func() { _ = v.Close() }()"} {
 		if !strings.Contains(src, required) {
 			t.Fatalf("missing explicit startup-state control %q", required)
 		}

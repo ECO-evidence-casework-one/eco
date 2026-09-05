@@ -35,7 +35,7 @@ func TestWorkspaceFormatRejectsUnsafeRootWithoutMutation(t *testing.T) {
 				}
 			}
 			before := workspaceFormatTree(t, parent)
-			v, err := OpenVault(root)
+			v, err := openTestVault(root)
 			if v != nil {
 				if closeErr := v.Close(); closeErr != nil {
 					t.Fatal(closeErr)
