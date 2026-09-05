@@ -1,0 +1,131 @@
+name: Qualify recovery reporting
+on:
+  push:
+    branches: [integration/recovery-reporting-acceptance-20260905]
+    paths: [.github/workflows/qualify-recovery-reporting.yml]
+permissions:
+  contents: write
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/integration/recovery-reporting-acceptance-20260905'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 32
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Reproduce discarded error details on unchanged main
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('internal/eco/recovery_reporting_regression_test.go')
+          s=p.read_text().replace('\n\t"reflect"','\n\t"reflect"\n\t"strconv"',1)
+          s=s.replace('[]string{"cleanup", stageRoot, "Open existing"}', '[]string{"cleanup", strconv.Quote(stageRoot), "Open existing"}',1)
+          p.write_text(s)
+          PY
+          baseline="$RUNNER_TEMP/reporting-baseline"
+          git worktree add --detach "$baseline" 726be7dc9ab6c808325173db7c236915d3554376
+          cp internal/eco/recovery_reporting_regression_test.go "$baseline/internal/eco/"
+          set +e
+          (cd "$baseline" && go test -count=1 -json -run '^TestRecoveryReporting' ./internal/eco) > "$RUNNER_TEMP/reporting-before.jsonl" 2>&1
+          result=$?
+          set -e
+          test "$result" -eq 1
+          cat "$RUNNER_TEMP/reporting-before.jsonl"
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          rows=[]
+          for line in Path(os.environ['RUNNER_TEMP'],'reporting-before.jsonl').read_text().splitlines():
+              try: rows.append(json.loads(line))
+              except json.JSONDecodeError: pass
+          failed=sorted(r['Test'] for r in rows if r.get('Action')=='fail' and r.get('Test'))
+          assert failed==['TestRecoveryReportingPreservesRollbackCause','TestRecoveryReportingReturnsCleanupFailure'],failed
+          Path(os.environ['RUNNER_TEMP'],'reporting-before-summary.json').write_text(json.dumps(failed))
+          PY
+      - name: Wire recovery context into real restore and archive returns
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          def once(s,old,new):
+              assert s.count(old)==1,repr(old)
+              return s.replace(old,new,1)
+          p=Path('internal/eco/backup.go');s=p.read_text()
+          s=once(s,'type RestoreReceipt struct {','type RestoreReceipt struct {\n\tRecoveryWarnings []string `json:"recovery_warnings,omitempty"`')
+          old='func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(BackupProgress)) (RestoreReceipt, error) {'
+          new='func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(BackupProgress)) (receipt RestoreReceipt, resultErr error) {\n\tif v == nil { return RestoreReceipt{}, ErrVaultClosed }\n\tactiveAtStart := v.Root\n\tvar stageRoot, preRestore string\n\tvar postActivationErr error\n\tdefer func() {\n\t\tresultErr = withRecoveryContext("Restore", resultErr, activeAtStart, preRestore, stageRoot)\n\t}()'
+          s=once(s,old,new)
+          s=once(s,'\tstageRoot := v.Root + ".restore-" + NewID("STAGE")','\tstageRoot = v.Root + ".restore-" + NewID("STAGE")')
+          old='\tdefer func() {\n\t\tif !stageActivated {\n\t\t\t// Validate the still-owned staged object before removal. A failed\n\t\t\t// rollback must not delete an unrelated replacement at this path.\n\t\t\t_ = removeUnactivatedRestoreStage(stage, stageRoot)\n\t\t}\n\t\t_ = stage.Close()\n\t}()'
+          new='\tdefer func() {\n\t\tfinalErr := finalizeRestoreStage(stage, stageRoot, stageActivated)\n\t\trecordRestoreFinalization(&receipt, &resultErr, stageActivated, errors.Join(postActivationErr, finalErr))\n\t}()'
+          s=once(s,old,new)
+          s=once(s,'\tpreRestore := filepath.Join(parent, base+".pre-restore-"','\tpreRestore = filepath.Join(parent, base+".pre-restore-"')
+          s=once(s,'\t_ = oldOwner.Close()','\tif closeErr := oldOwner.Close(); closeErr != nil {\n\t\tpostActivationErr = fmt.Errorf("release previous workspace owner at %q: %w", preRestore, closeErr)\n\t}')
+          s=once(s,'return fmt.Errorf("%w; rollback also failed: %v", cause, rollbackErr)','return fmt.Errorf("%w; rollback also failed: %w", cause, rollbackErr)')
+          p.write_text(s)
+          p=Path('internal/eco/recovery_reporting.go');s=p.read_text()
+          s=once(s,'\n\t"fmt"','\n\t"fmt"\n\t"os"')
+          s=once(s,'return renameArchivedWorkspaceBack(archive, original, owner)','if err := os.Rename(archive, original); err != nil { return err }\n\treturn owner.retarget(original)')
+          p.write_text(s)
+          p=Path('internal/eco/development_workspace.go');s=p.read_text()
+          old='func ArchiveDevelopmentWorkspaceForCleanStart(root string) (string, error) {'
+          new='func ArchiveDevelopmentWorkspaceForCleanStart(root string) (string, error) {\n\treturn archiveDevelopmentWorkspace(root, nil)\n}\n\n// boundary is an internal per-call test seam; the normal application leaves nil.\nfunc archiveDevelopmentWorkspace(root string, boundary func(string)) (archivePath string, resultErr error) {\n\tattemptedArchive := ""\n\tdefer func() {\n\t\tresultErr = withRecoveryContext("Archive for clean start", resultErr, root, attemptedArchive, "")\n\t}()'
+          s=once(s,old,new)
+          s=once(s,'\t\t\t_ = owner.Close()','\t\t\tif closeErr := owner.Close(); closeErr != nil {\n\t\t\t\tresultErr = errors.Join(resultErr, fmt.Errorf("release archive ownership: %w", closeErr))\n\t\t\t}')
+          anchor='\tif err := os.Rename(absolute, archive); err != nil {'
+          s=once(s,anchor,'\tattemptedArchive = archive\n'+anchor)
+          anchor='\tif err := owner.retarget(archive); err != nil {'
+          s=once(s,anchor,'\tarchivePath = archive\n\tif boundary != nil { boundary(archive) }\n'+anchor)
+          s=once(s,'rollbackErr := os.Rename(archive, absolute)','rollbackErr := rollbackArchivedWorkspace(archive, absolute, owner)')
+          s=once(s,'return "", fmt.Errorf("retarget archived workspace owner: %v; rollback failed: %v", err, rollbackErr)','return archive, fmt.Errorf("retarget archived workspace owner: %w; rollback failed: %w", err, rollbackErr)')
+          s=once(s,'\tif err := owner.Close(); err != nil {\n\t\treturn "", fmt.Errorf("release archived workspace ownership: %w", err)\n\t}', '\tclosed = true\n\tif err := owner.Close(); err != nil {\n\t\treturn archive, fmt.Errorf("release archived workspace ownership: %w", err)\n\t}')
+          p.write_text(s)
+          p=Path('cmd/eco/main_windows.go');s=p.read_text()
+          old='\t\tmessageBox(hwnd, "Encrypted backup restored safely", fmt.Sprintf("Restored items: %d\\r\\nRestored bytes: %s\\r\\nSource build: %s\\r\\nSource SHA-256: %s\\r\\n\\r\\nYour previous vault was retained at:\\r\\n%s", r.EvidenceItems, eco.HumanBytes(r.RestoredBytes), r.SourceBuildID, r.SourceSHA256, r.PreRestoreVault), MB_OK|MB_ICONINFORMATION)'
+          new='\t\ttitle, notice := eco.RestoreCompletionNotice(r)\n\t\tmessageBox(hwnd, title, notice, MB_OK|MB_ICONINFORMATION)'
+          s=once(s,old,new);p.write_text(s)
+          PY
+          gofmt -w internal/eco/recovery_reporting*.go internal/eco/backup.go internal/eco/development_workspace.go cmd/eco/main_windows.go
+          git diff --check
+      - name: Qualify returned errors and full Linux source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_source_policy.py
+          go test -count=1 -json -run '^TestRecoveryReporting' ./internal/eco | tee "$RUNNER_TEMP/reporting-after.jsonl"
+          go test -count=1 ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go test -c ./internal/eco -o "$RUNNER_TEMP/reporting-windows.test.exe"
+          GOOS=windows GOARCH=amd64 go build -o "$RUNNER_TEMP/reporting-windows.exe" ./cmd/eco
+          git diff --check
+      - name: Record exact evidence and commit only bounded source paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json,os
+          from pathlib import Path
+          rows=[json.loads(s) for s in Path(os.environ['RUNNER_TEMP'],'reporting-after.jsonl').read_text().splitlines()]
+          assert not any(r.get('Action') in {'fail','skip'} for r in rows)
+          passed=sorted(r['Test'] for r in rows if r.get('Action')=='pass' and r.get('Test') and r['Test']!='TestRecoveryReportingFinalizationStates')
+          assert len(passed)==9,passed
+          receipt={'baseline':'726be7dc9ab6c808325173db7c236915d3554376','run_id':os.environ['GITHUB_RUN_ID'],'before_failures':json.loads(Path(os.environ['RUNNER_TEMP'],'reporting-before-summary.json').read_text()),'after_passed':passed,'skips':0,'full_linux_tests':'passed','go_vet':'passed','source_policy':'passed','windows_cross_build':'passed','native_windows':'pending normal PR CI','limitations':['Real failure reporting tested with synthetic directories and the actual restore path.','Post-activation owner-release warning semantics unit-tested, not a hardware fault claim.','Interactive Windows/Acer acceptance and complete release gates remain open.','No automatic filesystem repair, new dependency or runtime binary upload.']}
+          Path('docs/control/RECOVERY_REPORTING_QUALIFICATION_20260905.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          print(json.dumps(receipt,indent=2))
+          PY
+          branch='integration/recovery-reporting-acceptance-20260905'
+          git fetch origin "$branch"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/eco/recovery_reporting*.go internal/eco/backup.go internal/eco/development_workspace.go cmd/eco/main_windows.go docs/control/RECOVERY_REPORTING_QUALIFICATION_20260905.json
+          git commit -m 'Return actionable recovery errors and preserve committed-restore warnings'
+          git push origin "HEAD:refs/heads/$branch"
