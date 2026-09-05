@@ -1,0 +1,40 @@
+{
+  "baseline": "4fc6ea21122058bb63182ff456b71256a21305d1",
+  "run_id": "33973317706",
+  "before_failing_leaf_cases": [
+    "TestRecoveryRollbackRefusesUnsafeState/missing_checkpoint",
+    "TestRecoveryRollbackRefusesUnsafeState/substituted_checkpoint",
+    "TestRecoveryRollbackRefusesUnsafeState/substituted_stage_source"
+  ],
+  "after_passing_leaf_cases": [
+    "TestRecoveryMetadataWriteInterruption/temporary_write_refused",
+    "TestRecoveryMetadataWriteInterruption/uncommitted_temporary_metadata",
+    "TestRecoveryRollbackFailureRetainsCause",
+    "TestRecoveryRollbackRefusesUnsafeState/missing_checkpoint",
+    "TestRecoveryRollbackRefusesUnsafeState/occupied_active_empty",
+    "TestRecoveryRollbackRefusesUnsafeState/occupied_active_nonempty",
+    "TestRecoveryRollbackRefusesUnsafeState/occupied_stage_empty",
+    "TestRecoveryRollbackRefusesUnsafeState/occupied_stage_nonempty",
+    "TestRecoveryRollbackRefusesUnsafeState/substituted_checkpoint",
+    "TestRecoveryRollbackRefusesUnsafeState/substituted_stage_source",
+    "TestRecoveryRollbackRenameBoundaries/boundary_1",
+    "TestRecoveryRollbackRenameBoundaries/boundary_2",
+    "TestRecoveryRollbackRenameBoundaries/boundary_3",
+    "TestRecoveryRollbackRenameBoundaries/boundary_4",
+    "TestRecoveryStageCleanupOwnership/displaced_stage",
+    "TestRecoveryStageCleanupOwnership/owned_stage",
+    "TestRecoveryStageCleanupOwnership/substituted_stage"
+  ],
+  "after_skipped_cases": 0,
+  "full_linux_tests": "passed",
+  "go_vet": "passed",
+  "source_policy": "passed",
+  "windows_cross_build": "passed",
+  "native_windows_execution": "pending normal PR CI",
+  "process_kill_power_loss": "not tested by this slice",
+  "earlier_failed_qualification_runs": {
+    "33973117677": "harness incorrectly expected occupied_active_empty to fail; old code passed that case",
+    "33973240139": "repair compilation stopped on an obsolete strings import"
+  },
+  "failed_run_product_commits": "none; application integration committed only after passing qualification"
+}
