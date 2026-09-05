@@ -359,20 +359,30 @@ func (r *objectPlainReader) Read(p []byte) (int, error) {
 }
 
 type RestoreReceipt struct {
-	Format          string `json:"format"`
-	SourcePath      string `json:"source_path"`
-	SourceBuildID   string `json:"source_build_id"`
-	EvidenceItems   int    `json:"evidence_items"`
-	RestoredBytes   int64  `json:"restored_bytes"`
-	PreRestoreVault string `json:"pre_restore_vault"`
-	SourceSHA256    string `json:"source_sha256"`
+	RecoveryWarnings []string `json:"recovery_warnings,omitempty"`
+	Format           string   `json:"format"`
+	SourcePath       string   `json:"source_path"`
+	SourceBuildID    string   `json:"source_build_id"`
+	EvidenceItems    int      `json:"evidence_items"`
+	RestoredBytes    int64    `json:"restored_bytes"`
+	PreRestoreVault  string   `json:"pre_restore_vault"`
+	SourceSHA256     string   `json:"source_sha256"`
 }
 
 // RestorePortableBackup authenticates and validates a portable backup in a
 // separate staging vault. The active vault is replaced only after every
 // record, hash, relationship and staged encrypted object has passed checks.
 // If activation fails, the original vault is rolled back.
-func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(BackupProgress)) (RestoreReceipt, error) {
+func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(BackupProgress)) (receipt RestoreReceipt, resultErr error) {
+	if v == nil {
+		return RestoreReceipt{}, ErrVaultClosed
+	}
+	activeAtStart := v.Root
+	var stageRoot, preRestore string
+	var postActivationErr error
+	defer func() {
+		resultErr = withRecoveryContext("Restore", resultErr, activeAtStart, preRestore, stageRoot)
+	}()
 	if len([]rune(passphrase)) < 12 {
 		return RestoreReceipt{}, errors.New("backup passphrase must be at least 12 characters")
 	}
@@ -441,7 +451,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}
 	var nonceCounter uint64
 
-	stageRoot := v.Root + ".restore-" + NewID("STAGE")
+	stageRoot = v.Root + ".restore-" + NewID("STAGE")
 	if _, err := os.Lstat(stageRoot); !os.IsNotExist(err) {
 		return RestoreReceipt{}, errors.New("restore staging route is occupied or unreadable; existing entries preserved")
 	}
@@ -451,12 +461,8 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}
 	stageActivated := false
 	defer func() {
-		if !stageActivated {
-			// Validate the still-owned staged object before removal. A failed
-			// rollback must not delete an unrelated replacement at this path.
-			_ = removeUnactivatedRestoreStage(stage, stageRoot)
-		}
-		_ = stage.Close()
+		finalErr := finalizeRestoreStage(stage, stageRoot, stageActivated)
+		recordRestoreFinalization(&receipt, &resultErr, stageActivated, errors.Join(postActivationErr, finalErr))
 	}()
 
 	var ws Workspace
@@ -650,7 +656,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	activeRoot := v.Root
 	parent := filepath.Dir(activeRoot)
 	base := filepath.Base(activeRoot)
-	preRestore := filepath.Join(parent, base+".pre-restore-"+time.Now().UTC().Format("20060102T150405Z"))
+	preRestore = filepath.Join(parent, base+".pre-restore-"+time.Now().UTC().Format("20060102T150405Z"))
 	oldOwner := v.owner
 	if err = os.Rename(activeRoot, preRestore); err != nil {
 		return RestoreReceipt{}, fmt.Errorf("could not create pre-restore checkpoint: %w", err)
@@ -706,7 +712,9 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	stage.persistedChangeHead = ""
 	stage.persistedOwnerTxn = ""
 	stageActivated = true
-	_ = oldOwner.Close()
+	if closeErr := oldOwner.Close(); closeErr != nil {
+		postActivationErr = fmt.Errorf("release previous workspace owner at %q: %w", preRestore, closeErr)
+	}
 	if v.restoreBoundary != nil {
 		v.restoreBoundary("activated")
 	}
@@ -726,7 +734,7 @@ func restoreActivationFailure(cause, rollbackErr error) error {
 	if rollbackErr == nil {
 		return cause
 	}
-	return fmt.Errorf("%w; rollback also failed: %v", cause, rollbackErr)
+	return fmt.Errorf("%w; rollback also failed: %w", cause, rollbackErr)
 }
 
 func rollbackRestoreActivation(activeRoot, stageRoot, preRestore string, activeOwner, stageOwner *workspaceOwnerLease, stageMoved bool) error {

@@ -1,0 +1,31 @@
+{
+  "baseline": "726be7dc9ab6c808325173db7c236915d3554376",
+  "run_id": "33978398733",
+  "before_failures": [
+    "TestRecoveryReportingPreservesRollbackCause",
+    "TestRecoveryReportingReturnsCleanupFailure"
+  ],
+  "after_passed": [
+    "TestRecoveryReportingArchiveFailurePaths",
+    "TestRecoveryReportingArchiveRollbackSuccess",
+    "TestRecoveryReportingContext",
+    "TestRecoveryReportingFinalizationStates/committed_with_warning",
+    "TestRecoveryReportingFinalizationStates/failed_operation",
+    "TestRecoveryReportingFinalizationStates/no_failure",
+    "TestRecoveryReportingNormalRestore",
+    "TestRecoveryReportingPreservesRollbackCause",
+    "TestRecoveryReportingReturnsCleanupFailure"
+  ],
+  "skips": 0,
+  "full_linux_tests": "passed",
+  "go_vet": "passed",
+  "source_policy": "passed",
+  "windows_cross_build": "passed",
+  "native_windows": "pending normal PR CI",
+  "limitations": [
+    "Real failure reporting tested with synthetic directories and the actual restore path.",
+    "Post-activation owner-release warning semantics unit-tested, not a hardware fault claim.",
+    "Interactive Windows/Acer acceptance and complete release gates remain open.",
+    "No automatic filesystem repair, new dependency or runtime binary upload."
+  ]
+}
