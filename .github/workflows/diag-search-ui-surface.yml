@@ -1,0 +1,22 @@
+name: Diagnose search UI surface
+on:
+  push:
+    paths:
+      - .github/workflows/diag-search-ui-surface.yml
+permissions:
+  contents: read
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Map native Evidence and preview surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo '=== APPLICATION METHODS RELEVANT TO EVIDENCE/PREVIEW ==='
+          grep -n -E '^func \(a \*application\).*(Evidence|Preview|Citation|Search|Message|Command|Key|Paint|Draw)' cmd/eco/main_windows.go || true
+          echo '=== EVIDENCE/PREVIEW TOKENS ==='
+          grep -n -E 'openCitation|pendingPreview|preview|paintEvidence|drawEvidence|evidencePage|SelectedEvidence|WM_KEY|VK_LEFT|VK_RIGHT|PageUp|PageDown' cmd/eco/main_windows.go | head -n 160 || true
+          echo '=== CONTROL CREATION TOKENS ==='
+          grep -n -E 'CreateWindowEx|EDIT|BUTTON|WM_COMMAND|GetWindowText|SetWindowText' cmd/eco/main_windows.go | head -n 160 || true
