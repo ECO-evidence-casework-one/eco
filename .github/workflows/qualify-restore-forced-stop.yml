@@ -1,0 +1,137 @@
+name: Qualify restore forced-stop restart
+on:
+  push:
+    branches: [integration/restore-forced-stop-restart-20260905]
+    paths: [.github/workflows/qualify-restore-forced-stop.yml]
+permissions:
+  contents: write
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/integration/restore-forced-stop-restart-20260905'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 32
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Add identical observation seams to baseline and candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/eco-forced-stop-baseline"
+          git worktree add --detach "$baseline" d615f28b63778281ecc15c7254d39d5347ff5ea0
+          cp internal/eco/restore_forced_stop_test.go "$baseline/internal/eco/"
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          def once(text, old, new):
+              assert text.count(old) == 1, repr(old)
+              return text.replace(old, new, 1)
+          def observe(phase):
+              return '\tif v.restoreBoundary != nil {\n\t\tv.restoreBoundary("'+phase+'")\n\t}\n'
+          for root in [Path(os.environ['RUNNER_TEMP'], 'eco-forced-stop-baseline'), Path('.')]:
+              p = root / 'internal/eco/vault.go'
+              s = once(p.read_text(), 'type Vault struct {\n', 'type Vault struct {\n\t// Per-instance, package-internal test observation; normal application leaves nil.\n\trestoreBoundary func(string)\n')
+              p.write_text(s)
+              p = root / 'internal/eco/backup.go'
+              s = p.read_text()
+              pairs = [
+                  ('\t// Activation is the only exclusive phase.', 'stage_verified'),
+                  ('\tif err = oldOwner.retarget(preRestore); err != nil {', 'original_renamed'),
+                  ('\tif err = os.Rename(stageRoot, activeRoot); err != nil {', 'original_retargeted'),
+                  ('\tif err = stage.owner.retarget(activeRoot); err != nil {', 'staged_renamed'),
+              ]
+              for anchor, phase in pairs:
+                  s = once(s, anchor, observe(phase)+anchor)
+              s = once(s, '\t_ = oldOwner.Close()\n\n\treturn RestoreReceipt{', '\t_ = oldOwner.Close()\n'+observe('activated')+'\n\treturn RestoreReceipt{')
+              p.write_text(s)
+          PY
+      - name: Reproduce forced-stop restart failures before the guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +e
+          (cd "$RUNNER_TEMP/eco-forced-stop-baseline" && go test -count=1 -json -run '^TestRestoreForcedStopRestart$' ./internal/eco) > "$RUNNER_TEMP/forced-before.jsonl" 2>&1
+          result=$?
+          set -e
+          cat "$RUNNER_TEMP/forced-before.jsonl"
+          test "$result" -eq 1
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          rows=[]
+          for s in Path(os.environ['RUNNER_TEMP'], 'forced-before.jsonl').read_text().splitlines():
+              try: rows.append(json.loads(s))
+              except json.JSONDecodeError: pass
+          failed=sorted(r['Test'] for r in rows if r.get('Action')=='fail' and '/' in r.get('Test',''))
+          passed=sorted(r['Test'] for r in rows if r.get('Action')=='pass' and '/' in r.get('Test',''))
+          assert set(failed)=={'TestRestoreForcedStopRestart/original_renamed','TestRestoreForcedStopRestart/original_retargeted'}, failed
+          assert len(passed)==3, passed
+          Path(os.environ['RUNNER_TEMP'],'forced-before-summary.json').write_text(json.dumps({'failed':failed,'passed':passed},indent=2))
+          PY
+      - name: Integrate restart guard and Windows recovery choice
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('internal/eco/vault.go')
+          s=p.read_text()
+          old='\tif err := preflightWorkspaceFormat(root); err != nil {'
+          assert s.count(old)==2
+          s=s.replace(old, '\tif err := CheckWorkspaceRecoveryState(root); err != nil {\n\t\treturn nil, err\n\t}\n'+old)
+          p.write_text(s)
+          p=Path('internal/eco/restore_restart.go')
+          s=p.read_text().replace('\n\t"fmt"','\n\t"fmt"\n\t"io"',1)
+          old='\t\t\tif errors.Is(readErr, os.ErrClosed) {\n\t\t\t\treturn fmt.Errorf("read recovery checkpoint directory: %w", readErr)\n\t\t\t}\n\t\t\t// ReadDir returns io.EOF when no entries remain.\n\t\t\tif readErr.Error() == "EOF" {'
+          assert s.count(old)==1
+          s=s.replace(old,'\t\t\tif errors.Is(readErr, io.EOF) {',1)
+          p.write_text(s)
+          p=Path('cmd/eco/main_windows.go')
+          s=p.read_text()
+          old='\tcandidate := eco.DefaultDevelopmentWorkspaceRoot(base)\n'
+          assert s.count(old)==1
+          added='\tif err := eco.CheckWorkspaceRecoveryState(candidate); err != nil {\n\t\tchoice := messageBox(0, "ECO workspace recovery needed", err.Error()+"\\r\\n\\r\\nYes — Open an existing ECO workspace for recovery\\r\\nNo or Cancel — Exit without changing the retained copies", MB_YESNOCANCEL|MB_ICONQUESTION)\n\t\tif choice == IDYES {\n\t\t\treturn chooseExistingWorkspace()\n\t\t}\n\t\treturn "", false\n\t}\n'
+          p.write_text(s.replace(old,old+added,1))
+          PY
+          gofmt -w internal/eco/vault.go internal/eco/backup.go internal/eco/restore_restart.go internal/eco/restore_restart_test.go internal/eco/restore_forced_stop_test.go cmd/eco/main_windows.go
+          git diff --check
+      - name: Qualify source and keep Windows binaries ephemeral
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_source_policy.py
+          go test -count=1 -json -run '^(TestRestoreForcedStopRestart|TestRestoreRestartGuard|TestRestoreRestartPositiveControls)$' ./internal/eco | tee "$RUNNER_TEMP/forced-after.jsonl"
+          go test -count=1 ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go test -c ./internal/eco -o "$RUNNER_TEMP/forced-stop.test.exe"
+          GOOS=windows GOARCH=amd64 go build -o "$RUNNER_TEMP/forced-stop.exe" ./cmd/eco
+          git diff --check
+      - name: Record qualification and commit only scoped paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          before=json.loads(Path(os.environ['RUNNER_TEMP'],'forced-before-summary.json').read_text())
+          rows=[json.loads(s) for s in Path(os.environ['RUNNER_TEMP'],'forced-after.jsonl').read_text().splitlines()]
+          assert not any(r.get('Action') in {'fail','skip'} for r in rows)
+          leaves=sorted(r['Test'] for r in rows if r.get('Action')=='pass' and '/' in r.get('Test',''))
+          assert len(leaves)==13, leaves
+          receipt={'baseline':'d615f28b63778281ecc15c7254d39d5347ff5ea0','run_id':os.environ['GITHUB_RUN_ID'],'before':before,'after_passing_leaf_cases':leaves,'after_skips':0,'method':'Actual RestorePortableBackup in a child process, per-instance observation at real boundaries; parent Kill then Wait; graceful-cleanup marker absent; no manually reconstructed directory state','linux_tests':'passed','go_vet':'passed','source_policy':'passed','windows_cross_build':'passed','native_windows':'pending ordinary PR CI','limits':['Only five portable-restore stop boundaries.','Reset interruption remains next, not covered by this slice.','No power-loss or storage-controller durability claim.','Checkpoint names cause refusal only, never automatic activation or deletion.','Main missing-route recovery choice is added; actual interactive Acer acceptance still pending.','W7, W8, issue #4 and real-evidence/public-release gates remain open.']}
+          Path('docs/control/RESTORE_FORCED_STOP_QUALIFICATION_20260905.json').write_text(json.dumps(receipt,indent=2)+'\n')
+          print(json.dumps(receipt,indent=2))
+          PY
+          branch='integration/restore-forced-stop-restart-20260905'
+          git fetch origin "$branch"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add internal/eco/vault.go internal/eco/backup.go internal/eco/restore_restart.go internal/eco/restore_restart_test.go internal/eco/restore_forced_stop_test.go cmd/eco/main_windows.go docs/control/RESTORE_FORCED_STOP_QUALIFICATION_20260905.json
+          git commit -m 'Refuse silent new state after a forcibly interrupted restore'
+          git push origin "HEAD:refs/heads/$branch"
