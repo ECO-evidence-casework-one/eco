@@ -28,7 +28,7 @@ public static class EcoA11yProbe {
   static string C(IntPtr h){var b=new StringBuilder(256);GetClassName(h,b,b.Capacity);return b.ToString();}
   static string T(IntPtr h){var b=new StringBuilder(Math.Max(1,GetWindowTextLength(h)+1));GetWindowText(h,b,b.Capacity);return b.ToString();}
   static EcoA11yRow R(IntPtr h){var r=new EcoA11yRow{Hwnd=h,ControlId=GetDlgCtrlID(h),ClassName=C(h),WindowText=T(h),Visible=IsWindowVisible(h)};try{Guid g=typeof(Accessibility.IAccessible).GUID;Accessibility.IAccessible a; if(AccessibleObjectFromWindow(h,OBJID_CLIENT,ref g,out a)>=0&&a!=null){object self=0;try{r.AccessibleName=a.get_accName(self);}catch{}try{r.DefaultAction=a.get_accDefaultAction(self);}catch{}try{r.Role=Convert.ToInt32(a.get_accRole(self));}catch{}try{r.State=Convert.ToInt32(a.get_accState(self));}catch{}}}catch{}return r;}
-  public static IntPtr Main(uint pid,string cls){IntPtr f=IntPtr.Zero;EnumWindows((h,l)=>{uint p;GetWindowThreadProcessId(h,out p);if(p==pid&&C(h)==cls){f=h;return false;}return true;},IntPtr.Zero);return f;}
+  public static IntPtr FindMainWindow(uint pid,string cls){IntPtr f=IntPtr.Zero;EnumWindows((h,l)=>{uint p;GetWindowThreadProcessId(h,out p);if(p==pid&&C(h)==cls){f=h;return false;}return true;},IntPtr.Zero);return f;}
   public static EcoA11yRow[] Children(IntPtr p){IntPtr[] h=new IntPtr[256];int c=0;EnumChildWindows(p,(x,l)=>{if(c<h.Length)h[c++]=x;return true;},IntPtr.Zero);var r=new EcoA11yRow[c];for(int i=0;i<c;i++)r[i]=R(h[i]);return r;}
 }
 '@ -ReferencedAssemblies $accAssembly
@@ -36,7 +36,7 @@ public static class EcoA11yProbe {
 $p=Start-Process -FilePath $ExePath -PassThru
 try {
   $deadline=(Get-Date).AddSeconds(20);$main=[IntPtr]::Zero
-  while($main -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline -and -not $p.HasExited){Start-Sleep -Milliseconds 200;$main=[EcoA11yProbe]::Main([uint32]$p.Id,'ECO_V25_NATIVE_MAIN')}
+  while($main -eq [IntPtr]::Zero -and (Get-Date) -lt $deadline -and -not $p.HasExited){Start-Sleep -Milliseconds 200;$main=[EcoA11yProbe]::FindMainWindow([uint32]$p.Id,'ECO_V25_NATIVE_MAIN')}
   if($main -eq [IntPtr]::Zero){throw 'Current ECO main HWND was not found.'}
   $rows=@([EcoA11yProbe]::Children($main))
   $rows|Select ControlId,ClassName,WindowText,Visible,AccessibleName,DefaultAction,Role,State|Format-Table -AutoSize|Out-String|Write-Host
