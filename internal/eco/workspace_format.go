@@ -39,6 +39,20 @@ func preflightWorkspaceFormat(root string) error {
 	if root == "" {
 		return errors.New("empty vault root")
 	}
+	absolute, err := filepath.Abs(root)
+	if err != nil {
+		return fmt.Errorf("resolve workspace root: %w", err)
+	}
+	// Apply the same real-directory rule to empty and populated roots. Clean
+	// the path first so a trailing separator cannot hide a symlink from Lstat.
+	if info, err := os.Lstat(absolute); err == nil {
+		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			return errors.New("selected workspace root is not a real directory")
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect workspace root: %w", err)
+	}
+	root = absolute
 	keyPath := filepath.Join(root, "vault.key")
 	metaPath := filepath.Join(root, "workspace.ecodb")
 	_, keyErr := os.Lstat(keyPath)
