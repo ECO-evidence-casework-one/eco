@@ -106,6 +106,9 @@ func TestEvidenceOccurrencesPersistAcrossVaultReopen(t *testing.T) {
 	if _, duplicate, err := v.ImportFile(pathB, nil); err != nil || !duplicate {
 		t.Fatalf("duplicate import err=%v duplicate=%v", err, duplicate)
 	}
+	if err := v.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	reopened, err := OpenVault(vaultRoot)
 	if err != nil {

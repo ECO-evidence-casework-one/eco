@@ -216,6 +216,10 @@ func TestCancellationAfterVerificationRecoversOnRestart(t *testing.T) {
 		t.Fatalf("verified original was not retained in explicit recoverable state: %v", err)
 	}
 
+	if err := vault.Close(); err != nil {
+		t.Fatal(err)
+	}
+
 	reopened, err := OpenVault(root)
 	if err != nil {
 		t.Fatal(err)
@@ -277,6 +281,10 @@ func TestCancelledVerifiedPreservationMismatchRemainsBlockedOnRestart(t *testing
 		t.Fatal(err)
 	}
 
+	if err := vault.Close(); err != nil {
+		t.Fatal(err)
+	}
+
 	reopened, err := OpenVault(root)
 	if err != nil {
 		t.Fatal(err)
@@ -316,6 +324,10 @@ func TestRestartMarksIncompletePreservationFailed(t *testing.T) {
 	}
 	tmpObject := filepath.Join(vault.Objects, record.ObjectFile+".tmp")
 	if err := os.WriteFile(tmpObject, []byte(objectMagic+"incomplete"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := vault.Close(); err != nil {
 		t.Fatal(err)
 	}
 
@@ -374,6 +386,10 @@ func TestRestartRecoversCompleteUncommittedPreservation(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Rename(objectPath, objectPath+".tmp"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := vault.Close(); err != nil {
 		t.Fatal(err)
 	}
 

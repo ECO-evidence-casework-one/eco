@@ -25,10 +25,14 @@ const (
 	chunkSize   = 1024 * 1024
 )
 
+var ErrVaultClosed = errors.New("vault is closed")
+
 type Vault struct {
 	Root      string
 	Objects   string
 	key       []byte
+	owner     *workspaceOwnerLease
+	closed    bool
 	opMu      sync.RWMutex
 	mu        sync.Mutex
 	Workspace Workspace
@@ -38,15 +42,29 @@ func OpenVault(root string) (*Vault, error) {
 	if root == "" {
 		return nil, errors.New("empty vault root")
 	}
-	objects := filepath.Join(root, "objects")
-	if err := os.MkdirAll(objects, 0700); err != nil {
+	owner, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		return nil, err
+	}
+	root = owner.root
+	v := &Vault{Root: root, Objects: filepath.Join(root, "objects"), owner: owner}
+	opened := false
+	defer func() {
+		if opened {
+			return
+		}
+		zeroBytes(v.key)
+		v.key = nil
+		_ = owner.Close()
+	}()
+	if err := os.MkdirAll(v.Objects, 0700); err != nil {
 		return nil, err
 	}
 	key, err := loadOrCreateMasterKey(filepath.Join(root, "vault.key"))
 	if err != nil {
 		return nil, fmt.Errorf("vault key: %w", err)
 	}
-	v := &Vault{Root: root, Objects: objects, key: key}
+	v.key = key
 	if err := v.loadWorkspace(); err != nil {
 		return nil, err
 	}
@@ -56,7 +74,41 @@ func OpenVault(root string) (*Vault, error) {
 	if err := v.recoverPreservations(); err != nil {
 		return nil, fmt.Errorf("recover preservation state: %w", err)
 	}
+	opened = true
 	return v, nil
+}
+
+func (v *Vault) Close() error {
+	if v == nil {
+		return nil
+	}
+	v.opMu.Lock()
+	defer v.opMu.Unlock()
+	v.mu.Lock()
+	if v.closed {
+		v.mu.Unlock()
+		return nil
+	}
+	v.closed = true
+	owner := v.owner
+	v.owner = nil
+	zeroBytes(v.key)
+	v.key = nil
+	v.mu.Unlock()
+	if owner != nil {
+		return owner.Close()
+	}
+	return nil
+}
+
+func (v *Vault) ensureOpenUnlocked() error {
+	if v == nil || v.closed || v.owner == nil {
+		return ErrVaultClosed
+	}
+	if err := v.owner.revalidate(); err != nil {
+		return fmt.Errorf("workspace ownership is invalid: %w", err)
+	}
+	return nil
 }
 
 func loadOrCreateMasterKey(path string) ([]byte, error) {
@@ -120,6 +172,9 @@ func (v *Vault) Save() error {
 }
 
 func (v *Vault) saveUnlocked() error {
+	if err := v.ensureOpenUnlocked(); err != nil {
+		return err
+	}
 	v.Workspace.UpdatedAt = time.Now().UTC()
 	v.Workspace.BuildID = BuildID
 	plain, err := json.MarshalIndent(v.Workspace, "", "  ")

@@ -67,6 +67,9 @@ func TestLocalToolRegistrationPersistsEncryptedAndVerifies(t *testing.T) {
 	if strings.Contains(string(raw), toolPath) || strings.Contains(string(raw), "5.5.1-test") || strings.Contains(string(raw), registered.SHA256) {
 		t.Fatal("encrypted workspace leaks local tool registration plaintext")
 	}
+	if err := v.Close(); err != nil {
+		t.Fatal(err)
+	}
 
 	reopened, err := OpenVault(vaultRoot)
 	if err != nil {

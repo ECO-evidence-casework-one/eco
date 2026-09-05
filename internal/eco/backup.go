@@ -15,6 +15,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -449,6 +450,7 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	}
 	stageActivated := false
 	defer func() {
+		_ = stage.Close()
 		if !stageActivated {
 			_ = os.RemoveAll(stageRoot)
 		}
@@ -623,37 +625,62 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 		return RestoreReceipt{}, err
 	}
 
-	// Activation is the only exclusive phase. Read/import/verify/backup file
-	// operations finish first, and metadata writers are blocked by v.mu.
+	// Activation is the only exclusive phase. The active Vault retains an
+	// object-bound owner throughout the swap while the staged Vault retains its
+	// own owner. Ownership follows the directory objects across renames and is
+	// transferred only after the activated staged vault re-verifies.
 	v.opMu.Lock()
 	defer v.opMu.Unlock()
 	v.mu.Lock()
 	defer v.mu.Unlock()
+	if err = v.ensureOpenUnlocked(); err != nil {
+		return RestoreReceipt{}, err
+	}
+	if stage.owner == nil {
+		return RestoreReceipt{}, errors.New("staged vault ownership is missing")
+	}
 
-	parent := filepath.Dir(v.Root)
-	base := filepath.Base(v.Root)
+	activeRoot := v.Root
+	parent := filepath.Dir(activeRoot)
+	base := filepath.Base(activeRoot)
 	preRestore := filepath.Join(parent, base+".pre-restore-"+time.Now().UTC().Format("20060102T150405Z"))
-	if err = os.Rename(v.Root, preRestore); err != nil {
+	oldOwner := v.owner
+	if err = os.Rename(activeRoot, preRestore); err != nil {
 		return RestoreReceipt{}, fmt.Errorf("could not create pre-restore checkpoint: %w", err)
 	}
-	if err = os.Rename(stageRoot, v.Root); err != nil {
-		_ = os.Rename(preRestore, v.Root)
-		return RestoreReceipt{}, fmt.Errorf("could not activate restored vault; original was rolled back: %w", err)
+	if err = oldOwner.retarget(preRestore); err != nil {
+		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, false)
+		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("active workspace ownership could not follow pre-restore checkpoint: %w", err), rollbackErr)
 	}
-	stageActivated = true
-
-	newVault, err := OpenVault(v.Root)
-	if err != nil {
-		failedPath := stageRoot + ".failed"
-		_ = os.Rename(v.Root, failedPath)
-		_ = os.Rename(preRestore, v.Root)
-		return RestoreReceipt{}, fmt.Errorf("restored vault could not reopen; original was rolled back: %w", err)
+	if err = os.Rename(stageRoot, activeRoot); err != nil {
+		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, false)
+		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("could not activate restored vault: %w", err), rollbackErr)
+	}
+	if err = stage.owner.retarget(activeRoot); err != nil {
+		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, true)
+		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("staged workspace ownership could not follow activation: %w", err), rollbackErr)
+	}
+	stage.Root = activeRoot
+	stage.Objects = filepath.Join(activeRoot, "objects")
+	if err = stage.owner.revalidate(); err != nil {
+		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, true)
+		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("activated workspace ownership failed revalidation: %w", err), rollbackErr)
+	}
+	if err = verifyStagedVault(stage); err != nil {
+		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, true)
+		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("activated restored vault failed source verification: %w", err), rollbackErr)
 	}
 
-	v.Objects = newVault.Objects
+	v.Root = activeRoot
+	v.Objects = stage.Objects
+	v.owner = stage.owner
+	stage.owner = nil
 	zeroBytes(v.key)
-	v.key = newVault.key
-	v.Workspace = newVault.Workspace
+	v.key = stage.key
+	stage.key = nil
+	v.Workspace = stage.Workspace
+	stageActivated = true
+	_ = oldOwner.Close()
 
 	return RestoreReceipt{
 		Format:          "ECOBKP1",
@@ -664,6 +691,41 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 		PreRestoreVault: preRestore,
 		SourceSHA256:    sourceHash,
 	}, nil
+}
+
+func restoreActivationFailure(cause, rollbackErr error) error {
+	if rollbackErr == nil {
+		return cause
+	}
+	return fmt.Errorf("%w; rollback also failed: %v", cause, rollbackErr)
+}
+
+func rollbackRestoreActivation(activeRoot, stageRoot, preRestore string, activeOwner, stageOwner *workspaceOwnerLease, stageMoved bool) error {
+	problems := []string{}
+	if stageMoved {
+		if err := os.Rename(activeRoot, stageRoot); err != nil {
+			problems = append(problems, "move failed staged vault back: "+err.Error())
+		} else if stageOwner != nil {
+			if err := stageOwner.retarget(stageRoot); err != nil {
+				problems = append(problems, "retarget staged owner during rollback: "+err.Error())
+			}
+		}
+	}
+	if _, err := os.Stat(preRestore); err == nil {
+		if err := os.Rename(preRestore, activeRoot); err != nil {
+			problems = append(problems, "restore original active vault: "+err.Error())
+		} else if activeOwner != nil {
+			if err := activeOwner.retarget(activeRoot); err != nil {
+				problems = append(problems, "retarget active owner during rollback: "+err.Error())
+			}
+		}
+	} else if !os.IsNotExist(err) {
+		problems = append(problems, "inspect pre-restore checkpoint: "+err.Error())
+	}
+	if len(problems) > 0 {
+		return errors.New(strings.Join(problems, "; "))
+	}
+	return nil
 }
 
 type countingReader struct {
