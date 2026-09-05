@@ -38,6 +38,7 @@ const (
 	msgVerifyDone     = WM_APP + 8
 	msgPreviewReady   = WM_APP + 9
 	msgMatterDone     = WM_APP + 10
+	msgPDFPageReady   = WM_APP + 50
 )
 
 type hitRegion struct {
@@ -85,6 +86,11 @@ type previewState struct {
 	itemID        string
 	isPDF         bool
 	pdfPage       int
+	pdfPages      int
+	pdfTargetPage int
+	pdfLoading    bool
+	pdfErr        string
+	sourceTitle   string
 	title         string
 	original      image.Image
 	image         image.Image
@@ -1346,6 +1352,18 @@ func (a *application) openSelectedPreview() {
 		go func(item eco.EvidenceItem, page int, highlight *eco.NormalizedRegion) {
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			defer cancel()
+			pageCount := 0
+			if info, infoErr := a.vault.PDFEvidenceInfoWithRegisteredPDFiumContext(ctx, item.ID); infoErr == nil {
+				pageCount = info.PageCount
+				if page > pageCount {
+					err := fmt.Errorf("PDF page %d is outside this document's %d pages", page, pageCount)
+					a.mu.Lock()
+					a.previewErr = err.Error()
+					a.mu.Unlock()
+					procPostMessageW.Call(a.hwnd, msgPreviewReady, 0, 0)
+					return
+				}
+			}
 			rendered, err := a.vault.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, item.ID, page, 1600)
 			if err == nil {
 				var img image.Image
@@ -1353,7 +1371,11 @@ func (a *application) openSelectedPreview() {
 				if err == nil {
 					assessment := eco.AssessImage(img)
 					previewImage := eco.BoundedPreviewImage(img, 8_000_000)
-					state := &previewState{itemID: item.ID, isPDF: true, pdfPage: page, title: fmt.Sprintf("%s — page %d", item.SafeName, page), original: previewImage, rotation: 0, mode: "original", zoom: 1, assessment: assessment, cropRect: previewImage.Bounds(), highlight: highlight}
+					title := fmt.Sprintf("%s — page %d", item.SafeName, page)
+					if pageCount > 0 {
+						title = fmt.Sprintf("%s — page %d of %d", item.SafeName, page, pageCount)
+					}
+					state := &previewState{itemID: item.ID, isPDF: true, pdfPage: page, pdfPages: pageCount, sourceTitle: item.SafeName, title: title, original: previewImage, rotation: 0, mode: "original", zoom: 1, assessment: assessment, cropRect: previewImage.Bounds(), highlight: highlight}
 					state.rebuild()
 					a.mu.Lock()
 					a.pendingPreview = state
@@ -1582,6 +1604,7 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		drawPreview(hwnd)
 		return 0
 	case WM_KEYDOWN:
+		pdfTarget := 0
 		previewMu.Lock()
 		p := previews[hwnd]
 		if p != nil {
@@ -1590,6 +1613,14 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 				previewMu.Unlock()
 				procDestroyWindow.Call(hwnd)
 				return 0
+			case VK_LEFT, VK_PRIOR:
+				if p.isPDF && !p.pdfLoading && p.pdfPages > 0 && p.pdfPage > 1 {
+					pdfTarget = p.pdfPage - 1
+				}
+			case VK_RIGHT, VK_NEXT:
+				if p.isPDF && !p.pdfLoading && p.pdfPages > 0 && p.pdfPage < p.pdfPages {
+					pdfTarget = p.pdfPage + 1
+				}
 			case 'R':
 				p.rotation = (p.rotation + 90) % 360
 				p.rebuild()
@@ -1642,6 +1673,23 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 			}
 		}
 		previewMu.Unlock()
+		if pdfTarget > 0 {
+			requestPDFPreviewPage(hwnd, pdfTarget)
+		}
+		invalidate(hwnd)
+		return 0
+	case msgPDFPageReady:
+		previewMu.Lock()
+		p := previews[hwnd]
+		errText := ""
+		if p != nil {
+			errText = p.pdfErr
+			p.pdfErr = ""
+		}
+		previewMu.Unlock()
+		if errText != "" {
+			messageBox(hwnd, "PDF page unavailable", errText, MB_OK|MB_ICONERROR)
+		}
 		invalidate(hwnd)
 		return 0
 	case WM_MOUSEWHEEL:
@@ -1671,6 +1719,61 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 	}
 	r, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wparam, lparam)
 	return r
+}
+
+func requestPDFPreviewPage(hwnd uintptr, target int) {
+	previewMu.Lock()
+	p := previews[hwnd]
+	if p == nil || !p.isPDF || p.pdfLoading || p.pdfPages < 1 || target < 1 || target > p.pdfPages || target == p.pdfPage {
+		previewMu.Unlock()
+		return
+	}
+	itemID := p.itemID
+	p.pdfLoading = true
+	p.pdfTargetPage = target
+	p.pdfErr = ""
+	previewMu.Unlock()
+	invalidate(hwnd)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		rendered, err := app.vault.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, itemID, target, 1600)
+		var previewImage image.Image
+		var assessment eco.ImageAssessment
+		if err == nil {
+			var img image.Image
+			img, _, err = eco.DecodeSupportedImage(rendered.PNG)
+			if err == nil {
+				assessment = eco.AssessImage(img)
+				previewImage = eco.BoundedPreviewImage(img, 8_000_000)
+			}
+		}
+
+		previewMu.Lock()
+		current := previews[hwnd]
+		if current == nil || current.itemID != itemID {
+			previewMu.Unlock()
+			return
+		}
+		current.pdfLoading = false
+		current.pdfTargetPage = 0
+		if err != nil {
+			current.pdfErr = err.Error()
+			previewMu.Unlock()
+			procPostMessageW.Call(hwnd, msgPDFPageReady, 0, 0)
+			return
+		}
+		current.pdfPage = target
+		current.title = fmt.Sprintf("%s — page %d of %d", current.sourceTitle, target, current.pdfPages)
+		current.original = previewImage
+		current.assessment = assessment
+		current.cropRect = previewImage.Bounds()
+		current.highlight = nil
+		current.rebuild()
+		previewMu.Unlock()
+		procPostMessageW.Call(hwnd, msgPDFPageReady, 0, 0)
+	}()
 }
 
 func (p *previewState) rebuild() {
@@ -1746,7 +1849,13 @@ func drawPreview(hwnd uintptr) {
 	drawTextFont(hdc, fmt.Sprintf("%d × %d · rotation %d° · %s · %s · %s · zoom %.0f%%%s", p.width, p.height, p.rotation, p.mode, cropState, deskewState, p.zoom*100, highlightState), RECT{24, 39, rc.Right - 24, 64}, app.fontSmall, rgb(196, 232, 228), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	controls := "R rotate · C auto-crop · D deskew · O original · G greyscale · H fixed contrast · A adaptive · Q quality · +/− zoom · Esc close"
 	if p.isPDF {
-		controls = fmt.Sprintf("PDF page %d · R rotate view · O original · G greyscale · H fixed contrast · A adaptive · +/− zoom · Esc close", p.pdfPage)
+		if p.pdfLoading {
+			controls = fmt.Sprintf("Rendering PDF page %d of %d locally…", p.pdfTargetPage, p.pdfPages)
+		} else if p.pdfPages > 0 {
+			controls = fmt.Sprintf("PDF page %d of %d · ←/→ or PageUp/PageDown change page · R rotate view · +/− zoom · Esc close", p.pdfPage, p.pdfPages)
+		} else {
+			controls = fmt.Sprintf("PDF page %d · page count unavailable · R rotate view · +/− zoom · Esc close", p.pdfPage)
+		}
 	}
 	drawTextFont(hdc, controls, RECT{24, 63, rc.Right - 24, 90}, app.fontSmall, rgb(218, 242, 238), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	availW := float64(rc.Right - 40)

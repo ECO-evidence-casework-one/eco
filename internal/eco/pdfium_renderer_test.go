@@ -54,3 +54,32 @@ func TestValidatePDFPageRenderRequiresSourceAndBounds(t *testing.T) {
 		t.Fatal("unbounded render width was accepted")
 	}
 }
+
+func TestPDFiumInfoArgsRequestJSONToStdout(t *testing.T) {
+	got := pdfiumInfoArgs(`C:\source.pdf`)
+	want := []string{"info", "--output-type", "json", `C:\source.pdf`, "-"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("unexpected pdfium-cli info args: %#v", got)
+	}
+}
+
+func TestParsePDFiumDocumentInfoBindsPageCountToSource(t *testing.T) {
+	source := SourceReceipt{ObjectFile: "object-abc.eco", SHA256: strings.Repeat("b", 64), VerifiedAt: time.Now().UTC()}
+	info, err := parsePDFiumDocumentInfo([]byte(`{"PageCount": 23}`), source, qualifiedPDFiumCLIVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.PageCount != 23 || info.SourceObject != source.ObjectFile || info.SourceSHA256 != source.SHA256 {
+		t.Fatalf("unexpected document info: %+v", info)
+	}
+}
+
+func TestParsePDFiumDocumentInfoRejectsUnsafePageCount(t *testing.T) {
+	source := SourceReceipt{ObjectFile: "object-abc.eco", SHA256: strings.Repeat("b", 64), VerifiedAt: time.Now().UTC()}
+	if _, err := parsePDFiumDocumentInfo([]byte(`{"PageCount": 0}`), source, qualifiedPDFiumCLIVersion); err == nil {
+		t.Fatal("zero page count was accepted")
+	}
+	if _, err := parsePDFiumDocumentInfo([]byte(`{"PageCount": 100001}`), source, qualifiedPDFiumCLIVersion); err == nil {
+		t.Fatal("unbounded page count was accepted")
+	}
+}

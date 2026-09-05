@@ -3,6 +3,7 @@ package eco
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image/png"
@@ -19,6 +20,7 @@ const (
 	qualifiedPDFiumCLISHA256        = "b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f"
 	qualifiedPDFiumCLIBytes   int64 = 16988160
 	maxPDFiumDiagnosticBytes        = 64 * 1024
+	maxPDFiumInfoBytes              = 8 * 1024 * 1024
 	maxPDFiumRenderPNGBytes   int64 = 32 * 1024 * 1024
 	maxPDFiumRenderInputBytes int64 = 512 * 1024 * 1024
 	maxPDFiumRenderPage             = 100000
@@ -37,6 +39,18 @@ type PDFPageRender struct {
 	Height        int       `json:"height"`
 	PNG           []byte    `json:"-"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type PDFDocumentInfo struct {
+	EngineVersion string    `json:"engine_version"`
+	SourceObject  string    `json:"source_object"`
+	SourceSHA256  string    `json:"source_sha256"`
+	PageCount     int       `json:"page_count"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type pdfiumCLIInfoJSON struct {
+	PageCount int `json:"PageCount"`
 }
 
 type pdfiumLimitedCapture struct {
@@ -117,6 +131,94 @@ func pdfiumRenderArgs(inputPath, outputPath string, page, maxWidth int) []string
 		inputPath,
 		outputPath,
 	}
+}
+
+func pdfiumInfoArgs(inputPath string) []string {
+	return []string{"info", "--output-type", "json", inputPath, "-"}
+}
+
+func parsePDFiumDocumentInfo(data []byte, source SourceReceipt, engineVersion string) (PDFDocumentInfo, error) {
+	result := PDFDocumentInfo{
+		EngineVersion: engineVersion,
+		SourceObject:  source.ObjectFile,
+		SourceSHA256:  source.SHA256,
+		CreatedAt:     time.Now().UTC(),
+	}
+	if len(data) == 0 {
+		return result, errors.New("pdfium-cli info returned empty JSON")
+	}
+	if len(data) > maxPDFiumInfoBytes {
+		return result, errors.New("pdfium-cli info JSON exceeds ECO's safe size limit")
+	}
+	var payload pdfiumCLIInfoJSON
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return result, fmt.Errorf("parse pdfium-cli info JSON: %w", err)
+	}
+	result.PageCount = payload.PageCount
+	if err := validatePDFDocumentInfo(result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func RunPDFiumDocumentInfo(ctx context.Context, executable, inputPath string, source SourceReceipt) (PDFDocumentInfo, error) {
+	result := PDFDocumentInfo{SourceObject: source.ObjectFile, SourceSHA256: source.SHA256, CreatedAt: time.Now().UTC()}
+	if ctx == nil {
+		return result, errors.New("pdfium-cli info context is required")
+	}
+	if strings.TrimSpace(source.ObjectFile) == "" || !sha256TextPattern.MatchString(source.SHA256) || source.VerifiedAt.IsZero() {
+		return result, errors.New("pdfium-cli info requires a verified preserved-object source receipt")
+	}
+	exePath, err := requireAbsoluteRegularFile(executable, "pdfium-cli executable")
+	if err != nil {
+		return result, err
+	}
+	verifiedInput, err := requireAbsoluteRegularFile(inputPath, "PDF info input")
+	if err != nil {
+		return result, err
+	}
+	inputInfo, err := os.Stat(verifiedInput)
+	if err != nil {
+		return result, err
+	}
+	if inputInfo.Size() <= 0 || inputInfo.Size() > maxPDFiumRenderInputBytes {
+		return result, fmt.Errorf("PDF info input size %d is outside ECO's safe automatic-preview limit", inputInfo.Size())
+	}
+	version, err := pdfiumCLIVersion(ctx, exePath)
+	if err != nil {
+		return result, err
+	}
+	stdout, stderr, exitErr, runErr := runPDFiumCLICommand(ctx, exePath, pdfiumInfoArgs(verifiedInput), maxPDFiumInfoBytes)
+	if runErr != nil {
+		return result, runErr
+	}
+	if exitErr != nil {
+		message := strings.TrimSpace(string(stderr))
+		if message == "" {
+			message = strings.TrimSpace(string(stdout))
+		}
+		if message == "" {
+			message = exitErr.Error()
+		}
+		return result, fmt.Errorf("pdfium-cli could not inspect PDF page count: %s", boundPDFiumDiagnostic(message))
+	}
+	return parsePDFiumDocumentInfo(stdout, source, version)
+}
+
+func validatePDFDocumentInfo(result PDFDocumentInfo) error {
+	if result.EngineVersion != qualifiedPDFiumCLIVersion {
+		return errors.New("PDF document info does not identify ECO's qualified pdfium-cli runtime")
+	}
+	if strings.TrimSpace(result.SourceObject) == "" || !sha256TextPattern.MatchString(result.SourceSHA256) {
+		return errors.New("PDF document info is not bound to a preserved source object")
+	}
+	if result.PageCount < 1 || result.PageCount > maxPDFiumRenderPage {
+		return fmt.Errorf("PDF page count %d is outside ECO's safe preview range", result.PageCount)
+	}
+	if result.CreatedAt.IsZero() {
+		return errors.New("PDF document info timestamp is missing")
+	}
+	return nil
 }
 
 func RunPDFiumPageRender(ctx context.Context, executable, inputPath string, page, maxWidth int, source SourceReceipt) (PDFPageRender, error) {
@@ -281,7 +383,59 @@ func validatePDFPageRender(result PDFPageRender) error {
 	return nil
 }
 
+type pdfiumInfoRunner func(context.Context, string, string, SourceReceipt) (PDFDocumentInfo, error)
+
 type pdfiumRenderRunner func(context.Context, string, string, int, int, SourceReceipt) (PDFPageRender, error)
+
+func (v *Vault) PDFEvidenceInfoWithRegisteredPDFium(evidenceID string) (PDFDocumentInfo, error) {
+	return v.PDFEvidenceInfoWithRegisteredPDFiumContext(context.Background(), evidenceID)
+}
+
+func (v *Vault) PDFEvidenceInfoWithRegisteredPDFiumContext(ctx context.Context, evidenceID string) (PDFDocumentInfo, error) {
+	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "pdfium-cli")
+	if err != nil {
+		return PDFDocumentInfo{}, err
+	}
+	return v.pdfEvidenceInfoWithRunner(ctx, evidenceID, tool.Executable, RunPDFiumDocumentInfo)
+}
+
+func (v *Vault) pdfEvidenceInfoWithRunner(ctx context.Context, evidenceID, executable string, runner pdfiumInfoRunner) (PDFDocumentInfo, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if strings.TrimSpace(evidenceID) == "" {
+		return PDFDocumentInfo{}, errors.New("PDF info evidence ID is required")
+	}
+	if runner == nil {
+		return PDFDocumentInfo{}, errors.New("PDF info runner is required")
+	}
+	item, record, err := v.pdfiumRenderSource(evidenceID)
+	if err != nil {
+		return PDFDocumentInfo{}, err
+	}
+	var result PDFDocumentInfo
+	err = v.withVerifiedPreservedFile(record, item.SHA256, func(path string, source SourceReceipt) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		info, runErr := runner(ctx, executable, path, source)
+		if runErr != nil {
+			return runErr
+		}
+		result = info
+		return nil
+	})
+	if err != nil {
+		return result, err
+	}
+	if result.SourceObject != item.ObjectFile || result.SourceSHA256 != item.SHA256 {
+		return result, errors.New("PDF document info diverges from its verified preserved source")
+	}
+	if err := validatePDFDocumentInfo(result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
 
 func (v *Vault) RenderEvidencePDFPageWithRegisteredPDFium(evidenceID string, page, maxWidth int) (PDFPageRender, error) {
 	return v.RenderEvidencePDFPageWithRegisteredPDFiumContext(context.Background(), evidenceID, page, maxWidth)
