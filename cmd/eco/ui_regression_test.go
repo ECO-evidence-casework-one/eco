@@ -100,6 +100,23 @@ func TestDevelopmentStartupStateIsExplicitAndCandidateBound(t *testing.T) {
 	}
 }
 
+func TestEvidenceSearchUIUsesBackgroundSourceBoundNavigation(t *testing.T) {
+	src := windowsSource(t)
+	for _, required := range []string{"ctrlSearchEdit", "Search all", "This item", "Previous", "Next", "Open match", "msgSearchDone", "msgSearchOpenReady", "SearchWorkspace", "ValidateSearchReceipt", "pendingCitationPage = match.Page", "pendingCitationRegion", "openSelectedPreview", "procEnableWindow", "Ctrl+F: focus verified evidence search"} {
+		if !strings.Contains(src, required) {
+			t.Fatalf("missing native search UI safeguard %q", required)
+		}
+	}
+	body := functionBody(t, src, "func (a *application) searchEvidence", "func (a *application) searchStatusText")
+	if !strings.Contains(body, "go func") || !strings.Contains(body, "procPostMessageW.Call(a.hwnd, msgSearchDone") {
+		t.Fatal("search must run off the UI thread and return through the Windows message queue")
+	}
+	openBody := functionBody(t, src, "func (a *application) openSearchMatch", "func (a *application) activateSearchMatch")
+	if !strings.Contains(openBody, "ValidateSearchReceipt") || !strings.Contains(openBody, "msgSearchOpenReady") {
+		t.Fatal("opening a search result must revalidate its receipt asynchronously before preview")
+	}
+}
+
 func TestNativeSourceContainsNoBrowserOrLocalhostRuntime(t *testing.T) {
 	src := windowsSource(t)
 	for _, forbidden := range []string{"\"net/http\"", "ListenAndServe", "brave.exe", "msedge.exe", "chrome.exe"} {
