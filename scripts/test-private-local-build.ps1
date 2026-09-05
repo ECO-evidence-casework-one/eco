@@ -3,6 +3,7 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'prepare-private-local-build.ps1') -LibraryOnly
 $root = Join-Path $env:TEMP ('eco-preparer-tests-' + [Guid]::NewGuid().ToString('N'))
 [void][IO.Directory]::CreateDirectory($root)
+Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $passed = 0
 function Expect-Refusal([scriptblock]$Action) {

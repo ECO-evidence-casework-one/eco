@@ -130,8 +130,9 @@ function Invoke-EcoPrivateBuild([string]$Manifest, [string]$Destination) {
         Invoke-EcoGo $go @('vet','-p=2','./...')
         Write-Host '[5/6] Building twice and checking the qualified executable fingerprint.'
         $candidate = Join-Path $work 'candidate'
-        [void][IO.Directory]::CreateDirectory($candidate)
-        $first = Join-Path $candidate 'ECO.exe'; $second = Join-Path $work 'ECO.rebuild.exe'
+        $stage = Join-Path $work 'build-staging'
+        [void][IO.Directory]::CreateDirectory($stage)
+        $first = Join-Path $stage 'ECO.exe'; $second = Join-Path $work 'ECO.rebuild.exe'
         $flags = "-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$source"
         Invoke-EcoGo $go @('build','-p=2','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$first,'./cmd/eco')
         Invoke-EcoGo $go @('build','-p=2','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$second,'./cmd/eco')
@@ -148,8 +149,10 @@ function Invoke-EcoPrivateBuild([string]$Manifest, [string]$Destination) {
             app_launched=$false; real_evidence_permitted=$false; public_distribution_permitted=$false
             optional_runtimes='Not bundled or registered by this preparer'; actual_machine_acceptance='NOT RUN'
         }
-        $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $candidate 'build-receipt.json') -Encoding UTF8
-        Copy-Item -LiteralPath (Join-Path $src 'LICENSE') -Destination (Join-Path $candidate 'LICENSE')
+        $receipt | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $stage 'build-receipt.json') -Encoding UTF8
+        Copy-Item -LiteralPath (Join-Path $src 'LICENSE') -Destination (Join-Path $stage 'LICENSE')
+        # Publish the whole qualified directory only after every check succeeds.
+        [IO.Directory]::Move($stage, $candidate)
         Write-Host '[6/6] PREPARATION PASSED. ECO was not launched. Keep the compiler and source folders private.'
         Write-Host "Executable SHA-256: $sha"
         return [pscustomobject]$receipt

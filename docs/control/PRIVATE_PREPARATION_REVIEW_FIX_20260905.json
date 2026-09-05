@@ -1,0 +1,16 @@
+﻿{
+    "run_id":  "33981640717",
+    "input_head":  "ca668a7def0de68ac73641a61e22dbf04da12bd6",
+    "earlier_harness_failure":  "33981390904: all controls passed including wrong-hash candidate absence; the expected child exit 1 then propagated through the runner shell and prevented product commit. This run resets that code only after the assertions.",
+    "application_source":  "8b69a669b003fe30e84f1d344aa7533eb9cd9045",
+    "preparer_sha256":  "1ace2fc82630357f09c7e1f9db8e9f7be1ca78f0c97d86c75751336027b0d79e",
+    "executable_sha256":  "d197748f861bd84b00776aa28c8712126091660fcc436e716f28126e05516dcc",
+    "executable_size":  4772352,
+    "standalone_controls":  "11/11 PASS in clean Windows PowerShell 5.1",
+    "command_launcher":  "PASS with Internet-origin marker and BUILD input",
+    "tampered_script":  "REFUSED before unblocking or output creation",
+    "failed_post_build_hash":  "REFUSED; candidate directory absent",
+    "app_launched":  false,
+    "public_artifact_upload":  false,
+    "actual_acer_acceptance":  "NOT RUN"
+}
