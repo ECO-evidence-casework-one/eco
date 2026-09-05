@@ -1,0 +1,343 @@
+package eco
+
+import (
+	"bufio"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"testing"
+)
+
+func TestWorkspaceOwnerBlocksSecondAcquisition(t *testing.T) {
+	root := t.TempDir()
+	first, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := acquireWorkspaceRootOwner(root)
+	if second != nil {
+		_ = second.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		t.Fatalf("second acquisition error=%v", err)
+	}
+}
+
+func TestWorkspaceOwnerCloseAllowsReacquisition(t *testing.T) {
+	root := t.TempDir()
+	first, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := second.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkspaceOwnerBlocksOtherProcess(t *testing.T) {
+	if os.Getenv("ECO_WORKSPACE_OWNER_HELPER") == "1" {
+		t.Skip("parent-only test")
+	}
+	root := t.TempDir()
+	cmd := exec.Command(os.Args[0], "-test.run=TestWorkspaceOwnerHelperProcess")
+	cmd.Env = append(os.Environ(), "ECO_WORKSPACE_OWNER_HELPER=1", "ECO_WORKSPACE_OWNER_ROOT="+root)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(stdout)
+	if !scanner.Scan() || scanner.Text() != "READY" {
+		_ = cmd.Process.Kill()
+		t.Fatalf("helper did not become ready: %q err=%v", scanner.Text(), scanner.Err())
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if lease != nil {
+		_ = lease.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+		t.Fatalf("cross-process acquisition error=%v", err)
+	}
+	_ = stdin.Close()
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	lease, err = acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = lease.Close()
+}
+
+func TestWorkspaceOwnerHelperProcess(t *testing.T) {
+	if os.Getenv("ECO_WORKSPACE_OWNER_HELPER") != "1" {
+		return
+	}
+	lease, err := acquireWorkspaceRootOwner(os.Getenv("ECO_WORKSPACE_OWNER_ROOT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	_, _ = os.Stdout.WriteString("READY\n")
+	_, _ = bufio.NewReader(os.Stdin).ReadByte()
+}
+
+func TestWorkspaceOwnerRevalidatesUnchangedRoot(t *testing.T) {
+	root := t.TempDir()
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAcquireOrCreateWorkspaceRootOwnerCreatesRootUnderClaim(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "new-workspace")
+	lease, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		t.Fatalf("root not created safely: info=%v err=%v", info, err)
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNestedWorkspaceCreationBuildsOwnedHierarchy(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "application", "candidate", "workspace")
+	lease, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	for _, path := range []string{filepath.Join(base, "application"), filepath.Join(base, "application", "candidate"), root} {
+		info, err := os.Lstat(path)
+		if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
+			t.Fatalf("unsafe created hierarchy at %s: info=%v err=%v", path, info, err)
+		}
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestNestedWorkspaceCreationRejectsNonDirectoryComponent(t *testing.T) {
+	base := t.TempDir()
+	block := filepath.Join(base, "application")
+	if err := os.WriteFile(block, []byte("sentinel"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireOrCreateWorkspaceRootOwner(filepath.Join(block, "candidate", "workspace"))
+	if lease != nil {
+		_ = lease.Close()
+	}
+	if err == nil {
+		t.Fatal("non-directory creation component was accepted")
+	}
+	data, readErr := os.ReadFile(block)
+	if readErr != nil || string(data) != "sentinel" {
+		t.Fatalf("non-directory sentinel was changed: %q err=%v", data, readErr)
+	}
+}
+
+func TestConcurrentWorkspaceCreationHasOneWritableOwner(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "new-workspace")
+	first, err := acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Close()
+	second, err := acquireOrCreateWorkspaceRootOwner(root)
+	if second != nil {
+		_ = second.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		t.Fatalf("concurrent create/open error=%v", err)
+	}
+}
+
+func TestConcurrentWorkspaceCreationAcrossProcesses(t *testing.T) {
+	if os.Getenv("ECO_WORKSPACE_CREATE_HELPER") == "1" {
+		t.Skip("parent-only test")
+	}
+	parent := t.TempDir()
+	root := filepath.Join(parent, "application", "candidate", "created-by-child")
+	cmd := exec.Command(os.Args[0], "-test.run=TestWorkspaceCreationHelperProcess")
+	cmd.Env = append(os.Environ(), "ECO_WORKSPACE_CREATE_HELPER=1", "ECO_WORKSPACE_OWNER_ROOT="+root)
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	scanner := bufio.NewScanner(stdout)
+	if !scanner.Scan() || scanner.Text() != "READY" {
+		_ = cmd.Process.Kill()
+		t.Fatalf("creation helper did not become ready: %q err=%v", scanner.Text(), scanner.Err())
+	}
+	lease, err := acquireOrCreateWorkspaceRootOwner(root)
+	if lease != nil {
+		_ = lease.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		_ = stdin.Close()
+		_ = cmd.Wait()
+		t.Fatalf("concurrent subprocess creation error=%v", err)
+	}
+	_ = stdin.Close()
+	if err := cmd.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	lease, err = acquireOrCreateWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = lease.Close()
+}
+
+func TestWorkspaceCreationHelperProcess(t *testing.T) {
+	if os.Getenv("ECO_WORKSPACE_CREATE_HELPER") != "1" {
+		return
+	}
+	lease, err := acquireOrCreateWorkspaceRootOwner(os.Getenv("ECO_WORKSPACE_OWNER_ROOT"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	_, _ = os.Stdout.WriteString("READY\n")
+	_, _ = bufio.NewReader(os.Stdin).ReadByte()
+}
+
+func TestWorkspaceOwnerRetargetsSameRenamedObject(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "stage")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	active := filepath.Join(base, "active")
+	if err := os.Rename(root, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.retarget(active); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatal(err)
+	}
+	second, err := acquireWorkspaceRootOwner(active)
+	if second != nil {
+		_ = second.Close()
+	}
+	if !errors.Is(err, ErrWorkspaceInUse) {
+		t.Fatalf("retargeted owner did not retain exclusion: %v", err)
+	}
+}
+
+func TestWorkspaceOwnerRetargetRejectsDifferentObject(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "owned")
+	other := filepath.Join(base, "other")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(other, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	if err := lease.retarget(other); err == nil {
+		t.Fatal("retarget accepted a different object")
+	}
+	if err := lease.revalidate(); err != nil {
+		t.Fatalf("original owner route was lost: %v", err)
+	}
+}
+
+func TestWorkspaceOwnerRetargetLeavesReplacementRouteUntouched(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "stage")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lease.Close()
+	active := filepath.Join(base, "active")
+	if err := os.Rename(root, active); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(root, "sentinel.txt")
+	if err := os.WriteFile(sentinel, []byte("replacement"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.retarget(active); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(sentinel)
+	if err != nil || string(data) != "replacement" {
+		t.Fatalf("replacement route was altered: %q err=%v", data, err)
+	}
+}
+
+func TestWorkspaceOwnerRetargetAfterCloseFails(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "owned")
+	if err := os.Mkdir(root, 0700); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := acquireWorkspaceRootOwner(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := lease.retarget(root); err == nil {
+		t.Fatal("closed lease was retargeted")
+	}
+}
