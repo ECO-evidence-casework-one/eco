@@ -629,6 +629,9 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 		return RestoreReceipt{}, err
 	}
 
+	if v.restoreBoundary != nil {
+		v.restoreBoundary("stage_verified")
+	}
 	// Activation is the only exclusive phase. The active Vault retains an
 	// object-bound owner throughout the swap while the staged Vault retains its
 	// own owner. Ownership follows the directory objects across renames and is
@@ -652,13 +655,22 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	if err = os.Rename(activeRoot, preRestore); err != nil {
 		return RestoreReceipt{}, fmt.Errorf("could not create pre-restore checkpoint: %w", err)
 	}
+	if v.restoreBoundary != nil {
+		v.restoreBoundary("original_renamed")
+	}
 	if err = oldOwner.retarget(preRestore); err != nil {
 		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, false)
 		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("active workspace ownership could not follow pre-restore checkpoint: %w", err), rollbackErr)
 	}
+	if v.restoreBoundary != nil {
+		v.restoreBoundary("original_retargeted")
+	}
 	if err = os.Rename(stageRoot, activeRoot); err != nil {
 		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, false)
 		return RestoreReceipt{}, restoreActivationFailure(fmt.Errorf("could not activate restored vault: %w", err), rollbackErr)
+	}
+	if v.restoreBoundary != nil {
+		v.restoreBoundary("staged_renamed")
 	}
 	if err = stage.owner.retarget(activeRoot); err != nil {
 		rollbackErr := rollbackRestoreActivation(activeRoot, stageRoot, preRestore, oldOwner, stage.owner, true)
@@ -695,6 +707,9 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	stage.persistedOwnerTxn = ""
 	stageActivated = true
 	_ = oldOwner.Close()
+	if v.restoreBoundary != nil {
+		v.restoreBoundary("activated")
+	}
 
 	return RestoreReceipt{
 		Format:          "ECOBKP1",

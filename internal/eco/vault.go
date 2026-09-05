@@ -31,6 +31,8 @@ var (
 )
 
 type Vault struct {
+	// Per-instance, package-internal test observation; normal application leaves nil.
+	restoreBoundary     func(string)
 	Root                string
 	Objects             string
 	key                 []byte
@@ -47,6 +49,9 @@ type Vault struct {
 }
 
 func OpenVault(root string) (*Vault, error) {
+	if err := CheckWorkspaceRecoveryState(root); err != nil {
+		return nil, err
+	}
 	if err := preflightWorkspaceFormat(root); err != nil {
 		return nil, err
 	}
@@ -65,6 +70,9 @@ func OpenVault(root string) (*Vault, error) {
 		v.key = nil
 		_ = owner.Close()
 	}()
+	if err := CheckWorkspaceRecoveryState(root); err != nil {
+		return nil, err
+	}
 	if err := preflightWorkspaceFormat(root); err != nil {
 		return nil, err
 	}

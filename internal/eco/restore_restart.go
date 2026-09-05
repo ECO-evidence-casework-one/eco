@@ -3,6 +3,7 @@ package eco
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -55,11 +56,7 @@ func CheckWorkspaceRecoveryState(root string) error {
 			}
 		}
 		if readErr != nil {
-			if errors.Is(readErr, os.ErrClosed) {
-				return fmt.Errorf("read recovery checkpoint directory: %w", readErr)
-			}
-			// ReadDir returns io.EOF when no entries remain.
-			if readErr.Error() == "EOF" {
+			if errors.Is(readErr, io.EOF) {
 				return nil
 			}
 			return fmt.Errorf("read recovery checkpoint directory: %w", readErr)

@@ -204,6 +204,13 @@ func main() {
 
 func chooseDevelopmentWorkspace(base string) (string, bool) {
 	candidate := eco.DefaultDevelopmentWorkspaceRoot(base)
+	if err := eco.CheckWorkspaceRecoveryState(candidate); err != nil {
+		choice := messageBox(0, "ECO workspace recovery needed", err.Error()+"\r\n\r\nYes — Open an existing ECO workspace for recovery\r\nNo or Cancel — Exit without changing the retained copies", MB_YESNOCANCEL|MB_ICONQUESTION)
+		if choice == IDYES {
+			return chooseExistingWorkspace()
+		}
+		return "", false
+	}
 	candidateInfo, candidateErr := os.Stat(candidate)
 	if candidateErr != nil && !os.IsNotExist(candidateErr) {
 		messageBox(0, "ECO workspace check failed", candidateErr.Error(), MB_OK|MB_ICONERROR)

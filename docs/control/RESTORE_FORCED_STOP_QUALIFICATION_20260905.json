@@ -1,0 +1,45 @@
+{
+  "baseline": "d615f28b63778281ecc15c7254d39d5347ff5ea0",
+  "run_id": "33975712200",
+  "before": {
+    "failed": [
+      "TestRestoreForcedStopRestart/original_renamed",
+      "TestRestoreForcedStopRestart/original_retargeted"
+    ],
+    "passed": [
+      "TestRestoreForcedStopRestart/activated",
+      "TestRestoreForcedStopRestart/stage_verified",
+      "TestRestoreForcedStopRestart/staged_renamed"
+    ]
+  },
+  "after_passing_leaf_cases": [
+    "TestRestoreForcedStopRestart/activated",
+    "TestRestoreForcedStopRestart/original_renamed",
+    "TestRestoreForcedStopRestart/original_retargeted",
+    "TestRestoreForcedStopRestart/stage_verified",
+    "TestRestoreForcedStopRestart/staged_renamed",
+    "TestRestoreRestartGuard/checkpoint_is_file",
+    "TestRestoreRestartGuard/empty_active",
+    "TestRestoreRestartGuard/large_parent",
+    "TestRestoreRestartGuard/literal_brackets",
+    "TestRestoreRestartGuard/missing_active",
+    "TestRestoreRestartPositiveControls/healthy_existing",
+    "TestRestoreRestartPositiveControls/new_hierarchy",
+    "TestRestoreRestartPositiveControls/unrelated_checkpoint"
+  ],
+  "after_skips": 0,
+  "method": "Actual RestorePortableBackup in a child process, per-instance observation at real boundaries; parent Kill then Wait; graceful-cleanup marker absent; no manually reconstructed directory state",
+  "linux_tests": "passed",
+  "go_vet": "passed",
+  "source_policy": "passed",
+  "windows_cross_build": "passed",
+  "native_windows": "pending ordinary PR CI",
+  "limits": [
+    "Only five portable-restore stop boundaries.",
+    "Reset interruption remains next, not covered by this slice.",
+    "No power-loss or storage-controller durability claim.",
+    "Checkpoint names cause refusal only, never automatic activation or deletion.",
+    "Main missing-route recovery choice is added; actual interactive Acer acceptance still pending.",
+    "W7, W8, issue #4 and real-evidence/public-release gates remain open."
+  ]
+}
