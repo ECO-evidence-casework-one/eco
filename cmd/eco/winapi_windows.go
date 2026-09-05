@@ -108,6 +108,10 @@ const (
 	VK_SHIFT             = 0x10
 	VK_UP                = 0x26
 	VK_DOWN              = 0x28
+	VK_LEFT              = 0x25
+	VK_RIGHT             = 0x27
+	VK_PRIOR             = 0x21
+	VK_NEXT              = 0x22
 	VK_HOME              = 0x24
 	VK_END               = 0x23
 	MK_CONTROL           = 0x0008
