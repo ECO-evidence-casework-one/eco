@@ -1,0 +1,177 @@
+name: Build one-click Acer PDF low-spec qualifier
+
+on:
+  push:
+    branches:
+      - ops/acer-pdf-low-spec-qualification-20260905
+    paths:
+      - .github/workflows/build-acer-pdf-low-spec-qualifier.yml
+      - cmd/eco-pdf-low-spec-qualifier/**
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-self-test:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ops/acer-pdf-low-spec-qualification-20260905
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+
+      - name: Add non-interactive CI result mode
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          from pathlib import Path
+          p=Path('cmd/eco-pdf-low-spec-qualifier/main_windows.go')
+          s=p.read_text(encoding='utf-8')
+          old='''\tif data, err := json.MarshalIndent(report, "", "  "); err == nil {\n\t\t_ = os.WriteFile(jsonPath, data, 0600)\n\t}\n\t_ = exec.Command("notepad.exe", txtPath).Start()\n'''
+          new='''\tif data, err := json.MarshalIndent(report, "", "  "); err == nil {\n\t\t_ = os.WriteFile(jsonPath, data, 0600)\n\t}\n\tif os.Getenv("ECO_QUALIFIER_CI") == "1" {\n\t\tfmt.Printf("ECO_QUALIFIER_STATUS=%s\\n", report.Status)\n\t\treturn\n\t}\n\t_ = exec.Command("notepad.exe", txtPath).Start()\n'''
+          if old not in s:
+              raise SystemExit('CI-mode patch anchor not found')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          '@ | python -
+          gofmt -w cmd/eco-pdf-low-spec-qualifier/main_windows.go
+          git diff --check
+
+      - name: Test combined source and build CI qualifier
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          go test ./...
+          go vet ./...
+          New-Item -ItemType Directory -Force ci | Out-Null
+          go build -trimpath -o ci\ECO_PDF_LOW_SPEC_QUALIFIER_CI.exe .\cmd\eco-pdf-low-spec-qualifier
+
+      - name: Download and verify exact PDFium runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $url='https://github.com/klippa-app/pdfium-cli/releases/download/v0.11.2/pdfium-webassembly-windows-amd64'
+          Invoke-WebRequest -Uri $url -OutFile ci\pdfium-webassembly-windows-amd64.exe
+          $file=Get-Item ci\pdfium-webassembly-windows-amd64.exe
+          if ($file.Length -ne 16988160) { throw "Unexpected PDFium bytes: $($file.Length)" }
+          $hash=(Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f') { throw "Unexpected PDFium SHA-256: $hash" }
+
+      - name: Run exact qualifier self-test on Windows
+        shell: pwsh
+        env:
+          ECO_QUALIFIER_CI: '1'
+        run: |
+          $ErrorActionPreference='Stop'
+          Push-Location ci
+          try {
+            .\ECO_PDF_LOW_SPEC_QUALIFIER_CI.exe | Tee-Object -FilePath qualifier-console.txt
+            if (!(Test-Path ECO_PDF_LOW_SPEC_RESULT.txt)) { throw 'Qualifier text report was not produced' }
+            if (!(Test-Path ECO_PDF_LOW_SPEC_RESULT.json)) { throw 'Qualifier JSON report was not produced' }
+            if (!(Select-String -Path ECO_PDF_LOW_SPEC_RESULT.txt -Pattern '^RESULT: PASS$' -Quiet)) {
+              Get-Content ECO_PDF_LOW_SPEC_RESULT.txt
+              throw 'Qualifier did not PASS on the clean Windows runner'
+            }
+          } finally {
+            Pop-Location
+          }
+
+      - name: Build one-click offline Acer package
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          New-Item -ItemType Directory -Force package | Out-Null
+          go build -trimpath -ldflags '-s -w -H=windowsgui' -o package\ECO_PDF_LOW_SPEC_QUALIFIER.exe .\cmd\eco-pdf-low-spec-qualifier
+          Copy-Item ci\pdfium-webassembly-windows-amd64.exe package\pdfium-webassembly-windows-amd64.exe
+          @'
+          ECO PDF LOW-SPEC QUALIFICATION — START HERE
+          ============================================
+
+          This package is the controlling Windows low-spec check for ECO's optional PDF visual renderer and multi-page navigation.
+
+          It is fully offline. The exact qualified PDFium runtime is already included and is SHA-256 checked again before any test runs.
+
+          TO RUN IT
+          1. Extract this ZIP to a normal folder.
+          2. Double-click RUN_ECO_PDF_LOW_SPEC_QUALIFICATION.cmd
+             (or double-click ECO_PDF_LOW_SPEC_QUALIFIER.exe directly).
+          3. Do not close it while the test is working.
+          4. At the end, Notepad opens ECO_PDF_LOW_SPEC_RESULT.txt and Windows shows PASS, CAUTION or FAIL.
+
+          Nothing is installed. ECO uses a disposable temporary vault and deletes it after the run. The result TXT/JSON files are written beside the qualifier so they can be reviewed.
+
+          PASS = all functional/source-integrity checks and the pre-set low-spec timing/memory targets passed.
+          CAUTION = functional checks passed but one or more low-spec performance targets were missed; approval stays withheld pending review.
+          FAIL = a functional/source-integrity check failed or could not complete safely.
+          '@ | Set-Content -Encoding ascii package\START_HERE.txt
+          @'
+          @echo off
+          cd /d "%~dp0"
+          start "" "%~dp0ECO_PDF_LOW_SPEC_QUALIFIER.exe"
+          exit /b 0
+          '@ | Set-Content -Encoding ascii package\RUN_ECO_PDF_LOW_SPEC_QUALIFICATION.cmd
+          $files=@(
+            'ECO_PDF_LOW_SPEC_QUALIFIER.exe',
+            'pdfium-webassembly-windows-amd64.exe',
+            'RUN_ECO_PDF_LOW_SPEC_QUALIFICATION.cmd',
+            'START_HERE.txt'
+          )
+          $manifest=@()
+          foreach($name in $files){
+            $path=Join-Path package $name
+            $manifest += ('{0}  {1}  {2} bytes' -f (Get-FileHash $path -Algorithm SHA256).Hash.ToLowerInvariant(),$name,(Get-Item $path).Length)
+          }
+          $manifest | Set-Content -Encoding ascii package\PACKAGE_SHA256.txt
+
+      - name: Upload one-click Acer package
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ECO_Acer_PDF_LowSpec_Qualification_20260905
+          path: package/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Record text-only package provenance
+        shell: pwsh
+        env:
+          ARTIFACT_ID: ${{ steps.upload.outputs.artifact-id }}
+          ARTIFACT_DIGEST: ${{ steps.upload.outputs.artifact-digest }}
+        run: |
+          $ErrorActionPreference='Stop'
+          $qualHash=(Get-FileHash package\ECO_PDF_LOW_SPEC_QUALIFIER.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $runtimeHash=(Get-FileHash package\pdfium-webassembly-windows-amd64.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest=Get-Content package\PACKAGE_SHA256.txt | ForEach-Object { '- ' + $_ }
+          $lines=@(
+            '# Acer PDF low-spec one-click qualification package','',
+            'Date: 2026-09-05','',
+            'Status: package built and self-tested PASS on GitHub-hosted Windows; real Acer result remains required.','',
+            '- Combined ECO source commit under test: `85c670e2b3a5fc5a3d87d814e896d749d8cd732b`',
+            '- Qualifier: `ECO-PDF-LOW-SPEC-20260905.1`',
+            '- Exact bundled PDFium: `klippa-app/pdfium-cli` v0.11.2 Windows WebAssembly',
+            '- PDFium SHA-256: `b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f`',
+            '- Artifact name: `ECO_Acer_PDF_LowSpec_Qualification_20260905`',
+            ('- Artifact ID: `' + $env:ARTIFACT_ID + '`'),
+            ('- GitHub artifact digest: `' + $env:ARTIFACT_DIGEST + '`'),
+            ('- Packaged qualifier SHA-256: `' + $qualHash + '`'),
+            ('- Packaged runtime SHA-256 recheck: `' + $runtimeHash + '`'),
+            '- The package is fully offline at runtime and contains no installer.',
+            '- The user action is extract once and double-click `RUN_ECO_PDF_LOW_SPEC_QUALIFICATION.cmd`.',
+            '- Result files: `ECO_PDF_LOW_SPEC_RESULT.txt` and `.json`.','',
+            '## Package manifest'
+          ) + $manifest
+          New-Item -ItemType Directory -Force docs\foss\qualification | Out-Null
+          $lines | Set-Content -Encoding utf8 docs\foss\qualification\ACER_PDF_LOW_SPEC_PACKAGE_20260905.md
+          git config user.name 'ECO GitHub qualification bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add cmd/eco-pdf-low-spec-qualifier/main_windows.go docs/foss/qualification/ACER_PDF_LOW_SPEC_PACKAGE_20260905.md
+          git diff --cached --check
+          git commit -m 'Record one-click Acer PDF qualifier package'
+          git push origin HEAD:ops/acer-pdf-low-spec-qualification-20260905
