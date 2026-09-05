@@ -41,7 +41,7 @@ jobs:
           go vet ./...
           GOOS=windows GOARCH=amd64 go test -c ./cmd/eco -o /tmp/eco-cmd.test.exe
           GOOS=windows GOARCH=amd64 go build -o /tmp/ECO.exe ./cmd/eco
-          ./scripts/check-offline-source.sh
+          python3 scripts/check_source_policy.py
           git diff --check
       - name: Commit qualified product changes
         shell: bash
