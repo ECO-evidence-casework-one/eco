@@ -19,6 +19,7 @@ function Assert-EcoHash([string]$Path, [string]$Expected) {
 
 function Expand-EcoCheckedZip([string]$Archive, [string]$Destination, [string]$StripPrefix = '') {
     if (Test-Path -LiteralPath $Destination) { throw 'Extraction destination already exists; preserving it.' }
+    Add-Type -AssemblyName System.IO.Compression
     Add-Type -AssemblyName System.IO.Compression.FileSystem
     $root = [IO.Path]::GetFullPath($Destination).TrimEnd('\') + '\'
     $zip = [IO.Compression.ZipFile]::OpenRead($Archive)
@@ -69,7 +70,7 @@ function Get-EcoCheckedDownload([string]$Url, [string]$Destination, [string]$Sha
 }
 
 function Invoke-EcoGo([string]$Go, [string[]]$Arguments) {
-    & $Go @Arguments
+    & $Go @Arguments | Out-Host
     if ($LASTEXITCODE -ne 0) { throw "Go command failed (exit $LASTEXITCODE): $($Arguments -join ' ')" }
 }
 
