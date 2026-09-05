@@ -25,17 +25,25 @@ const (
 	chunkSize   = 1024 * 1024
 )
 
-var ErrVaultClosed = errors.New("vault is closed")
+var (
+	ErrVaultClosed    = errors.New("vault is closed")
+	ErrWorkspaceStale = errors.New("workspace metadata changed since it was loaded")
+)
 
 type Vault struct {
-	Root      string
-	Objects   string
-	key       []byte
-	owner     *workspaceOwnerLease
-	closed    bool
-	opMu      sync.RWMutex
-	mu        sync.Mutex
-	Workspace Workspace
+	Root                string
+	Objects             string
+	key                 []byte
+	owner               *workspaceOwnerLease
+	ownerTxn            string
+	persistedRevision   uint64
+	persistedMetaSHA256 string
+	persistedChangeHead string
+	persistedOwnerTxn   string
+	closed              bool
+	opMu                sync.RWMutex
+	mu                  sync.Mutex
+	Workspace           Workspace
 }
 
 func OpenVault(root string) (*Vault, error) {
@@ -47,7 +55,7 @@ func OpenVault(root string) (*Vault, error) {
 		return nil, err
 	}
 	root = owner.root
-	v := &Vault{Root: root, Objects: filepath.Join(root, "objects"), owner: owner}
+	v := &Vault{Root: root, Objects: filepath.Join(root, "objects"), owner: owner, ownerTxn: NewID("OWNER")}
 	opened := false
 	defer func() {
 		if opened {
@@ -94,6 +102,11 @@ func (v *Vault) Close() error {
 	v.owner = nil
 	zeroBytes(v.key)
 	v.key = nil
+	v.ownerTxn = ""
+	v.persistedRevision = 0
+	v.persistedMetaSHA256 = ""
+	v.persistedChangeHead = ""
+	v.persistedOwnerTxn = ""
 	v.mu.Unlock()
 	if owner != nil {
 		return owner.Close()
@@ -144,6 +157,10 @@ func (v *Vault) loadWorkspace() error {
 	path := filepath.Join(v.Root, "workspace.ecodb")
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
+		v.persistedRevision = 0
+		v.persistedMetaSHA256 = ""
+		v.persistedChangeHead = ""
+		v.persistedOwnerTxn = ""
 		v.Workspace = newWorkspace()
 		return v.Save()
 	}
@@ -161,6 +178,10 @@ func (v *Vault) loadWorkspace() error {
 	if ws.Schema != Schema {
 		return fmt.Errorf("unsupported workspace schema %d", ws.Schema)
 	}
+	v.persistedRevision = ws.Revision
+	v.persistedMetaSHA256 = workspaceMetadataDigest(data)
+	v.persistedChangeHead = workspaceChangeHead(ws)
+	v.persistedOwnerTxn = ws.LastOwnerTxn
 	v.Workspace = ws
 	return nil
 }
@@ -175,25 +196,106 @@ func (v *Vault) saveUnlocked() error {
 	if err := v.ensureOpenUnlocked(); err != nil {
 		return err
 	}
+	if err := v.verifyWorkspaceCASUnlocked(); err != nil {
+		return err
+	}
+
+	oldRevision := v.Workspace.Revision
+	oldOwnerTxn := v.Workspace.LastOwnerTxn
+	oldUpdatedAt := v.Workspace.UpdatedAt
+	oldBuildID := v.Workspace.BuildID
+	restoreControl := func() {
+		v.Workspace.Revision = oldRevision
+		v.Workspace.LastOwnerTxn = oldOwnerTxn
+		v.Workspace.UpdatedAt = oldUpdatedAt
+		v.Workspace.BuildID = oldBuildID
+	}
+
+	baseRevision := v.persistedRevision
+	if v.Workspace.Revision > baseRevision {
+		baseRevision = v.Workspace.Revision
+	}
+	if baseRevision == ^uint64(0) {
+		return errors.New("workspace revision exhausted")
+	}
+	v.Workspace.Revision = baseRevision + 1
+	v.Workspace.LastOwnerTxn = v.ownerTxn
 	v.Workspace.UpdatedAt = time.Now().UTC()
 	v.Workspace.BuildID = BuildID
 	plain, err := json.MarshalIndent(v.Workspace, "", "  ")
 	if err != nil {
+		restoreControl()
 		return err
 	}
 	enc, err := encryptBlob(v.key, metaMagic, plain)
 	if err != nil {
+		restoreControl()
 		return err
 	}
 	path := filepath.Join(v.Root, "workspace.ecodb")
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, enc, 0600); err != nil {
+		restoreControl()
 		return err
 	}
 	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		restoreControl()
 		return err
 	}
+	v.persistedRevision = v.Workspace.Revision
+	v.persistedMetaSHA256 = workspaceMetadataDigest(enc)
+	v.persistedChangeHead = workspaceChangeHead(v.Workspace)
+	v.persistedOwnerTxn = v.Workspace.LastOwnerTxn
 	return nil
+}
+
+func (v *Vault) verifyWorkspaceCASUnlocked() error {
+	path := filepath.Join(v.Root, "workspace.ecodb")
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		if v.persistedMetaSHA256 == "" && v.persistedRevision == 0 && v.persistedChangeHead == "" && v.persistedOwnerTxn == "" {
+			return nil
+		}
+		return fmt.Errorf("%w: workspace metadata disappeared", ErrWorkspaceStale)
+	}
+	if err != nil {
+		return fmt.Errorf("read workspace metadata for compare-and-swap: %w", err)
+	}
+	digest := workspaceMetadataDigest(data)
+	if v.persistedMetaSHA256 == "" || digest != v.persistedMetaSHA256 {
+		return fmt.Errorf("%w: encrypted metadata digest changed", ErrWorkspaceStale)
+	}
+	plain, err := decryptBlob(v.key, metaMagic, data)
+	if err != nil {
+		return fmt.Errorf("%w: current workspace authentication failed: %v", ErrWorkspaceStale, err)
+	}
+	var current Workspace
+	if err := json.Unmarshal(plain, &current); err != nil {
+		return fmt.Errorf("%w: current workspace format is invalid: %v", ErrWorkspaceStale, err)
+	}
+	if current.Revision != v.persistedRevision {
+		return fmt.Errorf("%w: revision changed from %d to %d", ErrWorkspaceStale, v.persistedRevision, current.Revision)
+	}
+	if current.LastOwnerTxn != v.persistedOwnerTxn {
+		return fmt.Errorf("%w: owner transaction changed", ErrWorkspaceStale)
+	}
+	if head := workspaceChangeHead(current); head != v.persistedChangeHead {
+		return fmt.Errorf("%w: audit-chain head changed", ErrWorkspaceStale)
+	}
+	return nil
+}
+
+func workspaceMetadataDigest(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
+}
+
+func workspaceChangeHead(ws Workspace) string {
+	if len(ws.Changes) == 0 {
+		return ""
+	}
+	return ws.Changes[0].Hash
 }
 
 func (v *Vault) Snapshot() Workspace {
