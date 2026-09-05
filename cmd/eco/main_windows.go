@@ -22,24 +22,32 @@ import (
 )
 
 const (
-	className         = "ECO_V25_NATIVE_MAIN"
-	previewClass      = "ECO_V25_IMAGE_PREVIEW"
-	inputClass        = "ECO_V25_INPUT_DIALOG"
-	ctrlQuestion      = 1001
-	ctrlAsk           = 1002
-	ctrlAnswer        = 1003
-	msgImportProgress = WM_APP + 1
-	msgImportDone     = WM_APP + 2
-	msgImportError    = WM_APP + 3
-	msgRefresh        = WM_APP + 4
-	msgBackupDone     = WM_APP + 5
-	msgRestoreDone    = WM_APP + 6
-	msgAskDone        = WM_APP + 7
-	msgVerifyDone     = WM_APP + 8
-	msgPreviewReady   = WM_APP + 9
-	msgMatterDone     = WM_APP + 10
-	msgRuntimeDone    = WM_APP + 11
-	msgPDFPageReady   = WM_APP + 50
+	className          = "ECO_V25_NATIVE_MAIN"
+	previewClass       = "ECO_V25_IMAGE_PREVIEW"
+	inputClass         = "ECO_V25_INPUT_DIALOG"
+	ctrlQuestion       = 1001
+	ctrlAsk            = 1002
+	ctrlAnswer         = 1003
+	ctrlSearchEdit     = 1004
+	ctrlSearchAll      = 1005
+	ctrlSearchItem     = 1006
+	ctrlSearchPrev     = 1007
+	ctrlSearchNext     = 1008
+	ctrlSearchOpen     = 1009
+	msgImportProgress  = WM_APP + 1
+	msgImportDone      = WM_APP + 2
+	msgImportError     = WM_APP + 3
+	msgRefresh         = WM_APP + 4
+	msgBackupDone      = WM_APP + 5
+	msgRestoreDone     = WM_APP + 6
+	msgAskDone         = WM_APP + 7
+	msgVerifyDone      = WM_APP + 8
+	msgPreviewReady    = WM_APP + 9
+	msgMatterDone      = WM_APP + 10
+	msgRuntimeDone     = WM_APP + 11
+	msgSearchDone      = WM_APP + 12
+	msgSearchOpenReady = WM_APP + 13
+	msgPDFPageReady    = WM_APP + 50
 )
 
 type hitRegion struct {
@@ -59,6 +67,8 @@ type application struct {
 	fontBody, fontSmall, fontLabel, fontHeading, fontHero, fontNav, fontBrand uintptr
 	controlBrush                                                              uintptr
 	questionEdit, askButton, answerEdit                                       uintptr
+	searchEdit, searchAllButton, searchItemButton                             uintptr
+	searchPrevButton, searchNextButton, searchOpenButton                      uintptr
 	buttons                                                                   map[string]RECT
 	nav                                                                       []hitRegion
 	evidenceRows                                                              []hitRegion
@@ -78,6 +88,13 @@ type application struct {
 	runtimeNotice                                                             string
 	pendingCitationRegion                                                     *eco.NormalizedRegion
 	pendingCitationPage                                                       int
+	searchReceipt                                                             eco.SearchReceipt
+	searchIndex                                                               int
+	searchErr                                                                 string
+	searchRunning                                                             bool
+	searchActivity                                                            string
+	searchOpenIndex                                                           int
+	searchOpenErr                                                             string
 }
 
 var app *application
@@ -326,6 +343,12 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		app.questionEdit = createWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", WS_CHILD|WS_TABSTOP|ES_LEFT|ES_AUTOHSCROLL, 0, 0, 10, 10, hwnd, ctrlQuestion, app.hInstance, nil)
 		app.askButton = createWindowEx(0, "BUTTON", "Ask ECO", WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 0, 0, 10, 10, hwnd, ctrlAsk, app.hInstance, nil)
 		app.answerEdit = createWindowEx(WS_EX_CLIENTEDGE, "EDIT", "Ask a question about readable evidence. ECO will answer only from local source passages.", WS_CHILD|WS_VSCROLL|ES_LEFT|ES_MULTILINE|ES_AUTOVSCROLL|ES_READONLY, 0, 0, 10, 10, hwnd, ctrlAnswer, app.hInstance, nil)
+		app.searchEdit = createWindowEx(WS_EX_CLIENTEDGE, "EDIT", "", WS_CHILD|WS_TABSTOP|ES_LEFT|ES_AUTOHSCROLL, 0, 0, 10, 10, hwnd, ctrlSearchEdit, app.hInstance, nil)
+		app.searchAllButton = createWindowEx(0, "BUTTON", "Search all", WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 0, 0, 10, 10, hwnd, ctrlSearchAll, app.hInstance, nil)
+		app.searchItemButton = createWindowEx(0, "BUTTON", "This item", WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 0, 0, 10, 10, hwnd, ctrlSearchItem, app.hInstance, nil)
+		app.searchPrevButton = createWindowEx(0, "BUTTON", "Previous", WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 0, 0, 10, 10, hwnd, ctrlSearchPrev, app.hInstance, nil)
+		app.searchNextButton = createWindowEx(0, "BUTTON", "Next", WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 0, 0, 10, 10, hwnd, ctrlSearchNext, app.hInstance, nil)
+		app.searchOpenButton = createWindowEx(0, "BUTTON", "Open match", WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 0, 0, 10, 10, hwnd, ctrlSearchOpen, app.hInstance, nil)
 		procDragAcceptFiles.Call(hwnd, 1)
 		return 0
 	case WM_GETMINMAXINFO:
@@ -364,8 +387,21 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 	case WM_COMMAND:
 		id := int(loword(wparam))
 		code := int(hiword(wparam))
-		if id == ctrlAsk && code == BN_CLICKED {
-			app.askEvidence()
+		if code == BN_CLICKED {
+			switch id {
+			case ctrlAsk:
+				app.askEvidence()
+			case ctrlSearchAll:
+				app.searchEvidence(false)
+			case ctrlSearchItem:
+				app.searchEvidence(true)
+			case ctrlSearchPrev:
+				app.moveSearchMatch(-1)
+			case ctrlSearchNext:
+				app.moveSearchMatch(1)
+			case ctrlSearchOpen:
+				app.openSearchMatch()
+			}
 		}
 		return 0
 	case WM_LBUTTONDOWN:
@@ -410,6 +446,38 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		setWindowText(app.answerEdit, rec.Answer)
 		app.refreshView()
 		invalidate(hwnd)
+		return 0
+	case msgSearchDone:
+		app.mu.Lock()
+		errText := app.searchErr
+		app.searchRunning = false
+		app.searchActivity = ""
+		app.mu.Unlock()
+		app.selectSearchMatch(0)
+		app.updateSearchControlState()
+		if errText != "" {
+			messageBox(hwnd, "Search did not complete", errText, MB_OK|MB_ICONERROR)
+		}
+		invalidate(hwnd)
+		return 0
+	case msgSearchOpenReady:
+		app.mu.Lock()
+		errText := app.searchOpenErr
+		index := app.searchOpenIndex
+		app.searchOpenErr = ""
+		app.searchRunning = false
+		app.searchActivity = ""
+		if errText != "" {
+			app.searchErr = errText
+		}
+		app.mu.Unlock()
+		app.updateSearchControlState()
+		if errText != "" {
+			messageBox(hwnd, "Search result changed", "ECO refused to open the old match because its verified source or readable extraction changed. Run the search again.\r\n\r\n"+errText, MB_OK|MB_ICONERROR)
+			invalidate(hwnd)
+			return 0
+		}
+		app.activateSearchMatch(index, true)
 		return 0
 	case msgVerifyDone:
 		app.mu.Lock()
@@ -518,30 +586,69 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 }
 
 func (a *application) layoutControls(w, h int32) {
-	show := a.page == "ask"
-	if !show {
-		showWindow(a.questionEdit, SW_HIDE)
-		showWindow(a.askButton, SW_HIDE)
-		showWindow(a.answerEdit, SW_HIDE)
+	askShow := a.page == "ask"
+	searchShow := a.page == "evidence"
+
+	if askShow {
+		left := int32(305)
+		top := int32(168)
+		right := w - 45
+		if right-left < 720 {
+			right = left + 720
+		}
+		procMoveWindow.Call(a.questionEdit, uintptr(left), uintptr(top), uintptr(right-left-135), 44, 1)
+		procMoveWindow.Call(a.askButton, uintptr(right-120), uintptr(top), 120, 44, 1)
+		answerRight := right - 350
+		if answerRight-left < 360 {
+			answerRight = right
+		}
+		procMoveWindow.Call(a.answerEdit, uintptr(left), uintptr(top+70), uintptr(answerRight-left), uintptr(max32(260, h-top-120)), 1)
+		for _, c := range []uintptr{a.questionEdit, a.askButton, a.answerEdit} {
+			procSendMessageW.Call(c, WM_SETFONT, a.fontBody, 1)
+			showWindow(c, SW_SHOW)
+		}
+	} else {
+		for _, c := range []uintptr{a.questionEdit, a.askButton, a.answerEdit} {
+			showWindow(c, SW_HIDE)
+		}
+	}
+
+	searchControls := []uintptr{a.searchEdit, a.searchAllButton, a.searchItemButton, a.searchPrevButton, a.searchNextButton, a.searchOpenButton}
+	if !searchShow {
+		for _, c := range searchControls {
+			showWindow(c, SW_HIDE)
+		}
 		return
 	}
-	left := int32(305)
-	top := int32(168)
-	right := w - 45
-	if right-left < 720 {
-		right = left + 720
+	left := int32(300)
+	right := w - 25
+	listRight := right - 365
+	if listRight-left < 300 {
+		listRight = left + 300
 	}
-	procMoveWindow.Call(a.questionEdit, uintptr(left), uintptr(top), uintptr(right-left-135), 44, 1)
-	procMoveWindow.Call(a.askButton, uintptr(right-120), uintptr(top), 120, 44, 1)
-	answerRight := right - 350
-	if answerRight-left < 360 {
-		answerRight = right
+	width := listRight - left
+	gap := int32(5)
+	allW := int32(72)
+	itemW := int32(82)
+	editW := width - allW - itemW - 2*gap
+	if editW < 100 {
+		editW = 100
 	}
-	procMoveWindow.Call(a.answerEdit, uintptr(left), uintptr(top+70), uintptr(answerRight-left), uintptr(max32(260, h-top-120)), 1)
-	for _, c := range []uintptr{a.questionEdit, a.askButton, a.answerEdit} {
+	y := int32(300)
+	procMoveWindow.Call(a.searchEdit, uintptr(left), uintptr(y), uintptr(editW), 34, 1)
+	procMoveWindow.Call(a.searchAllButton, uintptr(left+editW+gap), uintptr(y), uintptr(allW), 34, 1)
+	procMoveWindow.Call(a.searchItemButton, uintptr(left+editW+gap+allW+gap), uintptr(y), uintptr(itemW), 34, 1)
+	prevW := int32(78)
+	nextW := int32(68)
+	openW := width - prevW - nextW - 2*gap
+	procMoveWindow.Call(a.searchPrevButton, uintptr(left), uintptr(y+40), uintptr(prevW), 34, 1)
+	procMoveWindow.Call(a.searchNextButton, uintptr(left+prevW+gap), uintptr(y+40), uintptr(nextW), 34, 1)
+	procMoveWindow.Call(a.searchOpenButton, uintptr(left+prevW+gap+nextW+gap), uintptr(y+40), uintptr(openW), 34, 1)
+	for _, c := range searchControls {
 		procSendMessageW.Call(c, WM_SETFONT, a.fontBody, 1)
 		showWindow(c, SW_SHOW)
 	}
+	a.updateSearchControlState()
 }
 
 func (a *application) paint(hwnd uintptr) {
@@ -751,11 +858,10 @@ func (a *application) drawEvidence(hdc uintptr, rc RECT) {
 	if a.processing() {
 		a.drawProgress(hdc, RECT{x, 210, right, 274})
 	}
-	y := int32(292)
-	if !a.processing() {
-		y = 218
-	}
 	listRight := right - 365
+	drawTextFont(hdc, "SEARCH VERIFIED READINGS", RECT{x, 280, listRight, 298}, a.fontLabel, rgb(65, 91, 93), DT_LEFT|DT_SINGLELINE)
+	drawTextFont(hdc, a.searchStatusText(), RECT{x, 379, listRight, 400}, a.fontSmall, rgb(82, 102, 105), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	y := int32(406)
 	drawTextFont(hdc, "PRESERVED ITEMS", RECT{x, y, listRight, y + 26}, a.fontLabel, rgb(65, 91, 93), DT_LEFT|DT_SINGLELINE)
 	y += 34
 	if len(a.view.Evidence) == 0 {
@@ -1135,10 +1241,16 @@ func (a *application) handleGlobalShortcut(vk uint32) bool {
 		case 'R':
 			a.restoreBackup()
 			return true
+		case 'F':
+			if a.page != "evidence" {
+				a.setPage("evidence")
+			}
+			procSetFocus.Call(a.searchEdit)
+			return true
 		}
 	}
 	if vk == VK_F1 {
-		messageBox(a.hwnd, "ECO help", "Ctrl+U: add evidence files\r\nCtrl+Shift+V: paste a clipboard image\r\nCtrl+B: create encrypted backup\r\nCtrl+R: restore encrypted backup safely\r\nAlt+1..7: change workspace\r\nUp/Down: select evidence\r\nEnter: open selected preview\r\n\r\nImage preview: R rotate 90°, C auto-crop suggestion, D deskew suggestion, O original colour, G greyscale, H fixed high contrast, A adaptive reading mode, Q quality report, +/− zoom, Esc close.", MB_OK|MB_ICONINFORMATION)
+		messageBox(a.hwnd, "ECO help", "Ctrl+U: add evidence files\r\nCtrl+Shift+V: paste a clipboard image\r\nCtrl+B: create encrypted backup\r\nCtrl+R: restore encrypted backup safely\r\nCtrl+F: focus verified evidence search\r\nAlt+1..7: change workspace\r\nUp/Down: select evidence\r\nEnter: open selected preview\r\n\r\nImage preview: R rotate 90°, C auto-crop suggestion, D deskew suggestion, O original colour, G greyscale, H fixed high contrast, A adaptive reading mode, Q quality report, +/− zoom, Esc close.", MB_OK|MB_ICONINFORMATION)
 		return true
 	}
 	return false
@@ -1371,6 +1483,234 @@ func (a *application) runImport(paths []string) {
 		}
 	}
 	procPostMessageW.Call(a.hwnd, msgImportDone, 0, 0)
+}
+
+func (a *application) searchEvidence(currentOnly bool) {
+	q := strings.TrimSpace(getWindowText(a.searchEdit))
+	if q == "" {
+		a.mu.Lock()
+		a.searchReceipt = eco.SearchReceipt{}
+		a.searchIndex = 0
+		a.searchErr = ""
+		a.searchActivity = ""
+		a.mu.Unlock()
+		a.updateSearchControlState()
+		invalidate(a.hwnd)
+		return
+	}
+	var scope []string
+	if currentOnly {
+		if len(a.view.Evidence) == 0 || a.selected < 0 || a.selected >= len(a.view.Evidence) {
+			return
+		}
+		scope = []string{a.view.Evidence[a.selected].ID}
+	}
+	a.mu.Lock()
+	if a.searchRunning {
+		a.mu.Unlock()
+		return
+	}
+	a.searchRunning = true
+	a.searchActivity = "Searching verified readable segments…"
+	a.searchErr = ""
+	a.searchReceipt = eco.SearchReceipt{}
+	a.searchIndex = 0
+	a.mu.Unlock()
+	a.updateSearchControlState()
+	invalidate(a.hwnd)
+	go func(query string, scopeIDs []string) {
+		receipt, err := a.vault.SearchWorkspace(query, scopeIDs)
+		a.mu.Lock()
+		if err != nil {
+			a.searchErr = err.Error()
+			a.searchReceipt = eco.SearchReceipt{}
+		} else {
+			a.searchReceipt = receipt
+			a.searchErr = ""
+		}
+		a.searchIndex = 0
+		a.mu.Unlock()
+		procPostMessageW.Call(a.hwnd, msgSearchDone, 0, 0)
+	}(q, append([]string(nil), scope...))
+}
+
+func (a *application) searchStatusText() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.searchRunning {
+		if a.searchActivity != "" {
+			return a.searchActivity
+		}
+		return "Working locally…"
+	}
+	if a.searchErr != "" {
+		return "Search needs to be run again — " + truncateUI(a.searchErr, 90)
+	}
+	if a.searchReceipt.ID == "" {
+		return "Search all readable evidence or limit the search to the selected item."
+	}
+	if len(a.searchReceipt.Matches) == 0 {
+		return "No matches in the selected search scope."
+	}
+	idx := a.searchIndex
+	if idx < 0 || idx >= len(a.searchReceipt.Matches) {
+		idx = 0
+	}
+	m := a.searchReceipt.Matches[idx]
+	where := m.SafeName
+	if m.Page > 0 {
+		where += fmt.Sprintf(" · page %d", m.Page)
+	}
+	if m.Origin == "ocr" {
+		where += fmt.Sprintf(" · OCR %.0f%%", m.Confidence*100)
+	}
+	count := fmt.Sprintf("%d of %d", idx+1, len(a.searchReceipt.Matches))
+	if a.searchReceipt.Truncated {
+		count += " · result limit reached"
+	}
+	return count + " · " + where + " · " + truncateUI(m.Snippet, 90)
+}
+
+func (a *application) updateSearchControlState() {
+	a.mu.Lock()
+	running := a.searchRunning
+	n := len(a.searchReceipt.Matches)
+	idx := a.searchIndex
+	a.mu.Unlock()
+	enable := func(hwnd uintptr, on bool) {
+		if hwnd == 0 {
+			return
+		}
+		value := uintptr(0)
+		if on {
+			value = 1
+		}
+		procEnableWindow.Call(hwnd, value)
+	}
+	enable(a.searchAllButton, !running)
+	enable(a.searchItemButton, !running && len(a.view.Evidence) > 0)
+	enable(a.searchPrevButton, !running && n > 0 && idx > 0)
+	enable(a.searchNextButton, !running && n > 0 && idx+1 < n)
+	enable(a.searchOpenButton, !running && n > 0 && idx >= 0 && idx < n)
+}
+
+func (a *application) selectSearchMatch(index int) {
+	a.mu.Lock()
+	if len(a.searchReceipt.Matches) == 0 {
+		a.searchIndex = 0
+		a.mu.Unlock()
+		a.updateSearchControlState()
+		invalidate(a.hwnd)
+		return
+	}
+	if index < 0 {
+		index = 0
+	}
+	if index >= len(a.searchReceipt.Matches) {
+		index = len(a.searchReceipt.Matches) - 1
+	}
+	a.searchIndex = index
+	match := a.searchReceipt.Matches[index]
+	a.mu.Unlock()
+	for i, item := range a.view.Evidence {
+		if item.ID == match.EvidenceID {
+			a.selected = i
+			break
+		}
+	}
+	a.updateSearchControlState()
+	invalidate(a.hwnd)
+}
+
+func (a *application) moveSearchMatch(delta int) {
+	a.mu.Lock()
+	idx := a.searchIndex
+	n := len(a.searchReceipt.Matches)
+	running := a.searchRunning
+	a.mu.Unlock()
+	if running || n == 0 {
+		return
+	}
+	next := idx + delta
+	if next < 0 || next >= n {
+		return
+	}
+	a.selectSearchMatch(next)
+}
+
+func (a *application) openSearchMatch() {
+	a.mu.Lock()
+	if a.searchRunning || len(a.searchReceipt.Matches) == 0 || a.searchIndex < 0 || a.searchIndex >= len(a.searchReceipt.Matches) {
+		a.mu.Unlock()
+		return
+	}
+	receipt := a.searchReceipt
+	index := a.searchIndex
+	a.searchRunning = true
+	a.searchActivity = "Rechecking the selected match against preserved source bytes…"
+	a.searchOpenErr = ""
+	a.searchOpenIndex = index
+	a.mu.Unlock()
+	a.updateSearchControlState()
+	invalidate(a.hwnd)
+	go func(r eco.SearchReceipt, idx int) {
+		err := a.vault.ValidateSearchReceipt(r)
+		a.mu.Lock()
+		a.searchOpenIndex = idx
+		if err != nil {
+			a.searchOpenErr = err.Error()
+		} else {
+			a.searchOpenErr = ""
+		}
+		a.mu.Unlock()
+		procPostMessageW.Call(a.hwnd, msgSearchOpenReady, 0, 0)
+	}(receipt, index)
+}
+
+func (a *application) activateSearchMatch(index int, open bool) {
+	a.mu.Lock()
+	if index < 0 || index >= len(a.searchReceipt.Matches) {
+		a.mu.Unlock()
+		return
+	}
+	a.searchIndex = index
+	match := a.searchReceipt.Matches[index]
+	a.mu.Unlock()
+	for i, item := range a.view.Evidence {
+		if item.ID != match.EvidenceID {
+			continue
+		}
+		a.selected = i
+		if !open {
+			break
+		}
+		a.mu.Lock()
+		if match.Region != nil {
+			region := *match.Region
+			a.pendingCitationRegion = &region
+		} else {
+			a.pendingCitationRegion = nil
+		}
+		a.pendingCitationPage = match.Page
+		a.mu.Unlock()
+		where := "No page number is recorded for this reading."
+		if match.Page > 0 {
+			where = fmt.Sprintf("Recorded page: %d.", match.Page)
+		}
+		provenance := "Native/extracted readable text."
+		if match.Origin == "ocr" {
+			provenance = fmt.Sprintf("OCR-derived reading · %.0f%% recorded confidence.", match.Confidence*100)
+		}
+		highlightNote := "ECO can open the recorded page/source, but this reading does not contain an exact visual text box."
+		if match.Region != nil {
+			highlightNote = "The preview will highlight the recorded source region for this reading."
+		}
+		messageBox(a.hwnd, "Verified search match — "+match.SafeName, match.Snippet+"\r\n\r\n"+where+"\r\n"+provenance+"\r\n\r\n"+highlightNote+"\r\n\r\nSelect OK to open the preserved source preview.", MB_OK|MB_ICONINFORMATION)
+		a.openSelectedPreview()
+		break
+	}
+	a.updateSearchControlState()
+	invalidate(a.hwnd)
 }
 
 func (a *application) askEvidence() {
