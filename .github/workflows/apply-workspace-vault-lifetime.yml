@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/apply-workspace-vault-lifetime.yml'
       - 'scripts/apply_workspace_vault_lifetime.py'
+      - 'scripts/apply_workspace_vault_lifetime_test_closes.py'
 
 permissions:
   contents: write
@@ -22,12 +23,14 @@ jobs:
           go-version: '1.23.12'
           cache: false
       - name: Apply controlled lifecycle patch
-        run: python3 scripts/apply_workspace_vault_lifetime.py
+        run: |
+          python3 scripts/apply_workspace_vault_lifetime.py
+          python3 scripts/apply_workspace_vault_lifetime_test_closes.py
       - name: Format and qualify current-main integration
         shell: bash
         run: |
           set -euo pipefail
-          gofmt -w internal/eco/vault.go internal/eco/backup.go internal/eco/vault_lifetime_test.go
+          gofmt -w internal/eco/vault.go internal/eco/backup.go internal/eco/vault_lifetime_test.go internal/eco/local_tools_test.go internal/eco/occurrence_test.go internal/eco/preservation_test.go
           python3 scripts/check_source_policy.py
           go test ./...
           go vet ./...
@@ -39,7 +42,7 @@ jobs:
           set -euo pipefail
           git config user.name 'ECO GitHub integration bot'
           git config user.email 'actions@users.noreply.github.com'
-          git add internal/eco/vault.go internal/eco/backup.go internal/eco/vault_lifetime_test.go
+          git add internal/eco/vault.go internal/eco/backup.go internal/eco/vault_lifetime_test.go internal/eco/local_tools_test.go internal/eco/occurrence_test.go internal/eco/preservation_test.go
           if git diff --cached --quiet; then
             echo 'No product changes to commit'
             exit 0
