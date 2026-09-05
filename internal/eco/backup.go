@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 )
 
@@ -443,17 +442,21 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	var nonceCounter uint64
 
 	stageRoot := v.Root + ".restore-" + NewID("STAGE")
-	_ = os.RemoveAll(stageRoot)
+	if _, err := os.Lstat(stageRoot); !os.IsNotExist(err) {
+		return RestoreReceipt{}, errors.New("restore staging route is occupied or unreadable; existing entries preserved")
+	}
 	stage, err := OpenVault(stageRoot)
 	if err != nil {
 		return RestoreReceipt{}, err
 	}
 	stageActivated := false
 	defer func() {
-		_ = stage.Close()
 		if !stageActivated {
-			_ = os.RemoveAll(stageRoot)
+			// Validate the still-owned staged object before removal. A failed
+			// rollback must not delete an unrelated replacement at this path.
+			_ = removeUnactivatedRestoreStage(stage, stageRoot)
 		}
+		_ = stage.Close()
 	}()
 
 	var ws Workspace
@@ -712,31 +715,7 @@ func restoreActivationFailure(cause, rollbackErr error) error {
 }
 
 func rollbackRestoreActivation(activeRoot, stageRoot, preRestore string, activeOwner, stageOwner *workspaceOwnerLease, stageMoved bool) error {
-	problems := []string{}
-	if stageMoved {
-		if err := os.Rename(activeRoot, stageRoot); err != nil {
-			problems = append(problems, "move failed staged vault back: "+err.Error())
-		} else if stageOwner != nil {
-			if err := stageOwner.retarget(stageRoot); err != nil {
-				problems = append(problems, "retarget staged owner during rollback: "+err.Error())
-			}
-		}
-	}
-	if _, err := os.Stat(preRestore); err == nil {
-		if err := os.Rename(preRestore, activeRoot); err != nil {
-			problems = append(problems, "restore original active vault: "+err.Error())
-		} else if activeOwner != nil {
-			if err := activeOwner.retarget(activeRoot); err != nil {
-				problems = append(problems, "retarget active owner during rollback: "+err.Error())
-			}
-		}
-	} else if !os.IsNotExist(err) {
-		problems = append(problems, "inspect pre-restore checkpoint: "+err.Error())
-	}
-	if len(problems) > 0 {
-		return errors.New(strings.Join(problems, "; "))
-	}
-	return nil
+	return checkedRollbackRestoreActivation(activeRoot, stageRoot, preRestore, activeOwner, stageOwner, stageMoved)
 }
 
 type countingReader struct {
