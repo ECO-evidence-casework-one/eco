@@ -529,8 +529,9 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 			if !hmac.Equal(hasher.Sum(nil), expectedHash) {
 				return RestoreReceipt{}, errors.New("workspace hash mismatch")
 			}
-			if err = json.Unmarshal(data, &ws); err != nil {
-				return RestoreReceipt{}, errors.New("workspace schema is invalid")
+			ws, err = decodeWorkspaceMetadata(data)
+			if err != nil {
+				return RestoreReceipt{}, fmt.Errorf("backup workspace format is not supported: %w", err)
 			}
 			if err = validateRestoredWorkspace(&ws); err != nil {
 				return RestoreReceipt{}, err
