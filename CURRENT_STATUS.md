@@ -1,144 +1,127 @@
 # Current ECO project status
 
-**Status date:** 4 August 2026  
-**Control update:** approximately 14:28 BST / 15:28 CEST  
-**Baseline `main` reviewed for this record:** `9c98588387f5aed6f33371fefbf1eacbc514a5e9`  
-**Live canonical source:** the repository's current `main` ref  
-**Recorded `VERSION` milestone:** `ECO-V25-20260731-N2-P1`  
-**Release position:** source development only; no approved V40 source tag, signed executable or ordinary-user release
+**Status date:** 5 September 2026  
+**Baseline `main` reviewed for this record:** `34e96faea669ed29e4c8f63b3c333ee642f29dbf`  
+**Post-merge CI:** run `33957055962` — source policy, Gitleaks, Linux tests/vet, deterministic Windows build/tests, Syft reconciliation and Cosign signing/tamper rehearsal all passed  
+**Release position:** source development only; no approved public source release, signed end-user executable or real-evidence use
 
 ## Authority and evidence terminology
 
-This file is ECO's canonical public status summary. Issue #22 carries the live Control Board. Pull requests, issues, raw workflow logs, artifact inventories and dated audit packs preserve supporting evidence.
-
-The baseline SHA identifies the tree reviewed when this record was prepared. It is not a claim that `main` can never advance after the record is merged.
-
-ECO records separately:
-
-- branch head;
-- actual tested checkout, including synthetic PR merge refs;
-- final merge or squash identity;
-- any genuine post-merge workflow;
-- reviewer/control-lane relationship.
-
-A green PR check is not exact-head or post-merge evidence unless the raw checkout proves it.
+This file is ECO's canonical public status summary. Issues, pull requests, exact commits, workflow runs and qualification records remain the detailed evidence. A feature being implemented or a CI run passing does not by itself open a release, real-evidence, accessibility, publisher or deployment gate.
 
 ## Live controlled position
 
 | Area | Current position |
 |---|---|
-| Workspace repair | Draft PR #72 at `a6bc1f0898d529b5f9eebab76f757e0926f85f86`; documentation-only; inspection HOLD |
-| First usable Matter journey | Draft PR #71 at `05983719b29be02f44ef2b4e7ec09a8166514aa6`; synthetic design prototype only; inspection HOLD |
-| Superseded workspace branch | PR #11 is closed unmerged and must not be revived or merged wholesale |
-| M1.18 | Merged as isolated source at `b66cab51ad0da118303afd7009065e25a27e6ab7`; P0 issue #65 blocks every integration |
-| Historical executable exposure | Four unsigned Actions artifacts remain live; issue #24 remains P0 |
-| Publisher/steward | Preferred model is one accountable steward with controlled replaceable specialists; no organisation appointed |
-| Candidate research | OKFN deep review completed; full/near-full status remains `HOLD`; no shortlist or outreach authority |
+| Authoritative source | `main` at `34e96faea669ed29e4c8f63b3c333ee642f29dbf` |
+| Qualified GitHub/FOSS stack | Merged through PR #122 after combined CI and controlling 8 GB Acer PASS |
+| Native PDF text | Implemented from qualified BSD-3-Clause `ledongthuc/pdf` source; page-aware extraction present |
+| PDF visual rendering/navigation | Optional exact-qualified `pdfium-cli` WebAssembly runtime; page count and bounded multi-page preview navigation implemented |
+| OCR | Tesseract adapter plus complete verified Windows runtime-bundle registration; real OCR qualification passed |
+| Mailbox ingestion | Bounded MBOX reader using MIT `emersion/go-mbox`; mutation fuzz qualification passed |
+| Hostile-input testing | Permanent fuzz targets for MBOX, ZIP, EML/MIME, XML/Office text and file sniffing; qualification campaigns passed |
+| Local runtime control | Encrypted audited registry for approved Tesseract, Docling, OCRmyPDF, llama.cpp, pdfcpu and pdfium-cli executables |
+| Release-integrity rehearsal | Gitleaks, deterministic Windows build, Syft SBOM reconciliation and private Cosign envelope/tamper checks are mandatory CI controls |
+| Low-spec PDF gate | PASS on the actual 8 GB Acer: 7.68 GiB RAM, median render 8103 ms, worst 8319 ms, peak renderer working set 291.4 MiB |
+| Workspace/state safety | Issue #4 remains open P0; old PR #72 contains useful isolated ownership primitives but is stale and must not be merged wholesale |
+| Preserved evidence/source truth | Issue #3 remains open P0; much downstream OCR/PDF/runtime work now uses freshly verified preserved objects, but issue acceptance is not fully closed |
+| Ask/restore concurrency | Issue #12 remains open P1 |
+| Offline AI reliability | Issue #5 remains open P0 despite bounded grounding and llama.cpp integration; issue acceptance tests are not fully proved |
+| Responsiveness | Issue #6 remains open P1 |
+| Accessibility | Issue #7 remains open P1 and blocks public preview |
+| Page-aware search | Issue #8 remains open P1; PDF page navigation is implemented, but full workspace/document search, match highlighting/receipts and accessible match navigation are not complete |
+| Diagnostic privacy/offline claims | Issue #14 remains open P0 |
+| Actual released-build provenance | Issue #15 remains open P0; CI rehearsal is materially stronger but does not equal a final packaged, Authenticode-signed release |
+| Intended purpose / claims | Issues #16, #20, #23 and #46 remain open; merged technical controls do not close cross-surface claims and high-consequence-output gates |
+| Publisher/steward | Issue #17 remains open; no accountable legal publisher/steward is appointed |
+| Historical Actions binaries | All four previously listed unsigned artifacts now report `expired: true`; issue #24 remains open for the other distribution-control acceptance items |
+| M1.18 hardening | Issue #65 is CLOSED; older status text saying it blocks all integration is obsolete |
+| V40 deadline | Issue #69 is a superseded historical control record, not an active delivery deadline or application-parent instruction |
 | Real or sensitive evidence | Blocked |
 | Signed public executable | None |
-| Institutional, healthcare, justice-sector and EU availability | Blocked |
+| Institutional, healthcare, justice-sector and EU/EEA availability | Blocked |
 
-## Development sequence
+## September GitHub/FOSS qualification checkpoint
 
-Issue #53 controls the sequence: repair workspace ownership, implement the native first usable Matter journey, correct M1.18's integration blockers, then connect one controlled assistance seam.
+PR #122 promoted the combined qualified stack into `main`. Its exact staging head `85c670e2b3a5fc5a3d87d814e896d749d8cd732b` passed ordinary complete CI in run `33948613469`. After that, the controlling Acer qualification `ECO-PDF-LOW-SPEC-20260905.1` passed on the actual low-spec Windows machine. PR #122 then merged as `34e96faea669ed29e4c8f63b3c333ee642f29dbf`, and post-merge main run `33957055962` passed the complete build/test/release-integrity pipeline.
+
+This checkpoint means the PDF/OCR/mailbox/runtime/fuzz work is no longer merely branch research. It is part of canonical `main`. It does **not** mean ECO is a public release or suitable for real evidence.
+
+## Superseded or stale lanes
+
+### PR #71 — V40 Matter journey
+
+PR #71 remains open/draft, but issue #69 explicitly supersedes the V40 application shell as an application parent. Do not revive or merge PR #71 as the product baseline. Useful UX requirements may be reimplemented selectively against current `main`.
 
 ### PR #72 — Workspace Ownership V2
 
-PR #72 is not yet an accepted implementation contract. Its inspection HOLD requires:
+PR #72 remains open/draft and contains useful ownership primitives and hostile tests, but its branch predates current `main` and its own description says it does not complete issue #4. Do not merge it wholesale. Reuse/adapt the proven primitives in small current-main slices, with Vault/restore lifecycle integration, stale-state/CAS controls and current CI.
 
-1. rewrite OW-01 so stale-CAS defence does not violate the full-lifetime exclusive lease;
-2. bind CAS to revision/generation, authenticated metadata digest, audit/state-chain head, target identity and owner transaction;
-3. distinguish safe continuation through an already-retained authorised object from forbidden pathname redirection;
-4. correct audit terminology: run `30905573823` tested synthetic merge `24241f9addf2e6d5f1d68d721b0c5aa492abf228`, not branch head `a6bc1f08…` directly.
+### Issue #65
 
-Issue #4 remains fully open. No workspace P0 property is implemented or proved by the documentation-only PR.
+Issue #65 is closed for its bounded M1.18 repair/recovered-worker proof. Older documents saying it blocks every adapter/model/runtime connection are stale. Closure does not approve real evidence, public release or high-consequence outputs.
 
-### PR #71 — first usable Matter journey
+### Issue #69
 
-PR #71 provides a materially improved visual direction but is not native implementation, accessibility evidence or release evidence. Its inspection HOLD requires:
+Issue #69 remains open only as a visible supersession/history record. The former 9 August V40 target is not an active delivery instruction.
 
-- keyboard-operable controls instead of pointer-only cards;
-- no dead or misleading visible controls;
-- correct modal focus entry, containment and return;
-- accessible progress/live-status semantics and narrow/high-zoom resilience;
-- exact page/region-aware citations with OCR provenance and navigation instead of filenames alone;
-- issue #65 as a hard prerequisite for M1.18;
-- core accessibility failures treated as release blockers;
-- qualified offline wording until issue #14 passes.
+## Current release blockers
 
-Run `30905512134` tested synthetic merge `6016792666d7ad7d7e8b6413ad27c1213c44a5d0`, not branch head `05983719…` directly.
+### P0 engineering / assurance
 
-Issues #7, #8, #14, #65 and #69 remain open.
+- #3 preserved evidence/source truth — open.
+- #4 clean explicit workspace state / ownership — open.
+- #5 offline AI instruction/source/reliability boundary — open.
+- #14 privacy-safe diagnostics and exact offline/network claims — open.
+- #15 final packaged-build SBOM/licences/provenance/signing — open.
+- #20 high-consequence/clinical/professional-output gate — open.
+- #24 public runnable-artifact controls — open, although the four historical artifacts are now expired.
 
-### M1.18 — issue #65
+### P1 product / usability
 
-Phase D is stopped. M1.18 does not yet independently prove erasure of orchestrator-owned buffers; non-cooperative dependencies can defeat deadlines; and late callbacks can make receipt counts incomplete.
+- #6 responsiveness and long-running-work behaviour — open.
+- #7 keyboard, screen-reader, scrolling and high-DPI accessibility — open.
+- #8 page-aware search/highlighting/source navigation — open.
+- #12 Ask verification cost and restore serialisation — open.
+- #16 intended-purpose/claims governance — open.
+- #17 accountable publisher/steward — open.
+- #23 user-facing claim reconciliation — open.
+- #46 UI/AI/export intended-purpose conformance — open.
 
-No adapter, model, runtime, IPC, Ask ECO, evidence or persistence connection may begin until issue #65 proves unconditional zeroing, truthful receipts, bounded process termination and callback-lifetime control.
+## What is now proved on the low-spec Acer
 
-## Evidence, AI and high-consequence outputs
+The PDF visual-rendering/navigation workload completed successfully on the controlling 8 GB Acer even though the machine began the test with only about 1.63 GiB available RAM and about 78% RAM usage. The pre-set acceptance limits were met:
 
-Issues #3, #5, #12, #20 and #46 remain open. ECO may be designed to help users navigate supplied evidence, identify document-stated facts and prepare source-linked notes or drafts. It is not approved to act as a doctor, lawyer, forensic authority, emergency service, eligibility scorer or institutional decision maker.
+- median ECO page render: 8103 ms (`<= 10000` target);
+- slowest page render: 8319 ms (`<= 15000` target);
+- peak renderer working set: 291.4 MiB (`<= 768` target);
+- page count and `1 -> 2 -> 3 -> 2 -> 1` navigation passed;
+- out-of-range page rejection passed.
 
-Current Ask ECO and future generated routes are not approved for real or public evidence use.
+This proves the qualified PDF visual path on that machine. It does not prove all ECO workflows, long-duration use, accessibility, clean-install packaging or model performance on the Acer.
 
-## Accessibility and exact source navigation
+## Development sequence from current `main`
 
-Issue #7 blocks public preview until the core journey works without a mouse, focus remains visible and ordered, visible controls work or are clearly disabled, long content remains reachable and at least one screen reader can identify controls and statuses.
-
-Issue #8 requires citations to the exact supporting page or nearest source region, with OCR provenance/confidence and accessible navigation. A filename alone is insufficient.
-
-The 9 August target in issue #69 cannot waive these requirements.
-
-## Provenance and distribution
-
-P0 issue #15 remains open. Historical/source-level manifest, receipt, SBOM and notice records do not describe an approved current executable.
-
-Issue #24 remains P0. Current workflows do not intentionally upload the runner-built executable, but these historical artifacts remain live and prohibited:
-
-| Artifact ID | Origin run | Expiry UTC |
-|---|---|---|
-| `8854774165` | `30810944362` | 10 August 2026 11:49:38 |
-| `8856536245` | `30815339549` | 10 August 2026 12:54:07 |
-| `8863951645` | `30833597696` | 10 August 2026 16:47:05 |
-| `8865678638` | `30838068198` | 10 August 2026 17:45:50 |
-
-Do not download, execute, test or redistribute them. A one-time control task is scheduled for 10 August 2026 at 19:00 Europe/London to verify deletion or expiry.
-
-## Publisher, stewardship and outreach
-
-The preferred model is one accountable official ECO publisher/steward that may use contracted, controlled and replaceable specialists while retaining final responsibility.
-
-No organisation is appointed, shortlisted or authorised for outreach. Open Knowledge Foundation's deeper public-source review remains `HOLD` and creates no relationship or permission to contact it. Issue #17 remains open and blocks an official source or binary release until a named legal organisation accepts and proves the required duties.
-
-No role falls to the originating developer or another contributor merely through contribution. Responsibilities may still arise from actual publishing, signing, contracting, supply, data processing, public claims or applicable law.
+1. Reconcile canonical status/release documents to this checkpoint.
+2. Rebuild **workspace/state ownership (#4)** from current `main`, selectively reusing the proven PR #72 primitives rather than reviving the stale branch.
+3. Close remaining **preserved-source / Ask-restore consistency (#3/#12)** gaps with current-main tests.
+4. Build the missing **page-aware search/highlighting (#8)** layer on the now-qualified extraction/OCR/PDF foundation.
+5. Qualify **responsiveness and accessibility (#6/#7)** on the actual Windows UI, including keyboard-only, high-DPI and Narrator/NVDA evidence.
+6. Close **diagnostic privacy/offline claims (#14)** and user-facing claim alignment (#16/#20/#23/#46).
+7. Complete final **packaging, actual-release SBOM/licences, Authenticode signing, installer/uninstaller and publisher/steward controls (#15/#17/#24)** before any public binary decision.
+8. Reassess local generative AI (#5) only against the exact low-spec model/runtime package and the permitted-output boundaries; do not let model packaging delay the deterministic evidence product.
 
 ## Stop gates
 
 The following remain blocked:
 
 - real, sensitive or irreplaceable evidence use;
-- current Ask ECO or local-model use with public or real evidence;
-- a public V40 tag or pre-alpha source release;
-- ordinary-user executable testing;
-- public executable upload or historical-artifact redistribution;
-- signing, release-candidate or stable-release status;
-- claims of production OCR, reliable generative AI, complete source investigation, accessibility, security, legal, medical, forensic or regulatory compliance;
-- official institutional, healthcare, justice-sector or EU supply or deployment;
-- named organisational outreach without a separately reviewed target and public contact route.
-
-No deadline, label, disclaimer or risk-acceptance statement can turn a failed gate into a pass.
-
-## Next controlled sequence
-
-1. Correct PR #72 at a new frozen head and re-review it.
-2. Correct PR #71 at a new frozen head and re-review it.
-3. Implement workspace ownership in small current-main slices with real subprocess evidence.
-4. Implement the native Matter journey without M1.18.
-5. Correct issue #65 before controlled assistance integration.
-6. Recheck the historical artifacts after their expiry window.
-7. Freeze and qualify one exact V40 source candidate only after every applicable issue #69 gate passes.
+- claims that ECO is production-ready, court-ready, forensic, legally/medically compliant or accessible;
+- public executable distribution or stable-release status;
+- trusted signing claims before the final exact artefact is Authenticode-signed and reconciled;
+- official institutional, healthcare, justice-sector or EU/EEA supply/deployment;
+- high-consequence scoring, diagnosis/treatment, professional representation or authority-side adverse-decision use.
 
 ## Public-record rule
 
-Use synthetic and non-sensitive information only. Do not publish personal evidence, private workspaces, credentials, private diagnostics, exploit-level instructions, unapproved executables or model files.
+Use synthetic and non-sensitive information only. Do not publish personal evidence, private workspaces, credentials, private diagnostics, exploit-level instructions, unapproved executable/model files or sensitive case material in repository records.
