@@ -47,8 +47,8 @@ type Vault struct {
 }
 
 func OpenVault(root string) (*Vault, error) {
-	if root == "" {
-		return nil, errors.New("empty vault root")
+	if err := preflightWorkspaceFormat(root); err != nil {
+		return nil, err
 	}
 	owner, err := acquireOrCreateWorkspaceRootOwner(root)
 	if err != nil {
@@ -65,6 +65,9 @@ func OpenVault(root string) (*Vault, error) {
 		v.key = nil
 		_ = owner.Close()
 	}()
+	if err := preflightWorkspaceFormat(root); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(v.Objects, 0700); err != nil {
 		return nil, err
 	}
@@ -171,12 +174,9 @@ func (v *Vault) loadWorkspace() error {
 	if err != nil {
 		return fmt.Errorf("workspace authentication failed: %w", err)
 	}
-	var ws Workspace
-	if err := json.Unmarshal(plain, &ws); err != nil {
-		return fmt.Errorf("workspace format invalid: %w", err)
-	}
-	if ws.Schema != Schema {
-		return fmt.Errorf("unsupported workspace schema %d", ws.Schema)
+	ws, err := decodeWorkspaceMetadata(plain)
+	if err != nil {
+		return err
 	}
 	v.persistedRevision = ws.Revision
 	v.persistedMetaSHA256 = workspaceMetadataDigest(data)
@@ -270,8 +270,8 @@ func (v *Vault) verifyWorkspaceCASUnlocked() error {
 	if err != nil {
 		return fmt.Errorf("%w: current workspace authentication failed: %v", ErrWorkspaceStale, err)
 	}
-	var current Workspace
-	if err := json.Unmarshal(plain, &current); err != nil {
+	current, err := decodeWorkspaceMetadata(plain)
+	if err != nil {
 		return fmt.Errorf("%w: current workspace format is invalid: %v", ErrWorkspaceStale, err)
 	}
 	if current.Revision != v.persistedRevision {
