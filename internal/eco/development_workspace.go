@@ -51,6 +51,15 @@ func ValidateExistingWorkspaceRoot(root string) error {
 // route. Use StartCleanDevelopmentWorkspace for an explicitly requested fresh
 // workspace, or OpenVault(archive) to select the preserved prior state.
 func ArchiveDevelopmentWorkspaceForCleanStart(root string) (string, error) {
+	return archiveDevelopmentWorkspace(root, nil)
+}
+
+// boundary is an internal per-call test seam; the normal application leaves nil.
+func archiveDevelopmentWorkspace(root string, boundary func(string)) (archivePath string, resultErr error) {
+	attemptedArchive := ""
+	defer func() {
+		resultErr = withRecoveryContext("Archive for clean start", resultErr, root, attemptedArchive, "")
+	}()
 	if root == "" {
 		return "", errors.New("empty workspace root")
 	}
@@ -70,7 +79,9 @@ func ArchiveDevelopmentWorkspaceForCleanStart(root string) (string, error) {
 	closed := false
 	defer func() {
 		if !closed {
-			_ = owner.Close()
+			if closeErr := owner.Close(); closeErr != nil {
+				resultErr = errors.Join(resultErr, fmt.Errorf("release archive ownership: %w", closeErr))
+			}
 		}
 	}()
 
@@ -82,18 +93,24 @@ func ArchiveDevelopmentWorkspaceForCleanStart(root string) (string, error) {
 		}
 		return "", fmt.Errorf("inspect development archive route: %w", err)
 	}
+	attemptedArchive = archive
 	if err := os.Rename(absolute, archive); err != nil {
 		return "", fmt.Errorf("archive development workspace: %w", err)
 	}
+	archivePath = archive
+	if boundary != nil {
+		boundary(archive)
+	}
 	if err := owner.retarget(archive); err != nil {
-		rollbackErr := os.Rename(archive, absolute)
+		rollbackErr := rollbackArchivedWorkspace(archive, absolute, owner)
 		if rollbackErr != nil {
-			return "", fmt.Errorf("retarget archived workspace owner: %v; rollback failed: %v", err, rollbackErr)
+			return archive, fmt.Errorf("retarget archived workspace owner: %w; rollback failed: %w", err, rollbackErr)
 		}
 		return "", fmt.Errorf("retarget archived workspace owner: %w", err)
 	}
+	closed = true
 	if err := owner.Close(); err != nil {
-		return "", fmt.Errorf("release archived workspace ownership: %w", err)
+		return archive, fmt.Errorf("release archived workspace ownership: %w", err)
 	}
 	closed = true
 	return archive, nil

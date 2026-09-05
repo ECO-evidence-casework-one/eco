@@ -586,7 +586,8 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		app.mu.Unlock()
 		app.refreshView()
 		app.selected = 0
-		messageBox(hwnd, "Encrypted backup restored safely", fmt.Sprintf("Restored items: %d\r\nRestored bytes: %s\r\nSource build: %s\r\nSource SHA-256: %s\r\n\r\nYour previous vault was retained at:\r\n%s", r.EvidenceItems, eco.HumanBytes(r.RestoredBytes), r.SourceBuildID, r.SourceSHA256, r.PreRestoreVault), MB_OK|MB_ICONINFORMATION)
+		title, notice := eco.RestoreCompletionNotice(r)
+		messageBox(hwnd, title, notice, MB_OK|MB_ICONINFORMATION)
 		invalidate(hwnd)
 		return 0
 	case msgImportError:

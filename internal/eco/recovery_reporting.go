@@ -3,6 +3,7 @@ package eco
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 )
 
@@ -34,7 +35,9 @@ func recoveryLocations(active, checkpoint, stage string) string {
 }
 
 func withRecoveryContext(operation string, cause error, active, checkpoint, stage string) error {
-	if cause == nil { return nil }
+	if cause == nil {
+		return nil
+	}
 	return &WorkspaceRecoveryError{Operation: operation, Cause: cause, ActiveRoot: active, CheckpointRoot: checkpoint, StageRoot: stage}
 }
 
@@ -56,7 +59,9 @@ func finalizeRestoreStage(stage *Vault, stageRoot string, activated bool) error 
 // receipt. Returning a failed-restore error at that point would misstate which
 // workspace is active and could encourage an unsafe retry.
 func recordRestoreFinalization(receipt *RestoreReceipt, resultErr *error, activated bool, finalErr error) {
-	if finalErr == nil { return }
+	if finalErr == nil {
+		return
+	}
 	if activated {
 		receipt.RecoveryWarnings = append(receipt.RecoveryWarnings,
 			"The restored workspace is active, but final cleanup or ownership release needs attention: "+finalErr.Error()+". Close ECO before another restore and retain the previous checkpoint.")
@@ -79,7 +84,14 @@ func RestoreCompletionNotice(r RestoreReceipt) (string, string) {
 }
 
 func rollbackArchivedWorkspace(archive, original string, owner *workspaceOwnerLease) error {
-	if err := validateRollbackOwnedSource(archive, owner); err != nil { return err }
-	if err := requireVacantRollbackDestination(original); err != nil { return err }
-	return renameArchivedWorkspaceBack(archive, original, owner)
+	if err := validateRollbackOwnedSource(archive, owner); err != nil {
+		return err
+	}
+	if err := requireVacantRollbackDestination(original); err != nil {
+		return err
+	}
+	if err := os.Rename(archive, original); err != nil {
+		return err
+	}
+	return owner.retarget(original)
 }
