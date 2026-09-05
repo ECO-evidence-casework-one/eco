@@ -35,7 +35,7 @@ func writeLocalToolFixture(t *testing.T, dir, name, content string) string {
 func TestLocalToolRegistrationPersistsEncryptedAndVerifies(t *testing.T) {
 	d := t.TempDir()
 	vaultRoot := filepath.Join(d, "vault")
-	v, err := OpenVault(vaultRoot)
+	v, err := openTestVault(vaultRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestLocalToolRegistrationPersistsEncryptedAndVerifies(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reopened, err := OpenVault(vaultRoot)
+	reopened, err := openTestVault(vaultRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +86,7 @@ func TestLocalToolRegistrationPersistsEncryptedAndVerifies(t *testing.T) {
 
 func TestLocalToolVerificationRejectsChangedExecutable(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestLocalToolVerificationRejectsChangedExecutable(t *testing.T) {
 
 func TestLocalToolVerificationRejectsChangedVersion(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestLocalToolVerificationRejectsChangedVersion(t *testing.T) {
 
 func TestLocalToolNewRegistrationSupersedesOld(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +148,7 @@ func TestLocalToolNewRegistrationSupersedesOld(t *testing.T) {
 }
 
 func TestLocalToolUnknownKindAndMissingRegistrationFailClosed(t *testing.T) {
-	v, err := OpenVault(filepath.Join(t.TempDir(), "vault"))
+	v, err := openTestVault(filepath.Join(t.TempDir(), "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestLocalToolUnknownKindAndMissingRegistrationFailClosed(t *testing.T) {
 
 func TestLocalToolMalformedNewestRegistrationFailsClosed(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestLocalToolMalformedNewestRegistrationFailsClosed(t *testing.T) {
 
 func TestLocalToolRegistrationRejectsMutationDuringProbe(t *testing.T) {
 	d := t.TempDir()
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

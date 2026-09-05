@@ -50,7 +50,7 @@ func setSearchTestSegments(t *testing.T, v *Vault, evidenceID string, segments [
 
 func TestSearchWorkspaceReturnsEveryPageAwareMatchInOrder(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestSearchWorkspaceReturnsEveryPageAwareMatchInOrder(t *testing.T) {
 
 func TestSearchWorkspaceHonoursEvidenceScope(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func TestSearchWorkspaceHonoursEvidenceScope(t *testing.T) {
 
 func TestSearchReceiptInvalidatesWhenReadableSegmentsChange(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestSearchReceiptInvalidatesWhenReadableSegmentsChange(t *testing.T) {
 
 func TestSearchReceiptSurvivesUnrelatedWorkspaceWrite(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestSearchReceiptSurvivesUnrelatedWorkspaceWrite(t *testing.T) {
 
 func TestSearchReceiptRejectsPreservedObjectTamper(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestSearchReceiptRejectsPreservedObjectTamper(t *testing.T) {
 
 func TestSearchWorkspaceBoundsMatchCount(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestSearchWorkspaceBoundsMatchCount(t *testing.T) {
 
 func TestSearchWorkspaceRejectsClosedVault(t *testing.T) {
 	dir := t.TempDir()
-	v, err := OpenVault(filepath.Join(dir, "vault"))
+	v, err := openTestVault(filepath.Join(dir, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

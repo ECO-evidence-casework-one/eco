@@ -9,11 +9,11 @@ import (
 
 func TestOpenVaultExcludesSecondWriterUntilClose(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vault")
-	first, err := OpenVault(root)
+	first, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := OpenVault(root)
+	second, err := openTestVault(root)
 	if second != nil {
 		_ = second.Close()
 	}
@@ -24,7 +24,7 @@ func TestOpenVaultExcludesSecondWriterUntilClose(t *testing.T) {
 	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := OpenVault(root)
+	reopened, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +35,7 @@ func TestOpenVaultExcludesSecondWriterUntilClose(t *testing.T) {
 
 func TestVaultCloseMakesSaveFailClosed(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vault")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +57,7 @@ func TestRestoreTransfersActiveWorkspaceOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	sourceRoot := filepath.Join(root, "source-vault")
-	source, err := OpenVault(sourceRoot)
+	source, err := openTestVault(sourceRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestRestoreTransfersActiveWorkspaceOwnership(t *testing.T) {
 	}
 
 	activeRoot := filepath.Join(root, "active-vault")
-	active, err := OpenVault(activeRoot)
+	active, err := openTestVault(activeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestRestoreTransfersActiveWorkspaceOwnership(t *testing.T) {
 		_ = active.Close()
 		t.Fatalf("active Vault did not receive restored workspace: %+v", snapshot.Evidence)
 	}
-	other, err := OpenVault(activeRoot)
+	other, err := openTestVault(activeRoot)
 	if other != nil {
 		_ = other.Close()
 	}
@@ -109,7 +109,7 @@ func TestRestoreTransfersActiveWorkspaceOwnership(t *testing.T) {
 	if err := active.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := OpenVault(activeRoot)
+	reopened, err := openTestVault(activeRoot)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,39 @@
+{
+  "earlier_qualification_failure": "33976047764: all 17 selected cases passed; full suite stopped because UI source-regression expected archive-only call rather than combined clean start. No product commit occurred in that run.",
+  "run_id": "33976259470",
+  "input_head": "4dbe8ed1a02556beb6287744ffa53e37922a25bd",
+  "before": "Intentional archive-then-open after prior restore reproduced as failing before the combined operation",
+  "after_passing_cases": [
+    "TestExplicitCleanStartRefusesLiveOwner",
+    "TestExplicitCleanStartWithRestoreHistory",
+    "TestResetForcedStopRestart/reset_archived",
+    "TestResetForcedStopRestart/reset_created",
+    "TestRestoreForcedStopRestart/activated",
+    "TestRestoreForcedStopRestart/original_renamed",
+    "TestRestoreForcedStopRestart/original_retargeted",
+    "TestRestoreForcedStopRestart/stage_verified",
+    "TestRestoreForcedStopRestart/staged_renamed",
+    "TestRestoreRestartGuard/checkpoint_is_file",
+    "TestRestoreRestartGuard/empty_active",
+    "TestRestoreRestartGuard/large_parent",
+    "TestRestoreRestartGuard/literal_brackets",
+    "TestRestoreRestartGuard/missing_active",
+    "TestRestoreRestartPositiveControls/healthy_existing",
+    "TestRestoreRestartPositiveControls/new_hierarchy",
+    "TestRestoreRestartPositiveControls/unrelated_checkpoint"
+  ],
+  "after_skips": 0,
+  "linux_full_tests": "passed",
+  "go_vet": "passed",
+  "source_policy": "passed",
+  "windows_cross_build": "passed",
+  "native_windows": "pending exact final PR CI",
+  "scope": "Seven actual forced-stop phases (five restore, two reset), not arbitrary interruption or power-loss proof",
+  "creation_permission": "Only the explicit operation may bypass missing-state refusal for its own newly created, exclusively owned, identity-checked directory; no permission persists after process exit",
+  "limits": [
+    "Interactive Windows/Acer recovery choice not yet exercised.",
+    "No automatic trusted recovery selection or cleanup based on filenames.",
+    "No durable crash journal or storage-controller failure proof.",
+    "W7 needs final acceptance mapping and failure-reporting review before closure; W8 remains actual-machine acceptance."
+  ]
+}

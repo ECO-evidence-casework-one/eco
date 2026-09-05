@@ -10,7 +10,7 @@ import (
 
 func TestWorkspaceCASRevisionAdvancesAndOwnerTxnChangesOnReopen(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vault")
-	first, err := OpenVault(root)
+	first, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestWorkspaceCASRevisionAdvancesAndOwnerTxnChangesOnReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reopened, err := OpenVault(root)
+	reopened, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func TestWorkspaceCASRevisionAdvancesAndOwnerTxnChangesOnReopen(t *testing.T) {
 
 func TestWorkspaceCASRejectsOlderValidEncryptedMetadata(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vault")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestWorkspaceCASRejectsOlderValidEncryptedMetadata(t *testing.T) {
 
 func TestWorkspaceCASRejectsSameRevisionDifferentAuthenticatedMetadata(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "vault")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}

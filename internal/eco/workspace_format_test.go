@@ -19,7 +19,7 @@ import (
 func workspaceFormatFixture(t *testing.T) (string, []byte, map[string]json.RawMessage) {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "workspace")
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +201,7 @@ func TestWorkspaceFormatRejectsWithoutMutation(t *testing.T) {
 				}
 			}
 			before := workspaceFormatTree(t, root)
-			opened, err := OpenVault(root)
+			opened, err := openTestVault(root)
 			if opened != nil {
 				if closeErr := opened.Close(); closeErr != nil {
 					t.Fatal(closeErr)
@@ -225,7 +225,7 @@ func TestWorkspaceFormatLegacyDefaultsPreserved(t *testing.T) {
 	document["build_id"] = json.RawMessage(`"ECO-SYNTHETIC-OLDER-CANDIDATE"`)
 	workspaceFormatWrite(t, root, key, workspaceFormatJSON(t, document))
 	before := workspaceFormatTree(t, root)
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,7 +243,7 @@ func TestWorkspaceFormatLegacyDefaultsPreserved(t *testing.T) {
 	if err := v.Close(); err != nil {
 		t.Fatal(err)
 	}
-	reopened, err := OpenVault(root)
+	reopened, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +313,7 @@ func TestWorkspaceFormatRestoreRejectsWithoutActivation(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "synthetic.ecobackup")
 			passphrase := "synthetic compatibility fixture"
 			workspaceFormatBackup(t, path, passphrase, workspaceFormatJSON(t, document))
-			v, err := OpenVault(root)
+			v, err := openTestVault(root)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -344,7 +344,7 @@ func TestWorkspaceFormatCompatibleBackupFixture(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "synthetic.ecobackup")
 	passphrase := "synthetic compatibility fixture"
 	workspaceFormatBackup(t, path, passphrase, workspaceFormatJSON(t, document))
-	v, err := OpenVault(root)
+	v, err := openTestVault(root)
 	if err != nil {
 		t.Fatal(err)
 	}

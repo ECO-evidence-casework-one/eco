@@ -18,7 +18,7 @@ func TestEvidenceOccurrencesSurviveEncryptedBackupRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	sourceVault, err := OpenVault(filepath.Join(root, "source-vault"))
+	sourceVault, err := openTestVault(filepath.Join(root, "source-vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +34,7 @@ func TestEvidenceOccurrencesSurviveEncryptedBackupRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	activeVault, err := OpenVault(filepath.Join(root, "active-vault"))
+	activeVault, err := openTestVault(filepath.Join(root, "active-vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

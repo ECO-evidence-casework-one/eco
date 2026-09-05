@@ -18,7 +18,7 @@ func testPDFCPUVault(t *testing.T) (*Vault, EvidenceItem) {
 	if err := os.WriteFile(src, []byte("%PDF-1.7\n% ECO workflow fixture\n%%EOF\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

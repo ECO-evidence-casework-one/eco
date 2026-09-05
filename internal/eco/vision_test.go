@@ -149,7 +149,7 @@ func TestApplyOCRResultPreservesSourceAndAddsRegions(t *testing.T) {
 	if err := os.WriteFile(path, buf.Bytes(), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestOCRSourceHashMismatchIsRejected(t *testing.T) {
 	if err := os.WriteFile(path, buf.Bytes(), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestApplyOCRResultRollsBackIfMetadataSaveFails(t *testing.T) {
 	if err := os.WriteFile(path, buf.Bytes(), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v, err := OpenVault(filepath.Join(d, "vault"))
+	v, err := openTestVault(filepath.Join(d, "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -31,6 +31,8 @@ var (
 )
 
 type Vault struct {
+	// Per-instance, package-internal test observation; normal application leaves nil.
+	restoreBoundary     func(string)
 	Root                string
 	Objects             string
 	key                 []byte
@@ -47,14 +49,26 @@ type Vault struct {
 }
 
 func OpenVault(root string) (*Vault, error) {
+	if err := CheckWorkspaceRecoveryState(root); err != nil {
+		return nil, err
+	}
+	if err := ValidateExistingWorkspaceRoot(root); err != nil {
+		return nil, fmt.Errorf("open existing workspace: %w", err)
+	}
 	if err := preflightWorkspaceFormat(root); err != nil {
 		return nil, err
 	}
-	owner, err := acquireOrCreateWorkspaceRootOwner(root)
+	owner, err := acquireWorkspaceRootOwner(root)
 	if err != nil {
 		return nil, err
 	}
-	root = owner.root
+	return openOwnedVault(owner, false)
+}
+
+// allowFresh is reserved for an identity-checked directory newly created by
+// the explicit clean-start operation. Ordinary opens never bypass recovery.
+func openOwnedVault(owner *workspaceOwnerLease, allowFresh bool) (*Vault, error) {
+	root := owner.root
 	v := &Vault{Root: root, Objects: filepath.Join(root, "objects"), owner: owner, ownerTxn: NewID("OWNER")}
 	opened := false
 	defer func() {
@@ -65,6 +79,14 @@ func OpenVault(root string) (*Vault, error) {
 		v.key = nil
 		_ = owner.Close()
 	}()
+	if !allowFresh {
+		if err := CheckWorkspaceRecoveryState(root); err != nil {
+			return nil, err
+		}
+		if err := ValidateExistingWorkspaceRoot(root); err != nil {
+			return nil, fmt.Errorf("open existing workspace under ownership: %w", err)
+		}
+	}
 	if err := preflightWorkspaceFormat(root); err != nil {
 		return nil, err
 	}

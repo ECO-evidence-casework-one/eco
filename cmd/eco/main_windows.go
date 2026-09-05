@@ -204,6 +204,13 @@ func main() {
 
 func chooseDevelopmentWorkspace(base string) (string, bool) {
 	candidate := eco.DefaultDevelopmentWorkspaceRoot(base)
+	if err := eco.CheckWorkspaceRecoveryState(candidate); err != nil {
+		choice := messageBox(0, "ECO workspace recovery needed", err.Error()+"\r\n\r\nYes — Open an existing ECO workspace for recovery\r\nNo or Cancel — Exit without changing the retained copies", MB_YESNOCANCEL|MB_ICONQUESTION)
+		if choice == IDYES {
+			return chooseExistingWorkspace()
+		}
+		return "", false
+	}
 	candidateInfo, candidateErr := os.Stat(candidate)
 	if candidateErr != nil && !os.IsNotExist(candidateErr) {
 		messageBox(0, "ECO workspace check failed", candidateErr.Error(), MB_OK|MB_ICONERROR)
@@ -215,14 +222,14 @@ func chooseDevelopmentWorkspace(base string) (string, bool) {
 			choice := messageBox(0, "Choose ECO development workspace", "This exact source candidate has no workspace yet, so its normal start is clean.\r\n\r\nA previous V25N2 development workspace also exists.\r\n\r\nYes — Start this candidate clean\r\nNo — Open an existing ECO workspace\r\nCancel — Exit without opening anything", MB_YESNOCANCEL|MB_ICONQUESTION)
 			switch choice {
 			case IDYES:
-				return candidate, true
+				return createNewCandidate(candidate)
 			case IDNO:
 				return chooseExistingWorkspace()
 			default:
 				return "", false
 			}
 		}
-		return candidate, true
+		return createNewCandidate(candidate)
 	}
 	if candidateInfo == nil || !candidateInfo.IsDir() {
 		messageBox(0, "ECO candidate workspace is invalid", "The candidate workspace route exists but is not a directory. ECO will not replace or alter it.", MB_OK|MB_ICONERROR)
@@ -280,14 +287,28 @@ func chooseExistingWorkspace() (string, bool) {
 	}
 }
 
+func createNewCandidate(candidate string) (string, bool) {
+	v, err := eco.CreateVault(candidate)
+	if err != nil {
+		messageBox(0, "ECO could not create a new workspace", err.Error(), MB_OK|MB_ICONERROR)
+		return "", false
+	}
+	if err := v.Close(); err != nil {
+		messageBox(0, "ECO workspace creation did not finish", err.Error(), MB_OK|MB_ICONERROR)
+		return "", false
+	}
+	messageBox(0, "New ECO candidate workspace", "A new empty workspace was created explicitly at:\r\n\r\n"+candidate, MB_OK|MB_ICONINFORMATION)
+	return candidate, true
+}
+
 func startCleanCandidate(candidate string) (string, bool) {
-	archive, err := eco.ArchiveDevelopmentWorkspaceForCleanStart(candidate)
+	archive, err := eco.StartCleanDevelopmentWorkspace(candidate)
 	if err != nil {
 		messageBox(0, "ECO could not start clean", err.Error(), MB_OK|MB_ICONERROR)
 		return "", false
 	}
 	if archive != "" {
-		messageBox(0, "Prior candidate workspace preserved", "ECO did not delete the previous workspace. It was preserved at:\r\n\r\n"+archive+"\r\n\r\nA fresh candidate workspace will now be created.", MB_OK|MB_ICONINFORMATION)
+		messageBox(0, "Prior candidate workspace preserved", "ECO did not delete the previous workspace. It was preserved at:\r\n\r\n"+archive+"\r\n\r\nA fresh candidate workspace has been created.", MB_OK|MB_ICONINFORMATION)
 	}
 	return candidate, true
 }

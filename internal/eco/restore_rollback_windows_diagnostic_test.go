@@ -27,10 +27,16 @@ func TestRecoveryWindowsSnapshotDiagnostic(t *testing.T) {
 func recoveryWindowsReportDifferences(t *testing.T, phase string, before, after map[string]string) {
 	t.Helper()
 	keys := make(map[string]bool)
-	for key := range before { keys[key] = true }
-	for key := range after { keys[key] = true }
+	for key := range before {
+		keys[key] = true
+	}
+	for key := range after {
+		keys[key] = true
+	}
 	ordered := make([]string, 0, len(keys))
-	for key := range keys { ordered = append(ordered, key) }
+	for key := range keys {
+		ordered = append(ordered, key)
+	}
 	sort.Strings(ordered)
 	for _, key := range ordered {
 		old, hadOld := before[key]
