@@ -170,6 +170,9 @@ func TestSearchReceiptRejectsPreservedObjectTamper(t *testing.T) {
 		t.Fatal(err)
 	}
 	objectPath := filepath.Join(v.Objects, item.ObjectFile)
+	if err := os.Chmod(objectPath, 0600); err != nil {
+		t.Fatal(err)
+	}
 	data, err := os.ReadFile(objectPath)
 	if err != nil {
 		t.Fatal(err)
@@ -179,6 +182,9 @@ func TestSearchReceiptRejectsPreservedObjectTamper(t *testing.T) {
 	}
 	data[len(data)-1] ^= 0xff
 	if err := os.WriteFile(objectPath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(objectPath, 0400); err != nil {
 		t.Fatal(err)
 	}
 	if err := v.ValidateSearchReceipt(receipt); !errors.Is(err, ErrSearchReceiptStale) {
