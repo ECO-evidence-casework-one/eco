@@ -1,0 +1,134 @@
+name: Qualify private preparation review fixes
+on:
+  push:
+    branches: [integration/private-local-build-handoff-20260905]
+    paths: [.github/workflows/qualify-private-preparation-review-fix.yml]
+permissions:
+  contents: write
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/integration/private-local-build-handoff-20260905'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Correct staged publication and standalone assembly loading
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $p=Join-Path $PWD 'scripts/prepare-private-local-build.ps1'
+          $s=[IO.File]::ReadAllText($p).Replace("`r`n","`n")
+          $old="        `$candidate = Join-Path `$work 'candidate'`n        [void][IO.Directory]::CreateDirectory(`$candidate)`n        `$first = Join-Path `$candidate 'ECO.exe'; `$second = Join-Path `$work 'ECO.rebuild.exe'"
+          $new="        `$candidate = Join-Path `$work 'candidate'`n        `$stage = Join-Path `$work 'build-staging'`n        [void][IO.Directory]::CreateDirectory(`$stage)`n        `$first = Join-Path `$stage 'ECO.exe'; `$second = Join-Path `$work 'ECO.rebuild.exe'"
+          if (-not $s.Contains($old)) { throw 'Staging source anchor changed.' }
+          $s=$s.Replace($old,$new)
+          $s=$s.Replace("(Join-Path `$candidate 'build-receipt.json')","(Join-Path `$stage 'build-receipt.json')")
+          $old="        Copy-Item -LiteralPath (Join-Path `$src 'LICENSE') -Destination (Join-Path `$candidate 'LICENSE')"
+          if (-not $s.Contains($old)) { throw 'License anchor changed.' }
+          $s=$s.Replace($old,"        Copy-Item -LiteralPath (Join-Path `$src 'LICENSE') -Destination (Join-Path `$stage 'LICENSE')`n        # Publish the whole qualified directory only after every check succeeds.`n        [IO.Directory]::Move(`$stage, `$candidate)")
+          [IO.File]::WriteAllText($p,$s,(New-Object Text.UTF8Encoding($false)))
+          $p=Join-Path $PWD 'scripts/test-private-local-build.ps1'
+          $s=[IO.File]::ReadAllText($p).Replace("`r`n","`n")
+          $s=$s.Replace('Add-Type -AssemblyName System.IO.Compression.FileSystem',"Add-Type -AssemblyName System.IO.Compression`nAdd-Type -AssemblyName System.IO.Compression.FileSystem")
+          [IO.File]::WriteAllText($p,$s,(New-Object Text.UTF8Encoding($false)))
+          # This new PowerShell process has no host-injected assembly preload.
+          & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File ./scripts/test-private-local-build.ps1
+          if ($LASTEXITCODE -ne 0) { throw 'Standalone preparation controls failed.' }
+      - name: Exercise the launcher with marked downloaded source and BUILD confirmation
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $repo=$PWD.Path
+          $root=Join-Path $env:RUNNER_TEMP 'eco-launcher-qualification'
+          [void][IO.Directory]::CreateDirectory($root)
+          $kit=Join-Path $root 'valid';[void][IO.Directory]::CreateDirectory($kit)
+          $script=Join-Path $kit 'prepare-private-local-build.ps1'
+          Copy-Item -LiteralPath ./scripts/prepare-private-local-build.ps1 -Destination $script
+          $scriptHash=(Get-FileHash -LiteralPath $script -Algorithm SHA256).Hash.ToLowerInvariant()
+          $m=[ordered]@{
+              schema=1;source_commit='8b69a669b003fe30e84f1d344aa7533eb9cd9045'
+              source_archive_sha256='d5d56d07140857d4e5ffed91966d32d8510451191959b89235e048015b3c3934'
+              executable_sha256='d197748f861bd84b00776aa28c8712126091660fcc436e716f28126e05516dcc'
+              recipient='synthetic-qualification-only';purpose='Private synthetic preparation test'
+              expires_utc='2026-09-12T23:59:59Z'
+          }
+          $manifest=Join-Path $kit 'private-build-manifest.json'
+          $m|ConvertTo-Json|Set-Content -LiteralPath $manifest -Encoding UTF8
+          $manifestHash=(Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
+          $template=[IO.File]::ReadAllText((Join-Path $repo 'scripts/private-build-launcher.cmd.in'))
+          $launcher=$template.Replace('__PREPARER_HASH__',$scriptHash).Replace('__MANIFEST_HASH__',$manifestHash)
+          [IO.File]::WriteAllText((Join-Path $kit 'PREPARE_ECO.cmd'),$launcher,[Text.Encoding]::ASCII)
+          Set-Content -LiteralPath $script -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -Encoding ASCII
+          $inputFile=Join-Path $root 'confirmation.txt'
+          [IO.File]::WriteAllText($inputFile,"BUILD`r`n`r`n",[Text.Encoding]::ASCII)
+          $stdout=Join-Path $root 'launcher-stdout.txt';$stderr=Join-Path $root 'launcher-stderr.txt'
+          $process=Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c','PREPARE_ECO.cmd') -WorkingDirectory $kit -RedirectStandardInput $inputFile -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -Wait
+          Get-Content -LiteralPath $stdout|Write-Host
+          if (Test-Path -LiteralPath $stderr) { Get-Content -LiteralPath $stderr|Write-Host }
+          if ($process.ExitCode -ne 0) { throw 'Fingerprint-bound command launcher failed.' }
+          $outputs=@(Get-ChildItem -LiteralPath $kit -Directory -Filter 'build-*')
+          if ($outputs.Count -ne 1) { throw 'Unexpected preparation output count.' }
+          $output=$outputs[0].FullName
+          $receipt=Get-Content -LiteralPath (Join-Path $output 'candidate\build-receipt.json') -Raw|ConvertFrom-Json
+          if ($receipt.app_launched -ne $false -or $receipt.executable_sha256 -cne $m.executable_sha256) { throw 'Unexpected preparation receipt.' }
+          if (Test-Path -LiteralPath (Join-Path $output 'build-staging')) { throw 'Successful staging was not published as a directory move.' }
+          if (Get-Item -LiteralPath $script -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw 'Verified preparer origin mark remained.' }
+          # Marker changes never alter the actual helper data bytes.
+          if ((Get-FileHash -LiteralPath $script -Algorithm SHA256).Hash.ToLowerInvariant() -cne $scriptHash) { throw 'Launcher changed script data bytes.' }
+          # A modified helper must be refused before any download or unblocking.
+          $badKit=Join-Path $root 'tampered';[void][IO.Directory]::CreateDirectory($badKit)
+          Copy-Item -LiteralPath $script,$manifest,(Join-Path $kit 'PREPARE_ECO.cmd') -Destination $badKit
+          Add-Content -LiteralPath (Join-Path $badKit 'prepare-private-local-build.ps1') -Value '# synthetic tamper'
+          Set-Content -LiteralPath (Join-Path $badKit 'prepare-private-local-build.ps1') -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3" -Encoding ASCII
+          $process=Start-Process -FilePath $env:ComSpec -ArgumentList @('/d','/c','PREPARE_ECO.cmd') -WorkingDirectory $badKit -RedirectStandardInput $inputFile -RedirectStandardOutput (Join-Path $root 'tamper-stdout.txt') -RedirectStandardError (Join-Path $root 'tamper-stderr.txt') -PassThru -Wait
+          if ($process.ExitCode -eq 0 -or @(Get-ChildItem -LiteralPath $badKit -Directory -Filter 'build-*').Count -ne 0) { throw 'Tampered preparer was not stopped before output creation.' }
+          if (-not (Get-Item -LiteralPath (Join-Path $badKit 'prepare-private-local-build.ps1') -Stream Zone.Identifier -ErrorAction SilentlyContinue)) { throw 'Tampered preparer was unblocked.' }
+          Write-Host 'Command launcher: marked-script BUILD run PASS; tampered-script early refusal PASS.'
+      - name: Prove failed fingerprint validation cannot publish a candidate directory
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $root=Join-Path $env:RUNNER_TEMP 'eco-launcher-qualification'
+          $kit=Join-Path $root 'failure';[void][IO.Directory]::CreateDirectory($kit)
+          Copy-Item -LiteralPath ./scripts/prepare-private-local-build.ps1 -Destination $kit
+          $m=Get-Content -LiteralPath (Join-Path $root 'valid\private-build-manifest.json') -Raw|ConvertFrom-Json
+          $m.executable_sha256='0'*64
+          $manifest=Join-Path $kit 'private-build-manifest.json'
+          $m|ConvertTo-Json|Set-Content -LiteralPath $manifest -Encoding UTF8
+          $output=Join-Path $root 'failed-output'
+          & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File (Join-Path $kit 'prepare-private-local-build.ps1') -ManifestPath $manifest -OutputRoot $output -NoPrompt
+          if ($LASTEXITCODE -eq 0) { throw 'Wrong expected executable hash was accepted.' }
+          if (Test-Path -LiteralPath (Join-Path $output 'candidate')) { throw 'Failed validation published a candidate directory.' }
+          if (-not (Test-Path -LiteralPath (Join-Path $output 'build-staging\ECO.exe'))) { throw 'Negative test did not reach the intended post-build validation boundary.' }
+          if (-not (Get-Content -LiteralPath (Join-Path $kit 'BUILD_RESULT.txt') -Raw).Contains('SHA-256 mismatch')) { throw 'Failure did not report the expected fingerprint boundary.' }
+          Write-Host 'Failed post-build validation: candidate directory ABSENT; stopped result PASS.'
+      - name: Commit only the qualified helpers and non-runnable evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $receipt=[ordered]@{
+              run_id=$env:GITHUB_RUN_ID;input_head=$env:GITHUB_SHA
+              application_source='8b69a669b003fe30e84f1d344aa7533eb9cd9045'
+              preparer_sha256=(Get-FileHash -LiteralPath ./scripts/prepare-private-local-build.ps1 -Algorithm SHA256).Hash.ToLowerInvariant()
+              executable_sha256='d197748f861bd84b00776aa28c8712126091660fcc436e716f28126e05516dcc'
+              executable_size=4772352;standalone_controls='11/11 PASS in clean Windows PowerShell 5.1'
+              command_launcher='PASS with Internet-origin marker and BUILD input'
+              tampered_script='REFUSED before unblocking or output creation'
+              failed_post_build_hash='REFUSED; candidate directory absent'
+              app_launched=$false;public_artifact_upload=$false;actual_acer_acceptance='NOT RUN'
+          }
+          $receipt|ConvertTo-Json -Depth 5|Set-Content -LiteralPath docs/control/PRIVATE_PREPARATION_REVIEW_FIX_20260905.json -Encoding UTF8
+          $receipt|ConvertTo-Json -Depth 5|Write-Host
+          & git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Whitespace error.' }
+          & git fetch origin integration/private-local-build-handoff-20260905
+          if ($LASTEXITCODE -ne 0) { throw 'Fetch failed.' }
+          $head=& git rev-parse FETCH_HEAD
+          if ($LASTEXITCODE -ne 0 -or $head -cne $env:GITHUB_SHA) { throw 'Source branch advanced.' }
+          & git config user.name 'github-actions[bot]'
+          & git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          & git add scripts/prepare-private-local-build.ps1 scripts/test-private-local-build.ps1 docs/control/PRIVATE_PREPARATION_REVIEW_FIX_20260905.json
+          & git commit -m 'Publish local candidates only after validation and qualify the real command launcher'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit failed.' }
+          & git push origin HEAD:refs/heads/integration/private-local-build-handoff-20260905
+          if ($LASTEXITCODE -ne 0) { throw 'Push failed.' }
