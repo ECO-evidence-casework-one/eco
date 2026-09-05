@@ -679,6 +679,16 @@ func (v *Vault) RestorePortableBackup(path, passphrase string, progress func(Bac
 	v.key = stage.key
 	stage.key = nil
 	v.Workspace = stage.Workspace
+	v.ownerTxn = stage.ownerTxn
+	v.persistedRevision = stage.persistedRevision
+	v.persistedMetaSHA256 = stage.persistedMetaSHA256
+	v.persistedChangeHead = stage.persistedChangeHead
+	v.persistedOwnerTxn = stage.persistedOwnerTxn
+	stage.ownerTxn = ""
+	stage.persistedRevision = 0
+	stage.persistedMetaSHA256 = ""
+	stage.persistedChangeHead = ""
+	stage.persistedOwnerTxn = ""
 	stageActivated = true
 	_ = oldOwner.Close()
 

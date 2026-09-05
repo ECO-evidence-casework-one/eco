@@ -10,6 +10,8 @@ const (
 
 type Workspace struct {
 	Schema        int                  `json:"schema"`
+	Revision      uint64               `json:"revision,omitempty"`
+	LastOwnerTxn  string               `json:"last_owner_txn,omitempty"`
 	BuildID       string               `json:"build_id"`
 	CreatedAt     time.Time            `json:"created_at"`
 	UpdatedAt     time.Time            `json:"updated_at"`
