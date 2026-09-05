@@ -1,0 +1,42 @@
+name: Apply native search UI
+on:
+  push:
+    paths:
+      - .github/workflows/apply-search-ui.yml
+      - scripts/ops/apply_search_ui.py
+permissions:
+  contents: write
+jobs:
+  apply-and-qualify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Apply controlled native UI patch
+        run: python3 scripts/ops/apply_search_ui.py
+      - name: Format and qualify
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w cmd/eco/main_windows.go cmd/eco/ui_regression_test.go
+          go test ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go test -c ./cmd/eco -o /tmp/eco-cmd.test.exe
+          GOOS=windows GOARCH=amd64 go build -o /tmp/ECO.exe ./cmd/eco
+          ./scripts/check-offline-source.sh
+          git diff --check
+      - name: Commit qualified product changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ECO Integration Bot'
+          git config user.email 'eco-integration-bot@users.noreply.github.com'
+          git add cmd/eco/main_windows.go cmd/eco/ui_regression_test.go
+          git diff --cached --quiet && { echo 'No product changes generated'; exit 1; }
+          git commit -m 'Add native page-aware search navigation UI'
+          git push origin HEAD:integration/page-aware-search-ui-20260905
