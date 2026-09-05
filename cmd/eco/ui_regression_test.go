@@ -88,6 +88,18 @@ func TestCoordinateCitationHighlightingPresent(t *testing.T) {
 	}
 }
 
+func TestDevelopmentStartupStateIsExplicitAndCandidateBound(t *testing.T) {
+	src := windowsSource(t)
+	for _, required := range []string{"chooseDevelopmentWorkspace", "DefaultDevelopmentWorkspaceRoot", "ValidateExistingWorkspaceRoot", "ArchiveDevelopmentWorkspaceForCleanStart", "Continue this candidate", "Open an existing ECO workspace", "start clean", "defer func() { _ = v.Close() }()"} {
+		if !strings.Contains(src, required) {
+			t.Fatalf("missing explicit startup-state control %q", required)
+		}
+	}
+	if strings.Contains(src, `root = filepath.Join(root, "EvidenceCaseworkOne", "V25N2")`) {
+		t.Fatal("Windows startup still silently selects the old shared V25N2 workspace")
+	}
+}
+
 func TestNativeSourceContainsNoBrowserOrLocalhostRuntime(t *testing.T) {
 	src := windowsSource(t)
 	for _, forbidden := range []string{"\"net/http\"", "ListenAndServe", "brave.exe", "msedge.exe", "chrome.exe"} {

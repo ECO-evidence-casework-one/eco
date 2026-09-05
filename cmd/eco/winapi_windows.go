@@ -61,8 +61,11 @@ const (
 	MB_ICONINFORMATION   = 0x00000040
 	MB_ICONERROR         = 0x00000010
 	MB_YESNO             = 0x00000004
+	MB_YESNOCANCEL       = 0x00000003
 	MB_ICONQUESTION      = 0x00000020
 	IDYES                = 6
+	IDNO                 = 7
+	IDCANCEL             = 2
 	COLOR_WINDOW         = 5
 	IDC_ARROW            = 32512
 	DT_LEFT              = 0x00000000
