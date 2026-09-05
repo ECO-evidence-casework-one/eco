@@ -21,4 +21,10 @@ Extend the already-qualified optional `klippa-app/pdfium-cli` v0.11.2 renderer; 
 
 The existing renderer limits remain unchanged: no runtime download, exact v0.11.2 SHA/size identity, 45-second render deadline, source <=512 MiB, bounded diagnostics, width/height/pixel/PNG limits and temporary derivative cleanup. Metadata stdout is additionally capped at 8 MiB and page count is constrained to ECO's existing safe render range.
 
-This source slice still requires the normal Linux/Windows/source-policy/Gitleaks/Syft/Cosign pipeline and an exact-runtime Windows navigation qualification. The 8 GB Acer remains the controlling low-spec hardware gate for performance claims.
+## Qualification
+
+Source qualification run `33947757143` passed all Go tests, `go vet`, Windows cross-build, offline/source policy and diff checks before the product commit.
+
+Exact-runtime Windows qualification run `33947946928` independently downloaded and SHA-256-verified the pinned v0.11.2 WebAssembly executable, opened a fresh ECO vault, preserved a deterministic three-page PDF, registered the runtime through ECO, proved `PDFEvidenceInfoWithRegisteredPDFium` returned exactly 3 source-bound pages, rendered pages 1, 2 and 3 through the registered preserved-source path with deliberately different page dimensions, and rejected page 4. No renderer binary or rendered page was uploaded as a repository artifact.
+
+The remaining software gate is the normal Linux/Windows/source-policy/Gitleaks/Syft/Cosign PR pipeline. The 8 GB Acer remains the controlling low-spec hardware gate for performance claims.
