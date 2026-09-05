@@ -8,6 +8,10 @@ $env:GOOS = "windows"
 $env:GOARCH = "amd64"
 
 $buildId = (Get-Content VERSION -Raw).Trim()
+$commit = $env:GITHUB_SHA
+if ([string]::IsNullOrWhiteSpace($commit)) {
+    $commit = "local-unrecorded"
+}
 $dist = Join-Path $root "dist"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 
@@ -18,7 +22,8 @@ Invoke-NativeChecked "source-policy check" { python scripts/check_source_policy.
 
 $first = Join-Path $dist "ECO.exe"
 $second = Join-Path $dist "ECO.rebuild.exe"
-$ldflags = "-s -w -H windowsgui -buildid="
+$sourceCommitFlag = "-X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$commit"
+$ldflags = "-s -w -H windowsgui -buildid= $sourceCommitFlag"
 
 Write-Host "Building first deterministic Windows artifact"
 Invoke-NativeChecked "first deterministic Windows build" { go build -trimpath -ldflags $ldflags -o $first ./cmd/eco }
@@ -35,10 +40,6 @@ Remove-Item $second -Force
 $size = (Get-Item $first).Length
 "$hash1  ECO.exe" | Set-Content -Encoding ascii (Join-Path $dist "ECO.exe.sha256")
 
-$commit = $env:GITHUB_SHA
-if ([string]::IsNullOrWhiteSpace($commit)) {
-    $commit = "local-unrecorded"
-}
 $goVersion = Invoke-NativeChecked "go version" { go version }
 $receipt = [ordered]@{
     schema = 1
