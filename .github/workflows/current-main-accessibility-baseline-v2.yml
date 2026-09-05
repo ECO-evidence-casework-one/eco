@@ -3,6 +3,7 @@ on:
   push:
     paths:
       - .github/workflows/current-main-accessibility-baseline-v2.yml
+      - scripts/ops/probe_current_accessibility.ps1
 permissions:
   contents: write
 jobs:
