@@ -62,6 +62,8 @@ jobs:
           assert 'problems := []string{}' in s[start:end]
           replacement = signature+'\n\treturn checkedRollbackRestoreActivation(activeRoot, stageRoot, preRestore, activeOwner, stageOwner, stageMoved)\n}\n'
           s = s[:start]+replacement+s[end:]
+          assert 'strings.' not in s
+          s = s.replace('\n\t"strings"','',1)
           old = '\tstageRoot := v.Root + ".restore-" + NewID("STAGE")\n\t_ = os.RemoveAll(stageRoot)\n'
           new = '\tstageRoot := v.Root + ".restore-" + NewID("STAGE")\n\tif _, err := os.Lstat(stageRoot); !os.IsNotExist(err) {\n\t\treturn RestoreReceipt{}, errors.New("restore staging route is occupied or unreadable; existing entries preserved")\n\t}\n'
           assert s.count(old) == 1
@@ -98,7 +100,7 @@ jobs:
           passed = sorted(r['Test'] for r in rows if r.get('Action') == 'pass' and r.get('Test'))
           leaves = [s for s in passed if '/' in s or s == 'TestRecoveryRollbackFailureRetainsCause']
           assert len(leaves) == 17, leaves
-          receipt = {'baseline':'4fc6ea21122058bb63182ff456b71256a21305d1','run_id':os.environ['GITHUB_RUN_ID'],'before_failing_leaf_cases':before['failed_leaf_cases'],'after_passing_leaf_cases':leaves,'after_skipped_cases':0,'full_linux_tests':'passed','go_vet':'passed','source_policy':'passed','windows_cross_build':'passed','native_windows_execution':'pending normal PR CI','process_kill_power_loss':'not tested by this slice','initial_harness_run':'33973117677 stopped because it incorrectly expected occupied_active_empty to fail; that old-code case passed and no application change was committed by that run'}
+          receipt = {'baseline':'4fc6ea21122058bb63182ff456b71256a21305d1','run_id':os.environ['GITHUB_RUN_ID'],'before_failing_leaf_cases':before['failed_leaf_cases'],'after_passing_leaf_cases':leaves,'after_skipped_cases':0,'full_linux_tests':'passed','go_vet':'passed','source_policy':'passed','windows_cross_build':'passed','native_windows_execution':'pending normal PR CI','process_kill_power_loss':'not tested by this slice','earlier_failed_qualification_runs':{'33973117677':'harness incorrectly expected occupied_active_empty to fail; old code passed that case','33973240139':'repair compilation stopped on an obsolete strings import'},'failed_run_product_commits':'none; application integration committed only after passing qualification'}
           Path('docs/control/RESTORE_ROLLBACK_QUALIFICATION_20260905.json').write_text(json.dumps(receipt, indent=2)+'\n')
           print(json.dumps(receipt, indent=2))
           PY
