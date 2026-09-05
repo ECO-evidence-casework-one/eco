@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"github.com/ECO-evidence-casework-one/eco/internal/eco"
 	"os"
-	"path/filepath"
 )
 
 func main() {
-	root := filepath.Join(os.TempDir(), "eco-v25-n1-dev-vault")
+	root := eco.DefaultDevelopmentWorkspaceRoot(os.TempDir())
 	v, err := eco.OpenVault(root)
 	if err != nil {
 		panic(err)
 	}
+	defer v.Close()
 	fmt.Println(eco.BuildName)
 	fmt.Printf("Development core opened: %d evidence items at %s\n", len(v.Workspace.Evidence), root)
 	if len(os.Args) > 1 {
