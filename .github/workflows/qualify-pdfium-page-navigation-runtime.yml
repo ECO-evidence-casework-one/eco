@@ -1,0 +1,138 @@
+name: Qualify actual PDFium page navigation runtime
+
+on:
+  push:
+    branches:
+      - ops/pdfium-page-navigation-runtime-20260905
+    paths:
+      - .github/workflows/qualify-pdfium-page-navigation-runtime.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ops/pdfium-page-navigation-runtime-20260905
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.12'
+          cache: false
+      - name: Download and verify exact qualified renderer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path $env:RUNNER_TEMP 'pdfium-nav.exe'
+          Invoke-WebRequest -Uri 'https://github.com/klippa-app/pdfium-cli/releases/download/v0.11.2/pdfium-webassembly-windows-amd64' -OutFile $exe
+          if ((Get-Item $exe).Length -ne 16988160) { throw 'Unexpected pdfium-cli asset size' }
+          $hash=(Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f') { throw "Unexpected pdfium-cli SHA-256: $hash" }
+          "ECO_PDFIUM_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Generate deterministic three-page PDF
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          from pathlib import Path
+          objects = [
+              b'<< /Type /Catalog /Pages 2 0 R >>',
+              b'<< /Type /Pages /Kids [3 0 R 5 0 R 7 0 R] /Count 3 >>',
+              b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 9 0 R >> >> /Contents 4 0 R >>',
+              b'<< /Length 48 >>\nstream\nBT /F1 24 Tf 72 720 Td (PAGE ONE) Tj ET\nendstream',
+              b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 9 0 R >> >> /Contents 6 0 R >>',
+              b'<< /Length 48 >>\nstream\nBT /F1 24 Tf 72 540 Td (PAGE TWO) Tj ET\nendstream',
+              b'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 800] /Resources << /Font << /F1 9 0 R >> >> /Contents 8 0 R >>',
+              b'<< /Length 50 >>\nstream\nBT /F1 24 Tf 50 720 Td (PAGE THREE) Tj ET\nendstream',
+              b'<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+          ]
+          out=bytearray(b'%PDF-1.4\n%\xe2\xe3\xcf\xd3\n')
+          offsets=[0]
+          for i,obj in enumerate(objects,1):
+              offsets.append(len(out)); out += f'{i} 0 obj\n'.encode()+obj+b'\nendobj\n'
+          xref=len(out); out += f'xref\n0 {len(objects)+1}\n'.encode()+b'0000000000 65535 f \n'
+          for off in offsets[1:]: out += f'{off:010d} 00000 n \n'.encode()
+          out += f'trailer\n<< /Size {len(objects)+1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n'.encode()
+          Path('navigation-three-pages.pdf').write_bytes(out)
+          '@ | python -
+          "ECO_NAV_PDF=$((Resolve-Path '.\navigation-three-pages.pdf').Path)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Exercise page count and page-specific rendering through ECO
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          @'
+          package eco
+
+          import (
+              "context"
+              "os"
+              "path/filepath"
+              "testing"
+              "time"
+          )
+
+          func TestQualifiedPDFiumNavigationRuntime(t *testing.T) {
+              exe := os.Getenv("ECO_PDFIUM_EXE")
+              pdf := os.Getenv("ECO_NAV_PDF")
+              if exe == "" || pdf == "" { t.Fatal("qualification paths missing") }
+              v, err := OpenVault(filepath.Join(t.TempDir(), "vault"))
+              if err != nil { t.Fatal(err) }
+              item, duplicate, err := v.ImportFile(pdf, nil)
+              if err != nil { t.Fatal(err) }
+              if duplicate { t.Fatal("fresh qualification PDF reported as duplicate") }
+              if item.DetectedType != "pdf" || !item.SourceVerified { t.Fatalf("unexpected imported PDF state: %+v", item) }
+              ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+              defer cancel()
+              reg, err := v.RegisterLocalToolContext(ctx, "pdfium-cli", exe)
+              if err != nil { t.Fatal(err) }
+              if reg.Version != qualifiedPDFiumCLIVersion || reg.SHA256 != qualifiedPDFiumCLISHA256 { t.Fatalf("unexpected runtime registration: %+v", reg) }
+              info, err := v.PDFEvidenceInfoWithRegisteredPDFiumContext(ctx, item.ID)
+              if err != nil { t.Fatal(err) }
+              if info.PageCount != 3 || info.SourceObject != item.ObjectFile || info.SourceSHA256 != item.SHA256 { t.Fatalf("unexpected page-count receipt: %+v", info) }
+              dims := [][2]int{}
+              for page := 1; page <= 3; page++ {
+                  rendered, err := v.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, item.ID, page, 1200)
+                  if err != nil { t.Fatalf("page %d render failed: %v", page, err) }
+                  if rendered.Page != page || rendered.SourceObject != item.ObjectFile || rendered.SourceSHA256 != item.SHA256 || len(rendered.PNG) == 0 { t.Fatalf("page %d result is not source-bound: %+v", page, rendered) }
+                  dims = append(dims, [2]int{rendered.Width, rendered.Height})
+              }
+              if dims[0] == dims[1] || dims[1] == dims[2] || dims[0] == dims[2] { t.Fatalf("distinct source page shapes did not produce distinct dimensions: %#v", dims) }
+              if _, err := v.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, item.ID, 4, 1200); err == nil { t.Fatal("out-of-range page 4 unexpectedly rendered") }
+              t.Logf("PDFIUM_NAVIGATION_PASS page_count=%d dimensions=%v", info.PageCount, dims)
+          }
+          '@ | Set-Content -Encoding utf8 internal\eco\pdfium_navigation_runtime_test.go
+          go test ./internal/eco -run '^TestQualifiedPDFiumNavigationRuntime$' -count=1 -v | Tee-Object -FilePath pdfium-navigation-runtime.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path pdfium-navigation-runtime.log -Pattern 'PDFIUM_NAVIGATION_PASS page_count=3' -Quiet)) { throw 'Navigation PASS marker missing' }
+          Remove-Item internal\eco\pdfium_navigation_runtime_test.go -Force
+      - name: Commit text-only qualification receipt
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $lines=@(
+            '# PDFium multi-page navigation runtime qualification','',
+            'Date: 2026-09-05','',
+            'Status: PASS on GitHub-hosted Windows. This is not the controlling 8 GB Acer performance qualification.','',
+            '- Runtime: klippa-app/pdfium-cli v0.11.2 Windows WebAssembly',
+            '- SHA-256: b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f',
+            '- ECO opened a fresh vault and preserved a deterministic three-page PDF.',
+            '- ECO registered the exact runtime through the normal verified local-tool registry.',
+            '- PDFEvidenceInfoWithRegisteredPDFium reported exactly 3 pages and remained bound to the preserved object/SHA-256.',
+            '- ECO rendered pages 1, 2 and 3 through the registered preserved-source workflow; deliberately different page shapes produced different dimensions.',
+            '- Page 4 was rejected.',
+            ('- Actions run: ' + $env:GITHUB_RUN_ID),
+            '- No renderer binary or rendered page was uploaded as a repository artifact.'
+          )
+          New-Item -ItemType Directory -Force docs\foss\qualification | Out-Null
+          $lines | Set-Content -Encoding utf8 docs\foss\qualification\PDFIUM_PAGE_NAVIGATION_RUNTIME_20260905.md
+          git config user.name 'ECO GitHub qualification bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/foss/qualification/PDFIUM_PAGE_NAVIGATION_RUNTIME_20260905.md
+          git diff --cached --check
+          git commit -m 'Record PDFium page navigation runtime qualification'
+          git push origin HEAD:ops/pdfium-page-navigation-runtime-20260905
