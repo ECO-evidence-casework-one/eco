@@ -17,6 +17,19 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - name: Repair generator escaping
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('scripts/ops/apply_search_ui.py')
+          s = p.read_text(encoding='utf-8')
+          old = 'Run the search again.\\r\\n\\r\\n"+errText'
+          new = 'Run the search again.\\\\r\\\\n\\\\r\\\\n"+errText'
+          if s.count(old) != 1:
+              raise SystemExit(f'escape repair anchor count={s.count(old)}')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+          PY
       - name: Apply controlled native UI patch
         run: python3 scripts/ops/apply_search_ui.py
       - name: Format and qualify
