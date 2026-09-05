@@ -21,6 +21,9 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	mbox "github.com/emersion/go-mbox"
+	pdf "github.com/ledongthuc/pdf"
 )
 
 const maxExtractBytes = int64(24 * 1024 * 1024)
@@ -50,8 +53,12 @@ func ExtractReadable(path, typ string) (string, []SourceSegment, []string) {
 		text, err = extractOpenDocument(path)
 	case "eml":
 		text, err = extractEML(path)
+	case "mbox":
+		text, err = extractMBOX(path)
 	case "zip":
 		text, err = inspectZIP(path)
+	case "pdf":
+		return extractPDFReadable(path)
 	default:
 		return "", nil, warnings
 	}
@@ -65,6 +72,115 @@ func ExtractReadable(path, typ string) (string, []SourceSegment, []string) {
 		warnings = append(warnings, "Extracted text was bounded to 24 MiB for this preview.")
 	}
 	return text, segmentText(text), warnings
+}
+
+const (
+	maxNativePDFPages      = 10000
+	maxNativePDFSegments   = 20000
+	maxNativePDFInputBytes = int64(512 * 1024 * 1024)
+)
+
+func extractPDFReadable(path string) (text string, segments []SourceSegment, warnings []string) {
+	defer func() {
+		if recover() != nil {
+			text = ""
+			segments = nil
+			warnings = []string{"The original PDF was preserved, but native PDF parsing stopped safely after an unexpected parser failure."}
+		}
+	}()
+
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction could not open the reading copy: " + err.Error()}
+	}
+	if !info.Mode().IsRegular() {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction requires a regular file reading copy."}
+	}
+	if info.Size() > maxNativePDFInputBytes {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction was skipped because the file exceeds ECO's 512 MiB parser safety bound."}
+	}
+
+	f, reader, err := pdf.Open(path)
+	if err != nil {
+		return "", nil, []string{"The original PDF was preserved, but native PDF extraction could not open its structure: " + boundPDFExtractDiagnostic(err.Error())}
+	}
+	defer f.Close()
+
+	pages := reader.NumPage()
+	if pages <= 0 {
+		return "", nil, []string{"The original PDF was preserved, but no readable PDF pages were declared."}
+	}
+	if pages > maxNativePDFPages {
+		return "", nil, []string{fmt.Sprintf("The original PDF was preserved, but native PDF extraction was skipped because it declares %d pages (limit %d).", pages, maxNativePDFPages)}
+	}
+
+	var out strings.Builder
+	ordinal := 1
+	bounded := false
+	for pageIndex := 1; pageIndex <= pages; pageIndex++ {
+		page := reader.Page(pageIndex)
+		pageText, pageErr := page.GetPlainText(nil)
+		if pageErr != nil {
+			warnings = append(warnings, fmt.Sprintf("PDF page %d native text extraction did not complete: %s", pageIndex, boundPDFExtractDiagnostic(pageErr.Error())))
+			continue
+		}
+		pageText = normalizeText(pageText)
+		if pageText == "" {
+			continue
+		}
+
+		header := fmt.Sprintf("Page %d\n", pageIndex)
+		separator := ""
+		if out.Len() > 0 {
+			separator = "\n\n"
+		}
+		remaining := int(maxExtractBytes) - out.Len() - len(separator) - len(header)
+		if remaining <= 0 {
+			bounded = true
+			break
+		}
+		if len(pageText) > remaining {
+			pageText = strings.ToValidUTF8(pageText[:remaining], "�")
+			bounded = true
+		}
+		out.WriteString(separator)
+		out.WriteString(header)
+		out.WriteString(pageText)
+
+		for _, seg := range segmentText(pageText) {
+			if len(segments) >= maxNativePDFSegments {
+				bounded = true
+				break
+			}
+			seg.ID = fmt.Sprintf("SEG-PDF-%04d", ordinal)
+			seg.Ordinal = ordinal
+			seg.Page = pageIndex
+			seg.PageHint = fmt.Sprintf("Page %d", pageIndex)
+			seg.Origin = "pdf-native"
+			segments = append(segments, seg)
+			ordinal++
+		}
+		if bounded {
+			break
+		}
+	}
+	if bounded {
+		warnings = append(warnings, "Native PDF text extraction reached ECO's bounded text/segment limit; the preserved original remains authoritative.")
+	}
+	text = normalizeText(out.String())
+	if text == "" && len(warnings) == 0 {
+		warnings = append(warnings, "The PDF contains no extractable native text. A registered local OCR path may be required for scanned pages.")
+	}
+	return text, segments, warnings
+}
+
+func boundPDFExtractDiagnostic(text string) string {
+	text = strings.TrimSpace(text)
+	runes := []rune(text)
+	if len(runes) > 512 {
+		return string(runes[:512]) + "…"
+	}
+	return text
 }
 
 func extractPlainFamily(path, typ string) (string, error) {
@@ -383,13 +499,23 @@ func extractOpenDocument(path string) (string, error) {
 	return xmlText(d, map[string]bool{"p": true, "h": true, "table-row": true}), nil
 }
 
+const (
+	maxMBOXScanBytes    = int64(256 * 1024 * 1024)
+	maxMBOXMessageBytes = int64(8 * 1024 * 1024)
+	maxMBOXMessages     = 10000
+)
+
 func extractEML(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	msg, err := mail.ReadMessage(bufio.NewReader(io.LimitReader(f, maxExtractBytes)))
+	return extractMailReader(io.LimitReader(f, maxExtractBytes))
+}
+
+func extractMailReader(r io.Reader) (string, error) {
+	msg, err := mail.ReadMessage(bufio.NewReader(r))
 	if err != nil {
 		return "", err
 	}
@@ -418,6 +544,7 @@ func extractEML(path string) (string, error) {
 				s := string(d)
 				if strings.Contains(pct, "html") {
 					s = tagRE.ReplaceAllString(scriptRE.ReplaceAllString(s, " "), "\n")
+					s = html.UnescapeString(s)
 				}
 				b.WriteString(s)
 				b.WriteByte('\n')
@@ -428,6 +555,73 @@ func extractEML(path string) (string, error) {
 		b.Write(d)
 	}
 	return b.String(), nil
+}
+
+func extractMBOX(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return "", err
+	}
+	reader := mbox.NewReader(io.LimitReader(f, maxMBOXScanBytes))
+	var out strings.Builder
+	messages := 0
+	for messages < maxMBOXMessages {
+		messageReader, nextErr := reader.NextMessage()
+		if nextErr == io.EOF {
+			break
+		}
+		if nextErr != nil {
+			if messages == 0 {
+				return "", nextErr
+			}
+			fmt.Fprintf(&out, "[Mailbox parsing stopped after message %d: %s]\n", messages, boundMailboxDiagnostic(nextErr.Error()))
+			break
+		}
+		messages++
+		raw, readErr := io.ReadAll(io.LimitReader(messageReader, maxMBOXMessageBytes+1))
+		if readErr != nil {
+			fmt.Fprintf(&out, "Message %d\n[Message could not be read safely: %s]\n\n", messages, boundMailboxDiagnostic(readErr.Error()))
+			continue
+		}
+		if int64(len(raw)) > maxMBOXMessageBytes {
+			fmt.Fprintf(&out, "Message %d\n[Message exceeds ECO's 8 MiB automatic-reading limit and was not decoded.]\n\n", messages)
+			continue
+		}
+		text, parseErr := extractMailReader(bytes.NewReader(raw))
+		if parseErr != nil {
+			fmt.Fprintf(&out, "Message %d\n[Message headers/body could not be decoded safely: %s]\n\n", messages, boundMailboxDiagnostic(parseErr.Error()))
+			continue
+		}
+		fmt.Fprintf(&out, "Message %d\n%s\n\n", messages, strings.TrimSpace(text))
+		if out.Len() >= int(maxExtractBytes) {
+			out.WriteString("[Mailbox readable preview reached ECO's 24 MiB extracted-text bound.]\n")
+			break
+		}
+	}
+	if messages >= maxMBOXMessages {
+		fmt.Fprintf(&out, "[Mailbox preview reached the %d-message automatic-reading limit.]\n", maxMBOXMessages)
+	}
+	if info.Size() > maxMBOXScanBytes {
+		fmt.Fprintf(&out, "[Mailbox is larger than ECO's %s automatic scan window; later content was not read in this preview.]\n", HumanBytes(maxMBOXScanBytes))
+	}
+	if messages == 0 && strings.TrimSpace(out.String()) == "" {
+		return "", fmt.Errorf("mailbox contains no readable mbox messages")
+	}
+	return out.String(), nil
+}
+
+func boundMailboxDiagnostic(text string) string {
+	text = strings.TrimSpace(text)
+	runes := []rune(text)
+	if len(runes) > 384 {
+		return string(runes[:384]) + "…"
+	}
+	return text
 }
 
 func inspectZIP(path string) (string, error) {

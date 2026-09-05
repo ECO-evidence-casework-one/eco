@@ -9,8 +9,8 @@ import (
 func TestLlamaCPPWorkflowCarriesResourceAssessmentIntoAudit(t *testing.T) {
 	v, _ := testGroundingVault(t)
 	resources := ResourceAssessment{
-		Level:   "elevated",
-		Blocked: false,
+		Level:    "elevated",
+		Blocked:  false,
 		Warnings: []string{"CPU usage is already high"},
 		Snapshot: ResourceSnapshot{
 			CPUSampled:           true,

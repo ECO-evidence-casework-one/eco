@@ -96,14 +96,14 @@ func TestPDFCPUWorkflowRecordsNonPassingRelaxedValidationWithoutCallingItCorrupt
 	v, item := testPDFCPUVault(t)
 	fake := func(_ context.Context, _ string, _ string, source SourceReceipt) (PDFAssessment, error) {
 		return PDFAssessment{
-			EngineVersion:            "pdfcpu test-build",
-			SourceObject:             source.ObjectFile,
-			SourceSHA256:             source.SHA256,
-			CreatedAt:                time.Now().UTC(),
-			RelaxedValidationPassed:  false,
-			RelaxedValidationError:   "validation failed",
-			StrictValidationPassed:   false,
-			Warnings: []string{"The original remains preserved; this may also represent unsupported/password-protected input."},
+			EngineVersion:           "pdfcpu test-build",
+			SourceObject:            source.ObjectFile,
+			SourceSHA256:            source.SHA256,
+			CreatedAt:               time.Now().UTC(),
+			RelaxedValidationPassed: false,
+			RelaxedValidationError:  "validation failed",
+			StrictValidationPassed:  false,
+			Warnings:                []string{"The original remains preserved; this may also represent unsupported/password-protected input."},
 		}, nil
 	}
 	assessment, err := v.inspectEvidencePDFWithRunner(context.Background(), item.ID, "ignored", fake)
@@ -141,14 +141,14 @@ func TestPDFCPUWorkflowRejectsAssessmentWithWrongSourceBinding(t *testing.T) {
 	v, item := testPDFCPUVault(t)
 	fake := func(_ context.Context, _ string, _ string, source SourceReceipt) (PDFAssessment, error) {
 		return PDFAssessment{
-			EngineVersion:            "pdfcpu test-build",
-			SourceObject:             source.ObjectFile,
-			SourceSHA256:             strings.Repeat("0", 64),
-			CreatedAt:                time.Now().UTC(),
-			RelaxedValidationPassed:  true,
-			StrictValidationPassed:   true,
-			Version:                  "1.7",
-			PageCount:                1,
+			EngineVersion:           "pdfcpu test-build",
+			SourceObject:            source.ObjectFile,
+			SourceSHA256:            strings.Repeat("0", 64),
+			CreatedAt:               time.Now().UTC(),
+			RelaxedValidationPassed: true,
+			StrictValidationPassed:  true,
+			Version:                 "1.7",
+			PageCount:               1,
 		}, nil
 	}
 	_, err := v.inspectEvidencePDFWithRunner(context.Background(), item.ID, "ignored", fake)
@@ -161,12 +161,12 @@ func TestPDFCPUWorkflowRejectsPassingAssessmentWithoutPageIdentity(t *testing.T)
 	v, item := testPDFCPUVault(t)
 	fake := func(_ context.Context, _ string, _ string, source SourceReceipt) (PDFAssessment, error) {
 		return PDFAssessment{
-			EngineVersion:            "pdfcpu test-build",
-			SourceObject:             source.ObjectFile,
-			SourceSHA256:             source.SHA256,
-			CreatedAt:                time.Now().UTC(),
-			RelaxedValidationPassed:  true,
-			StrictValidationPassed:   true,
+			EngineVersion:           "pdfcpu test-build",
+			SourceObject:            source.ObjectFile,
+			SourceSHA256:            source.SHA256,
+			CreatedAt:               time.Now().UTC(),
+			RelaxedValidationPassed: true,
+			StrictValidationPassed:  true,
 		}, nil
 	}
 	_, err := v.inspectEvidencePDFWithRunner(context.Background(), item.ID, "ignored", fake)

@@ -18,6 +18,14 @@ func (v *Vault) OCRImageWithTesseract(evidenceID, executable, language string) e
 // OCRImageWithTesseractContext is the cancellable form of
 // OCRImageWithTesseract. It performs no download or network operation.
 func (v *Vault) OCRImageWithTesseractContext(ctx context.Context, evidenceID, executable, language string) error {
+	return v.ocrImageWithTesseractContext(ctx, evidenceID, executable, language, "")
+}
+
+func (v *Vault) OCRImageWithTesseractRuntimeContext(ctx context.Context, evidenceID, executable, language, tessdataDir string) error {
+	return v.ocrImageWithTesseractContext(ctx, evidenceID, executable, language, tessdataDir)
+}
+
+func (v *Vault) ocrImageWithTesseractContext(ctx context.Context, evidenceID, executable, language, tessdataDir string) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -39,11 +47,12 @@ func (v *Vault) OCRImageWithTesseractContext(ctx context.Context, evidenceID, ex
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		result, resultSegments, runErr := RunTesseractOCR(
+		result, resultSegments, runErr := RunTesseractOCRWithTessdata(
 			ctx,
 			executable,
 			path,
 			language,
+			tessdataDir,
 			source,
 			item.Image.Width,
 			item.Image.Height,

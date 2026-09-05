@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	maxEvidenceEventBatch       = 250_000
-	maxEventIdentityText        = 256
-	maxEventFieldText           = 4_096
-	maxEventLargeFieldText      = 32_768
-	defaultCorrelationMaxLinks  = 50_000
-	defaultCorrelationMaxScans  = 2_000_000
-	maxCorrelationLinksHard     = 250_000
-	maxCorrelationScansHard     = 10_000_000
+	maxEvidenceEventBatch      = 250_000
+	maxEventIdentityText       = 256
+	maxEventFieldText          = 4_096
+	maxEventLargeFieldText     = 32_768
+	defaultCorrelationMaxLinks = 50_000
+	defaultCorrelationMaxScans = 2_000_000
+	maxCorrelationLinksHard    = 250_000
+	maxCorrelationScansHard    = 10_000_000
 )
 
 const maxLinksPerEntityShare = 0.10
@@ -104,16 +104,16 @@ type EntityEventLink struct {
 }
 
 type EventCorrelation struct {
-	LinkID             string  `json:"link_id"`
-	EventIDA           string  `json:"event_id_a"`
-	EventIDB           string  `json:"event_id_b"`
-	RelationshipType   string  `json:"relationship_type"`
-	Basis              string  `json:"basis"`
-	SharedEntityID     string  `json:"shared_entity_id,omitempty"`
-	SharedEntityType   string  `json:"shared_entity_type,omitempty"`
-	SharedEntityValue  string  `json:"shared_entity_value,omitempty"`
-	TimeDeltaSeconds   float64 `json:"time_delta_seconds"`
-	Confidence         string  `json:"confidence"`
+	LinkID            string  `json:"link_id"`
+	EventIDA          string  `json:"event_id_a"`
+	EventIDB          string  `json:"event_id_b"`
+	RelationshipType  string  `json:"relationship_type"`
+	Basis             string  `json:"basis"`
+	SharedEntityID    string  `json:"shared_entity_id,omitempty"`
+	SharedEntityType  string  `json:"shared_entity_type,omitempty"`
+	SharedEntityValue string  `json:"shared_entity_value,omitempty"`
+	TimeDeltaSeconds  float64 `json:"time_delta_seconds"`
+	Confidence        string  `json:"confidence"`
 }
 
 type EventCorrelationOptions struct {
@@ -124,17 +124,17 @@ type EventCorrelationOptions struct {
 }
 
 type EventIntelligenceResult struct {
-	EvidenceID          string             `json:"evidence_id"`
-	SourceObject        string             `json:"source_object"`
-	SourceSHA256        string             `json:"source_sha256"`
-	Events              []NormalizedEvent  `json:"events"`
-	Entities            []EventEntity      `json:"entities"`
-	EntityEventLinks    []EntityEventLink  `json:"entity_event_links"`
-	Correlations        []EventCorrelation `json:"correlations"`
-	ScannedPairs        int                `json:"scanned_pairs"`
-	SuppressedPossible  int                `json:"suppressed_possible"`
-	CrowdedOutStrong    int                `json:"crowded_out_strong"`
-	ScanLimitReached    bool               `json:"scan_limit_reached"`
+	EvidenceID         string             `json:"evidence_id"`
+	SourceObject       string             `json:"source_object"`
+	SourceSHA256       string             `json:"source_sha256"`
+	Events             []NormalizedEvent  `json:"events"`
+	Entities           []EventEntity      `json:"entities"`
+	EntityEventLinks   []EntityEventLink  `json:"entity_event_links"`
+	Correlations       []EventCorrelation `json:"correlations"`
+	ScannedPairs       int                `json:"scanned_pairs"`
+	SuppressedPossible int                `json:"suppressed_possible"`
+	CrowdedOutStrong   int                `json:"crowded_out_strong"`
+	ScanLimitReached   bool               `json:"scan_limit_reached"`
 }
 
 // AnalyzeEvidenceEvents gives a parser a verified ECO reading copy, normalizes
@@ -368,7 +368,9 @@ var eventEntityFields = []struct {
 	{"file_hash", "hash", func(e NormalizedEvent) string { return e.FileHash }},
 	{"process_name", "process", func(e NormalizedEvent) string { return e.ProcessName }},
 	{"dst_port", "port", func(e NormalizedEvent) string {
-		if e.DstPort == nil { return "" }
+		if e.DstPort == nil {
+			return ""
+		}
 		return fmt.Sprintf("%d", *e.DstPort)
 	}},
 }
@@ -418,8 +420,12 @@ func BuildEventEntityIndex(events []NormalizedEvent) ([]EventEntity, []EntityEve
 		links = append(links, link)
 	}
 	sort.Slice(links, func(i, j int) bool {
-		if links[i].EventID != links[j].EventID { return links[i].EventID < links[j].EventID }
-		if links[i].Field != links[j].Field { return links[i].Field < links[j].Field }
+		if links[i].EventID != links[j].EventID {
+			return links[i].EventID < links[j].EventID
+		}
+		if links[i].Field != links[j].Field {
+			return links[i].Field < links[j].Field
+		}
 		return links[i].EntityID < links[j].EntityID
 	})
 	return entities, links
@@ -474,7 +480,9 @@ func CorrelateNormalizedEvents(events []NormalizedEvent, entities []EventEntity,
 		}
 	}
 	sort.Slice(timestamped, func(i, j int) bool {
-		if timestamped[i].Timestamp.Equal(*timestamped[j].Timestamp) { return timestamped[i].EventID < timestamped[j].EventID }
+		if timestamped[i].Timestamp.Equal(*timestamped[j].Timestamp) {
+			return timestamped[i].EventID < timestamped[j].EventID
+		}
 		return timestamped[i].Timestamp.Before(*timestamped[j].Timestamp)
 	})
 
@@ -575,18 +583,30 @@ func strongestSharedEntity(eventA, eventB string, linksByEvent map[string][]Enti
 
 func correlationEntityPriority(entityType string) int {
 	switch entityType {
-	case "user": return 0
-	case "hostname": return 1
-	case "device": return 2
-	case "ip_address": return 3
-	case "domain": return 4
-	case "url": return 5
-	case "file": return 6
-	case "hash": return 7
-	case "process": return 8
-	case "network_connection": return 9
-	case "port": return 100
-	default: return 50
+	case "user":
+		return 0
+	case "hostname":
+		return 1
+	case "device":
+		return 2
+	case "ip_address":
+		return 3
+	case "domain":
+		return 4
+	case "url":
+		return 5
+	case "file":
+		return 6
+	case "hash":
+		return 7
+	case "process":
+		return 8
+	case "network_connection":
+		return 9
+	case "port":
+		return 100
+	default:
+		return 50
 	}
 }
 

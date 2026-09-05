@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -37,6 +38,8 @@ const (
 	msgVerifyDone     = WM_APP + 8
 	msgPreviewReady   = WM_APP + 9
 	msgMatterDone     = WM_APP + 10
+	msgRuntimeDone    = WM_APP + 11
+	msgPDFPageReady   = WM_APP + 50
 )
 
 type hitRegion struct {
@@ -72,7 +75,9 @@ type application struct {
 	previewErr                                                                string
 	matterCreated                                                             string
 	matterErr                                                                 string
+	runtimeNotice                                                             string
 	pendingCitationRegion                                                     *eco.NormalizedRegion
+	pendingCitationPage                                                       int
 }
 
 var app *application
@@ -81,6 +86,13 @@ var previews = map[uintptr]*previewState{}
 
 type previewState struct {
 	itemID        string
+	isPDF         bool
+	pdfPage       int
+	pdfPages      int
+	pdfTargetPage int
+	pdfLoading    bool
+	pdfErr        string
+	sourceTitle   string
 	title         string
 	original      image.Image
 	image         image.Image
@@ -343,6 +355,17 @@ func mainWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 				invalidate(hw)
 			}
 		}
+		invalidate(hwnd)
+		return 0
+	case msgRuntimeDone:
+		app.mu.Lock()
+		notice := app.runtimeNotice
+		app.runtimeNotice = ""
+		app.importing = false
+		app.progress = eco.ImportProgress{}
+		app.mu.Unlock()
+		app.refreshView()
+		messageBox(hwnd, "Local OCR runtime ready", notice, MB_OK|MB_ICONINFORMATION)
 		invalidate(hwnd)
 		return 0
 	case msgMatterDone:
@@ -863,7 +886,7 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 		drawTextFont(hdc, f.body, RECT{r.Left + 15, r.Top + 34, r.Right - 15, r.Bottom - 7}, a.fontSmall, rgb(66, 90, 92), DT_LEFT|DT_WORDBREAK)
 	}
 
-	buttonTop := rc.Bottom - 108
+	buttonTop := rc.Bottom - 160
 	if buttonTop < y+4*rowStep+8 {
 		buttonTop = y + 4*rowStep + 8
 	}
@@ -875,6 +898,16 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 	w2 := (right - x - gapB) / 2
 	a.drawButton(hdc, "backup", "Create encrypted backup", RECT{x, buttonTop + 52, x + w2, buttonTop + 94}, true)
 	a.drawButton(hdc, "restore", "Restore encrypted backup", RECT{x + w2 + gapB, buttonTop + 52, right, buttonTop + 94}, false)
+	tesseractLabel := "Locate verified Tesseract runtime"
+	if reg, err := a.vault.RegisteredTesseractRuntimeBundle(); err == nil {
+		tesseractLabel = "Tesseract " + reg.Version + " — verified runtime registered"
+	}
+	a.drawButton(hdc, "tesseractRuntime", tesseractLabel, RECT{x, buttonTop + 104, x + w2, buttonTop + 146}, false)
+	pdfRendererLabel := "Locate verified PDF page renderer"
+	if reg, err := a.vault.RegisteredLocalTool("pdfium-cli"); err == nil {
+		pdfRendererLabel = "PDF renderer " + reg.Version + " — verified runtime registered"
+	}
+	a.drawButton(hdc, "pdfRenderer", pdfRendererLabel, RECT{x + w2 + gapB, buttonTop + 104, right, buttonTop + 146}, false)
 	if a.processing() {
 		a.drawProgress(hdc, RECT{x, buttonTop - 68, right, buttonTop - 10})
 	}
@@ -937,6 +970,10 @@ func (a *application) handleClick(x, y int32, double bool) {
 				a.verifyEvidence()
 			case "openVault":
 				exec.Command("explorer.exe", a.vault.Root).Start()
+			case "tesseractRuntime":
+				a.locateTesseractRuntime()
+			case "pdfRenderer":
+				a.locatePDFRenderer()
 			case "lowSensory":
 				go func() {
 					_, _ = a.vault.ToggleLowSensory()
@@ -1061,6 +1098,40 @@ func (a *application) chooseFiles() {
 	if len(paths) > 0 {
 		a.beginImport(paths)
 	}
+}
+
+func (a *application) locatePDFRenderer() {
+	path := openExecutableDialog(a.hwnd, "Locate the verified pdfium-cli v0.11.2 WebAssembly renderer")
+	if path == "" {
+		return
+	}
+	a.mu.Lock()
+	if a.importing {
+		a.mu.Unlock()
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	a.importing = true
+	a.progress = eco.ImportProgress{Name: filepath.Base(path), Stage: "Verifying PDF renderer SHA-256 and self-check"}
+	a.mu.Unlock()
+	invalidate(a.hwnd)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_, err := a.vault.RegisterLocalToolContext(ctx, "pdfium-cli", path)
+		if err != nil {
+			a.mu.Lock()
+			a.lastErr = "PDF renderer registration failed: " + err.Error()
+			a.mu.Unlock()
+			procPostMessageW.Call(a.hwnd, msgImportError, 0, 0)
+			return
+		}
+		a.mu.Lock()
+		a.importing = false
+		a.progress = eco.ImportProgress{}
+		a.mu.Unlock()
+		procPostMessageW.Call(a.hwnd, msgRefresh, 0, 0)
+	}()
 }
 
 func (a *application) chooseFolder() {
@@ -1241,6 +1312,7 @@ func (a *application) openCitation(index int) {
 			} else {
 				a.pendingCitationRegion = nil
 			}
+			a.pendingCitationPage = c.Page
 			a.mu.Unlock()
 			note := "Select OK to open the preserved source preview next."
 			if c.Region != nil {
@@ -1261,6 +1333,84 @@ func (a *application) openSelectedPreview() {
 		a.selected = 0
 	}
 	e := a.view.Evidence[a.selected]
+	if e.DetectedType == "pdf" {
+		a.mu.Lock()
+		if a.importing {
+			a.mu.Unlock()
+			messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish before rendering a PDF page.", MB_OK|MB_ICONINFORMATION)
+			return
+		}
+		page := a.pendingCitationPage
+		if page < 1 {
+			page = 1
+		}
+		a.pendingCitationPage = 0
+		var highlight *eco.NormalizedRegion
+		if a.pendingCitationRegion != nil {
+			region := *a.pendingCitationRegion
+			highlight = &region
+			a.pendingCitationRegion = nil
+		}
+		a.mu.Unlock()
+		if _, err := a.vault.RegisteredLocalTool("pdfium-cli"); err != nil {
+			if e.ExtractedText != "" {
+				text := e.ExtractedText
+				if len([]rune(text)) > 1400 {
+					text = string([]rune(text)[:1400]) + "\r\n\r\n[Text preview bounded here.]"
+				}
+				messageBox(a.hwnd, "PDF visual renderer not registered — readable text available", "To enable visual PDF pages, open Trust & Settings and choose ‘Locate verified PDF page renderer’.\r\n\r\n"+text, MB_OK|MB_ICONINFORMATION)
+			} else {
+				messageBox(a.hwnd, "PDF visual renderer not registered", "Open Trust & Settings and choose ‘Locate verified PDF page renderer’, then select the exact qualified pdfium-cli v0.11.2 WebAssembly executable.", MB_OK|MB_ICONINFORMATION)
+			}
+			return
+		}
+		a.mu.Lock()
+		a.importing = true
+		a.progress = eco.ImportProgress{Name: e.SafeName, Stage: fmt.Sprintf("Rendering verified PDF page %d locally", page)}
+		a.mu.Unlock()
+		invalidate(a.hwnd)
+		go func(item eco.EvidenceItem, page int, highlight *eco.NormalizedRegion) {
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			pageCount := 0
+			if info, infoErr := a.vault.PDFEvidenceInfoWithRegisteredPDFiumContext(ctx, item.ID); infoErr == nil {
+				pageCount = info.PageCount
+				if page > pageCount {
+					err := fmt.Errorf("PDF page %d is outside this document's %d pages", page, pageCount)
+					a.mu.Lock()
+					a.previewErr = err.Error()
+					a.mu.Unlock()
+					procPostMessageW.Call(a.hwnd, msgPreviewReady, 0, 0)
+					return
+				}
+			}
+			rendered, err := a.vault.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, item.ID, page, 1600)
+			if err == nil {
+				var img image.Image
+				img, _, err = eco.DecodeSupportedImage(rendered.PNG)
+				if err == nil {
+					assessment := eco.AssessImage(img)
+					previewImage := eco.BoundedPreviewImage(img, 8_000_000)
+					title := fmt.Sprintf("%s — page %d", item.SafeName, page)
+					if pageCount > 0 {
+						title = fmt.Sprintf("%s — page %d of %d", item.SafeName, page, pageCount)
+					}
+					state := &previewState{itemID: item.ID, isPDF: true, pdfPage: page, pdfPages: pageCount, sourceTitle: item.SafeName, title: title, original: previewImage, rotation: 0, mode: "original", zoom: 1, assessment: assessment, cropRect: previewImage.Bounds(), highlight: highlight}
+					state.rebuild()
+					a.mu.Lock()
+					a.pendingPreview = state
+					a.mu.Unlock()
+				}
+			}
+			if err != nil {
+				a.mu.Lock()
+				a.previewErr = err.Error()
+				a.mu.Unlock()
+			}
+			procPostMessageW.Call(a.hwnd, msgPreviewReady, 0, 0)
+		}(e, page, highlight)
+		return
+	}
 	if e.Image != nil {
 		a.mu.Lock()
 		if a.importing {
@@ -1460,6 +1610,37 @@ func (a *application) createQuickMatter() {
 	}()
 }
 
+func (a *application) locateTesseractRuntime() {
+	root := openFolderDialogWithTitle(a.hwnd, "Select the extracted ECO Tesseract Wave 4 runtime folder")
+	if root == "" {
+		return
+	}
+	a.mu.Lock()
+	if a.importing {
+		a.mu.Unlock()
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	a.importing = true
+	a.progress = eco.ImportProgress{Name: filepath.Base(root), Stage: "Verifying complete Tesseract runtime"}
+	a.mu.Unlock()
+	a.setPage("settings")
+	go func() {
+		registration, err := a.vault.RegisterTesseractRuntimeBundle(root)
+		if err != nil {
+			a.mu.Lock()
+			a.lastErr = err.Error()
+			a.mu.Unlock()
+			procPostMessageW.Call(a.hwnd, msgImportError, 0, 0)
+			return
+		}
+		a.mu.Lock()
+		a.runtimeNotice = fmt.Sprintf("ECO verified the complete GitHub-built Tesseract runtime.\r\n\r\nVersion: %s\r\nRuntime: %s\r\n\r\nThe executable, DLLs, eng/osd language data and Wave 4 control receipts will be re-verified before OCR is allowed to run.", registration.Version, registration.Root)
+		a.mu.Unlock()
+		procPostMessageW.Call(a.hwnd, msgRuntimeDone, 0, 0)
+	}()
+}
+
 func (a *application) reviewCount() int {
 	n := 0
 	for _, e := range a.view.Evidence {
@@ -1474,6 +1655,7 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		drawPreview(hwnd)
 		return 0
 	case WM_KEYDOWN:
+		pdfTarget := 0
 		previewMu.Lock()
 		p := previews[hwnd]
 		if p != nil {
@@ -1482,12 +1664,22 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 				previewMu.Unlock()
 				procDestroyWindow.Call(hwnd)
 				return 0
+			case VK_LEFT, VK_PRIOR:
+				if p.isPDF && !p.pdfLoading && p.pdfPages > 0 && p.pdfPage > 1 {
+					pdfTarget = p.pdfPage - 1
+				}
+			case VK_RIGHT, VK_NEXT:
+				if p.isPDF && !p.pdfLoading && p.pdfPages > 0 && p.pdfPage < p.pdfPages {
+					pdfTarget = p.pdfPage + 1
+				}
 			case 'R':
 				p.rotation = (p.rotation + 90) % 360
 				p.rebuild()
-				_ = app.vault.SetRotation(p.itemID, p.rotation)
+				if !p.isPDF {
+					_ = app.vault.SetRotation(p.itemID, p.rotation)
+				}
 			case 'C':
-				if p.highlight != nil {
+				if p.isPDF || p.highlight != nil {
 					break
 				}
 				if p.cropRect != p.original.Bounds() && !p.cropRect.Empty() {
@@ -1495,7 +1687,7 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 					p.rebuild()
 				}
 			case 'D':
-				if p.highlight != nil {
+				if p.isPDF || p.highlight != nil {
 					break
 				}
 				if math.Abs(p.assessment.SkewCorrectionDegrees) >= 0.25 && p.assessment.SkewConfidence >= 0.08 {
@@ -1532,6 +1724,23 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 			}
 		}
 		previewMu.Unlock()
+		if pdfTarget > 0 {
+			requestPDFPreviewPage(hwnd, pdfTarget)
+		}
+		invalidate(hwnd)
+		return 0
+	case msgPDFPageReady:
+		previewMu.Lock()
+		p := previews[hwnd]
+		errText := ""
+		if p != nil {
+			errText = p.pdfErr
+			p.pdfErr = ""
+		}
+		previewMu.Unlock()
+		if errText != "" {
+			messageBox(hwnd, "PDF page unavailable", errText, MB_OK|MB_ICONERROR)
+		}
 		invalidate(hwnd)
 		return 0
 	case WM_MOUSEWHEEL:
@@ -1561,6 +1770,60 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 	}
 	r, _, _ := procDefWindowProcW.Call(hwnd, uintptr(msg), wparam, lparam)
 	return r
+}
+
+func requestPDFPreviewPage(hwnd uintptr, target int) {
+	previewMu.Lock()
+	p := previews[hwnd]
+	if p == nil || !p.isPDF || p.pdfLoading || p.pdfPages < 1 || target < 1 || target > p.pdfPages || target == p.pdfPage {
+		previewMu.Unlock()
+		return
+	}
+	itemID := p.itemID
+	p.pdfLoading = true
+	p.pdfTargetPage = target
+	p.pdfErr = ""
+	previewMu.Unlock()
+	invalidate(hwnd)
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		rendered, err := app.vault.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, itemID, target, 1600)
+		var previewImage image.Image
+		var assessment eco.ImageAssessment
+		if err == nil {
+			var img image.Image
+			img, _, err = eco.DecodeSupportedImage(rendered.PNG)
+			if err == nil {
+				assessment = eco.AssessImage(img)
+				previewImage = eco.BoundedPreviewImage(img, 8_000_000)
+			}
+		}
+		previewMu.Lock()
+		current := previews[hwnd]
+		if current == nil || current.itemID != itemID {
+			previewMu.Unlock()
+			return
+		}
+		current.pdfLoading = false
+		current.pdfTargetPage = 0
+		if err != nil {
+			current.pdfErr = err.Error()
+			previewMu.Unlock()
+			procPostMessageW.Call(hwnd, msgPDFPageReady, 0, 0)
+			return
+		}
+		current.pdfPage = target
+		current.title = fmt.Sprintf("%s — page %d of %d", current.sourceTitle, target, current.pdfPages)
+		current.original = previewImage
+		current.assessment = assessment
+		current.cropRect = previewImage.Bounds()
+		current.highlight = nil
+		current.rebuild()
+		previewMu.Unlock()
+		procPostMessageW.Call(hwnd, msgPDFPageReady, 0, 0)
+	}()
 }
 
 func (p *previewState) rebuild() {
@@ -1634,7 +1897,17 @@ func drawPreview(hwnd uintptr) {
 		highlightState = " · exact source region highlighted"
 	}
 	drawTextFont(hdc, fmt.Sprintf("%d × %d · rotation %d° · %s · %s · %s · zoom %.0f%%%s", p.width, p.height, p.rotation, p.mode, cropState, deskewState, p.zoom*100, highlightState), RECT{24, 39, rc.Right - 24, 64}, app.fontSmall, rgb(196, 232, 228), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
-	drawTextFont(hdc, "R rotate · C auto-crop · D deskew · O original · G greyscale · H fixed contrast · A adaptive · Q quality · +/− zoom · Esc close", RECT{24, 63, rc.Right - 24, 90}, app.fontSmall, rgb(218, 242, 238), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	controls := "R rotate · C auto-crop · D deskew · O original · G greyscale · H fixed contrast · A adaptive · Q quality · +/− zoom · Esc close"
+	if p.isPDF {
+		if p.pdfLoading {
+			controls = fmt.Sprintf("Rendering PDF page %d of %d locally…", p.pdfTargetPage, p.pdfPages)
+		} else if p.pdfPages > 0 {
+			controls = fmt.Sprintf("PDF page %d of %d · ←/→ or PageUp/PageDown change page · R rotate view · +/− zoom · Esc close", p.pdfPage, p.pdfPages)
+		} else {
+			controls = fmt.Sprintf("PDF page %d · page count unavailable · R rotate view · +/− zoom · Esc close", p.pdfPage)
+		}
+	}
+	drawTextFont(hdc, controls, RECT{24, 63, rc.Right - 24, 90}, app.fontSmall, rgb(218, 242, 238), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	availW := float64(rc.Right - 40)
 	availH := float64(rc.Bottom - 126)
 	scale := minFloat(availW/float64(p.width), availH/float64(p.height)) * p.zoom
@@ -1767,6 +2040,17 @@ func openFileDialog(owner uintptr) ([]string, error) {
 	}
 	return out, nil
 }
+func openExecutableDialog(owner uintptr, title string) string {
+	buf := make([]uint16, 32768)
+	filter := multiString([]string{"Windows executable", "*.exe", "All files", "*.*"})
+	ofn := OPENFILENAME{LStructSize: uint32(unsafe.Sizeof(OPENFILENAME{})), HwndOwner: owner, LpstrFilter: &filter[0], NFilterIndex: 1, LpstrFile: &buf[0], NMaxFile: uint32(len(buf)), LpstrTitle: utf16Ptr(title), Flags: OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY}
+	r, _, _ := procGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
+	if r == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(buf)
+}
+
 func multiString(parts []string) []uint16 {
 	out := []uint16{}
 	for _, s := range parts {
@@ -1804,8 +2088,15 @@ func droppedPaths(hdrop uintptr) []string {
 }
 
 func openFolderDialog(owner uintptr) string {
+	return openFolderDialogWithTitle(owner, "Add an evidence folder — symbolic links will not be followed")
+}
+
+func openFolderDialogWithTitle(owner uintptr, title string) string {
+	if strings.TrimSpace(title) == "" {
+		title = "Select a folder"
+	}
 	display := make([]uint16, 260)
-	bi := BROWSEINFO{HwndOwner: owner, PszDisplayName: &display[0], LpszTitle: utf16Ptr("Add an evidence folder — symbolic links will not be followed"), UlFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX}
+	bi := BROWSEINFO{HwndOwner: owner, PszDisplayName: &display[0], LpszTitle: utf16Ptr(title), UlFlags: BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE | BIF_EDITBOX}
 	pidl, _, _ := procSHBrowseForFolderW.Call(uintptr(unsafe.Pointer(&bi)))
 	if pidl == 0 {
 		return ""

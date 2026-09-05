@@ -23,14 +23,15 @@ type localToolSpec struct {
 }
 
 var localToolSpecs = map[string]localToolSpec{
-	"tesseract": {Kind: "tesseract", Upstream: "tesseract-ocr/tesseract", License: "Apache-2.0"},
-	"docling":   {Kind: "docling", Upstream: "docling-project/docling", License: "MIT"},
-	"ocrmypdf":  {Kind: "ocrmypdf", Upstream: "ocrmypdf/OCRmyPDF", License: "MPL-2.0"},
-	"llama.cpp": {Kind: "llama.cpp", Upstream: "ggml-org/llama.cpp", License: "MIT"},
-	"pdfcpu":    {Kind: "pdfcpu", Upstream: "pdfcpu/pdfcpu", License: "Apache-2.0"},
+	"tesseract":  {Kind: "tesseract", Upstream: "tesseract-ocr/tesseract", License: "Apache-2.0"},
+	"docling":    {Kind: "docling", Upstream: "docling-project/docling", License: "MIT"},
+	"ocrmypdf":   {Kind: "ocrmypdf", Upstream: "ocrmypdf/OCRmyPDF", License: "MPL-2.0"},
+	"llama.cpp":  {Kind: "llama.cpp", Upstream: "ggml-org/llama.cpp", License: "MIT"},
+	"pdfcpu":     {Kind: "pdfcpu", Upstream: "pdfcpu/pdfcpu", License: "Apache-2.0"},
+	"pdfium-cli": {Kind: "pdfium-cli", Upstream: "klippa-app/pdfium-cli", License: "MIT"},
 }
 
-var localToolOrder = []string{"tesseract", "docling", "ocrmypdf", "llama.cpp", "pdfcpu"}
+var localToolOrder = []string{"tesseract", "docling", "ocrmypdf", "llama.cpp", "pdfcpu", "pdfium-cli"}
 
 type LocalToolRegistration struct {
 	Kind          string    `json:"kind"`
@@ -59,6 +60,8 @@ func canonicalLocalToolKind(kind string) (localToolSpec, error) {
 		kind = "llama.cpp"
 	case "pdfcpu":
 		kind = "pdfcpu"
+	case "pdfium-cli", "pdfium", "pdfium-renderer":
+		kind = "pdfium-cli"
 	default:
 		return localToolSpec{}, fmt.Errorf("unsupported local tool kind %q", strings.TrimSpace(kind))
 	}
@@ -85,6 +88,8 @@ func localToolVersion(ctx context.Context, kind, executable string) (string, err
 		return llamaCPPVersion(ctx, executable)
 	case "pdfcpu":
 		return pdfcpuVersion(ctx, executable)
+	case "pdfium-cli":
+		return pdfiumCLIVersion(ctx, executable)
 	default:
 		return "", errors.New("local tool version probe is unavailable")
 	}
@@ -352,6 +357,13 @@ func (v *Vault) OCRImageWithRegisteredTesseract(evidenceID, language string) err
 }
 
 func (v *Vault) OCRImageWithRegisteredTesseractContext(ctx context.Context, evidenceID, language string) error {
+	bundle, bundleErr := v.VerifyRegisteredTesseractRuntimeBundleContext(ctx)
+	if bundleErr == nil {
+		return v.OCRImageWithTesseractRuntimeContext(ctx, evidenceID, bundle.Executable, language, bundle.TessdataDir)
+	}
+	if !errors.Is(bundleErr, os.ErrNotExist) {
+		return bundleErr
+	}
 	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "tesseract")
 	if err != nil {
 		return err

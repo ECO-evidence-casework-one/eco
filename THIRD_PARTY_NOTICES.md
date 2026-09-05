@@ -24,3 +24,28 @@ That historical record is not authoritative for later source commits or a future
 ## Release authority
 
 P0 issue #15 controls the future actual-build SBOM, licence, notice and provenance package. No executable, public binary, ordinary-user test or release is approved by this source-level notice file.
+
+
+## ledongthuc/pdf — native PDF reader
+
+- Upstream: `https://github.com/ledongthuc/pdf`
+- Exact source commit: `b3c860c2375335b0bc6676c430107a553725991d`
+- Licence: BSD-3-Clause; verbatim licence retained at `third_party/ledongthuc_pdf/LICENSE`.
+- ECO compatibility change: the vendored local module declares Go 1.23 instead of upstream's Go 1.24.1 module directive; qualified source files are otherwise copied from the exact upstream commit.
+- Purpose: bounded, page-aware native-text extraction from PDFs. Scanned/image-only PDFs still require a separately registered local OCR path.
+
+
+## emersion/go-mbox — MBOX message framing
+
+- Upstream: `https://github.com/emersion/go-mbox`
+- Exact acquired commit: `1345da99f1254a23f517ffdc979f92359442473d`
+- Licence: MIT.
+- ECO use: bounded, read-only MBOX message framing before ECO's existing MIME/email extraction.
+
+## Qualified optional PDF page-rendering runtime (not bundled)
+
+- `klippa-app/pdfium-cli` release `v0.11.2`, exact source-tag commit `260c846dbbd180fdc478a2771e9dae9914164846`.
+- ECO accepts only the single-file Windows WebAssembly asset `pdfium-webassembly-windows-amd64`, 16,988,160 bytes, SHA-256 `b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f`.
+- `pdfium-cli` is MIT licensed. Upstream states its embedded Wazero and PDFium components are Apache-2.0 licensed.
+- The renderer is an optional caller-located local executable. It is not committed into this source repository and ECO does not download it at runtime.
+- ECO re-verifies the executable before each use, materialises only a freshly verified temporary reading copy of the preserved PDF, renders a bounded temporary PNG, and deletes both temporary derivatives afterwards.
