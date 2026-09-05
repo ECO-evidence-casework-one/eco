@@ -27,15 +27,15 @@ import (
 )
 
 const (
-	qualifierVersion            = "ECO-PDF-LOW-SPEC-20260905.1"
-	qualifiedRuntimeName        = "pdfium-webassembly-windows-amd64.exe"
-	qualifiedRuntimeBytes int64 = 16988160
-	qualifiedRuntimeSHA256      = "b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f"
-	adapterWidth                = 1600
-	functionalTimeout           = 45 * time.Second
-	acceptMedianMillis    int64 = 10000
-	acceptWorstMillis     int64 = 15000
-	acceptPeakMiB               = 768.0
+	qualifierVersion             = "ECO-PDF-LOW-SPEC-20260905.1"
+	qualifiedRuntimeName         = "pdfium-webassembly-windows-amd64.exe"
+	qualifiedRuntimeBytes  int64 = 16988160
+	qualifiedRuntimeSHA256       = "b56c3c405111ae68cc99b225f8627ea25ec5a7cb3188bdfca67b4cac5df2189f"
+	adapterWidth                 = 1600
+	functionalTimeout            = 45 * time.Second
+	acceptMedianMillis     int64 = 10000
+	acceptWorstMillis      int64 = 15000
+	acceptPeakMiB                = 768.0
 )
 
 var (
@@ -44,15 +44,15 @@ var (
 )
 
 type hardwareInfo struct {
-	OS                 string `json:"os"`
-	Architecture       string `json:"architecture"`
-	Processor          string `json:"processor"`
-	LogicalCPUs        int    `json:"logical_cpus"`
-	MemoryTotalBytes   uint64 `json:"memory_total_bytes,omitempty"`
-	MemoryAvailBytes   uint64 `json:"memory_available_bytes,omitempty"`
+	OS                 string  `json:"os"`
+	Architecture       string  `json:"architecture"`
+	Processor          string  `json:"processor"`
+	LogicalCPUs        int     `json:"logical_cpus"`
+	MemoryTotalBytes   uint64  `json:"memory_total_bytes,omitempty"`
+	MemoryAvailBytes   uint64  `json:"memory_available_bytes,omitempty"`
 	MemoryUsedPercent  float64 `json:"memory_used_percent,omitempty"`
-	MemorySampled      bool   `json:"memory_sampled"`
-	ResourceAssessment string `json:"resource_assessment,omitempty"`
+	MemorySampled      bool    `json:"memory_sampled"`
+	ResourceAssessment string  `json:"resource_assessment,omitempty"`
 }
 
 type pageSample struct {
@@ -422,6 +422,10 @@ func finalizeReport(report *qualificationReport) {
 	report.ReportPath = txtPath
 	if data, err := json.MarshalIndent(report, "", "  "); err == nil {
 		_ = os.WriteFile(jsonPath, data, 0600)
+	}
+	if os.Getenv("ECO_QUALIFIER_CI") == "1" {
+		fmt.Printf("ECO_QUALIFIER_STATUS=%s\n", report.Status)
+		return
 	}
 	_ = exec.Command("notepad.exe", txtPath).Start()
 	icon := uintptr(0x40) // MB_ICONINFORMATION
