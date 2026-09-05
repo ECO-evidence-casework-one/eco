@@ -19,7 +19,7 @@ func TestDoclingSourceRejectsInconsistentPreservation(t *testing.T) {
 	now := time.Now().UTC()
 	item := EvidenceItem{
 		ID: "EVD-1", SafeName: "report.pdf", Size: 10,
-		SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		SHA256:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		ObjectFile: "EVD-1.ecoobj", Preservation: preservationCommitted,
 		SourceVerified: true, SourceVerifiedAt: now, DetectedType: "pdf",
 	}
@@ -40,7 +40,7 @@ func TestDoclingSourceAcceptsVerifiedCommittedEvidence(t *testing.T) {
 	now := time.Now().UTC()
 	item := EvidenceItem{
 		ID: "EVD-1", SafeName: "report.pdf", Size: 10,
-		SHA256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		SHA256:     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		ObjectFile: "EVD-1.ecoobj", Preservation: preservationCommitted,
 		SourceVerified: true, SourceVerifiedAt: now, DetectedType: "pdf",
 	}

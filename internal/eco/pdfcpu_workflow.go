@@ -99,19 +99,19 @@ func (v *Vault) recordPDFCPUAssessment(item EvidenceItem, assessment PDFAssessme
 	oldUpdatedAt := v.Workspace.UpdatedAt
 	oldBuildID := v.Workspace.BuildID
 	v.addChangeUnlocked("pdfcpu-worker", "pdf-structure-inspected", "Inspected preserved PDF structure for "+item.SafeName, map[string]any{
-		"id":                         item.ID,
-		"object_file":                item.ObjectFile,
-		"source_sha256":              item.SHA256,
-		"engine":                     "pdfcpu",
-		"engine_version":             truncate(assessment.EngineVersion, maxOCRIdentityText),
-		"relaxed_validation_passed":  assessment.RelaxedValidationPassed,
-		"strict_validation_passed":   assessment.StrictValidationPassed,
-		"pdf_version":                truncate(assessment.Version, maxOCRIdentityText),
-		"page_count":                 assessment.PageCount,
-		"encrypted":                  assessment.Encrypted,
-		"signatures":                 assessment.Signatures,
-		"form":                       assessment.Form,
-		"attachments":                assessment.AttachmentCount,
+		"id":                          item.ID,
+		"object_file":                 item.ObjectFile,
+		"source_sha256":               item.SHA256,
+		"engine":                      "pdfcpu",
+		"engine_version":              truncate(assessment.EngineVersion, maxOCRIdentityText),
+		"relaxed_validation_passed":   assessment.RelaxedValidationPassed,
+		"strict_validation_passed":    assessment.StrictValidationPassed,
+		"pdf_version":                 truncate(assessment.Version, maxOCRIdentityText),
+		"page_count":                  assessment.PageCount,
+		"encrypted":                   assessment.Encrypted,
+		"signatures":                  assessment.Signatures,
+		"form":                        assessment.Form,
+		"attachments":                 assessment.AttachmentCount,
 		"inspection_is_content_truth": false,
 	})
 	if err := v.saveUnlocked(); err != nil {

@@ -9,12 +9,12 @@ import (
 )
 
 type LlamaCPPAnswerResult struct {
-	Question      QuestionRecord    `json:"question"`
-	Grounding     GroundingReport   `json:"grounding"`
-	EngineVersion string            `json:"engine_version"`
-	ModelName     string            `json:"model_name"`
-	ModelSHA256   string            `json:"model_sha256"`
-	ContextID     string            `json:"context_id"`
+	Question      QuestionRecord     `json:"question"`
+	Grounding     GroundingReport    `json:"grounding"`
+	EngineVersion string             `json:"engine_version"`
+	ModelName     string             `json:"model_name"`
+	ModelSHA256   string             `json:"model_sha256"`
+	ContextID     string             `json:"context_id"`
 	Resources     ResourceAssessment `json:"resources"`
 }
 
@@ -243,12 +243,12 @@ func (v *Vault) recordLlamaResourceBlock(question string, model LlamaCPPModelRes
 	oldUpdatedAt := v.Workspace.UpdatedAt
 	oldBuildID := v.Workspace.BuildID
 	details := map[string]any{
-		"question":      truncate(question, 300),
-		"context_id":    grounding.ContextID,
-		"engine":        "llama.cpp",
-		"engine_version": truncate(model.EngineVersion, maxOCRIdentityText),
-		"model_name":    truncate(model.ModelName, maxOCRIdentityText),
-		"model_sha256":  model.ModelSHA256,
+		"question":           truncate(question, 300),
+		"context_id":         grounding.ContextID,
+		"engine":             "llama.cpp",
+		"engine_version":     truncate(model.EngineVersion, maxOCRIdentityText),
+		"model_name":         truncate(model.ModelName, maxOCRIdentityText),
+		"model_sha256":       model.ModelSHA256,
 		"generation_started": false,
 	}
 	addResourceAuditDetails(details, model.Resources)

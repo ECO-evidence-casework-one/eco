@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"image"
@@ -75,6 +76,7 @@ type application struct {
 	matterErr                                                                 string
 	runtimeNotice                                                             string
 	pendingCitationRegion                                                     *eco.NormalizedRegion
+	pendingCitationPage                                                       int
 }
 
 var app *application
@@ -83,6 +85,8 @@ var previews = map[uintptr]*previewState{}
 
 type previewState struct {
 	itemID        string
+	isPDF         bool
+	pdfPage       int
 	title         string
 	original      image.Image
 	image         image.Image
@@ -876,7 +880,7 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 		drawTextFont(hdc, f.body, RECT{r.Left + 15, r.Top + 34, r.Right - 15, r.Bottom - 7}, a.fontSmall, rgb(66, 90, 92), DT_LEFT|DT_WORDBREAK)
 	}
 
-	buttonTop := rc.Bottom - 108
+	buttonTop := rc.Bottom - 160
 	if buttonTop < y+4*rowStep+8 {
 		buttonTop = y + 4*rowStep + 8
 	}
@@ -892,7 +896,12 @@ func (a *application) drawTrust(hdc uintptr, rc RECT) {
 	if reg, err := a.vault.RegisteredTesseractRuntimeBundle(); err == nil {
 		tesseractLabel = "Tesseract " + reg.Version + " — verified runtime registered"
 	}
-	a.drawButton(hdc, "tesseractRuntime", tesseractLabel, RECT{x, buttonTop + 104, right, buttonTop + 146}, false)
+	a.drawButton(hdc, "tesseractRuntime", tesseractLabel, RECT{x, buttonTop + 104, x + w2, buttonTop + 146}, false)
+	pdfRendererLabel := "Locate verified PDF page renderer"
+	if reg, err := a.vault.RegisteredLocalTool("pdfium-cli"); err == nil {
+		pdfRendererLabel = "PDF renderer " + reg.Version + " — verified runtime registered"
+	}
+	a.drawButton(hdc, "pdfRenderer", pdfRendererLabel, RECT{x + w2 + gapB, buttonTop + 104, right, buttonTop + 146}, false)
 	if a.processing() {
 		a.drawProgress(hdc, RECT{x, buttonTop - 68, right, buttonTop - 10})
 	}
@@ -957,6 +966,8 @@ func (a *application) handleClick(x, y int32, double bool) {
 				exec.Command("explorer.exe", a.vault.Root).Start()
 			case "tesseractRuntime":
 				a.locateTesseractRuntime()
+			case "pdfRenderer":
+				a.locatePDFRenderer()
 			case "lowSensory":
 				go func() {
 					_, _ = a.vault.ToggleLowSensory()
@@ -1081,6 +1092,40 @@ func (a *application) chooseFiles() {
 	if len(paths) > 0 {
 		a.beginImport(paths)
 	}
+}
+
+func (a *application) locatePDFRenderer() {
+	path := openExecutableDialog(a.hwnd, "Locate the verified pdfium-cli v0.11.2 WebAssembly renderer")
+	if path == "" {
+		return
+	}
+	a.mu.Lock()
+	if a.importing {
+		a.mu.Unlock()
+		messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish.", MB_OK|MB_ICONINFORMATION)
+		return
+	}
+	a.importing = true
+	a.progress = eco.ImportProgress{Name: filepath.Base(path), Stage: "Verifying PDF renderer SHA-256 and self-check"}
+	a.mu.Unlock()
+	invalidate(a.hwnd)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		_, err := a.vault.RegisterLocalToolContext(ctx, "pdfium-cli", path)
+		if err != nil {
+			a.mu.Lock()
+			a.lastErr = "PDF renderer registration failed: " + err.Error()
+			a.mu.Unlock()
+			procPostMessageW.Call(a.hwnd, msgImportError, 0, 0)
+			return
+		}
+		a.mu.Lock()
+		a.importing = false
+		a.progress = eco.ImportProgress{}
+		a.mu.Unlock()
+		procPostMessageW.Call(a.hwnd, msgRefresh, 0, 0)
+	}()
 }
 
 func (a *application) chooseFolder() {
@@ -1261,6 +1306,7 @@ func (a *application) openCitation(index int) {
 			} else {
 				a.pendingCitationRegion = nil
 			}
+			a.pendingCitationPage = c.Page
 			a.mu.Unlock()
 			note := "Select OK to open the preserved source preview next."
 			if c.Region != nil {
@@ -1281,6 +1327,68 @@ func (a *application) openSelectedPreview() {
 		a.selected = 0
 	}
 	e := a.view.Evidence[a.selected]
+	if e.DetectedType == "pdf" {
+		a.mu.Lock()
+		if a.importing {
+			a.mu.Unlock()
+			messageBox(a.hwnd, "ECO is already processing", "Wait for the current local task to finish before rendering a PDF page.", MB_OK|MB_ICONINFORMATION)
+			return
+		}
+		page := a.pendingCitationPage
+		if page < 1 {
+			page = 1
+		}
+		a.pendingCitationPage = 0
+		var highlight *eco.NormalizedRegion
+		if a.pendingCitationRegion != nil {
+			region := *a.pendingCitationRegion
+			highlight = &region
+			a.pendingCitationRegion = nil
+		}
+		a.mu.Unlock()
+		if _, err := a.vault.RegisteredLocalTool("pdfium-cli"); err != nil {
+			if e.ExtractedText != "" {
+				text := e.ExtractedText
+				if len([]rune(text)) > 1400 {
+					text = string([]rune(text)[:1400]) + "\r\n\r\n[Text preview bounded here.]"
+				}
+				messageBox(a.hwnd, "PDF visual renderer not registered — readable text available", "To enable visual PDF pages, open Trust & Settings and choose ‘Locate verified PDF page renderer’.\r\n\r\n"+text, MB_OK|MB_ICONINFORMATION)
+			} else {
+				messageBox(a.hwnd, "PDF visual renderer not registered", "Open Trust & Settings and choose ‘Locate verified PDF page renderer’, then select the exact qualified pdfium-cli v0.11.2 WebAssembly executable.", MB_OK|MB_ICONINFORMATION)
+			}
+			return
+		}
+		a.mu.Lock()
+		a.importing = true
+		a.progress = eco.ImportProgress{Name: e.SafeName, Stage: fmt.Sprintf("Rendering verified PDF page %d locally", page)}
+		a.mu.Unlock()
+		invalidate(a.hwnd)
+		go func(item eco.EvidenceItem, page int, highlight *eco.NormalizedRegion) {
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			rendered, err := a.vault.RenderEvidencePDFPageWithRegisteredPDFiumContext(ctx, item.ID, page, 1600)
+			if err == nil {
+				var img image.Image
+				img, _, err = eco.DecodeSupportedImage(rendered.PNG)
+				if err == nil {
+					assessment := eco.AssessImage(img)
+					previewImage := eco.BoundedPreviewImage(img, 8_000_000)
+					state := &previewState{itemID: item.ID, isPDF: true, pdfPage: page, title: fmt.Sprintf("%s — page %d", item.SafeName, page), original: previewImage, rotation: 0, mode: "original", zoom: 1, assessment: assessment, cropRect: previewImage.Bounds(), highlight: highlight}
+					state.rebuild()
+					a.mu.Lock()
+					a.pendingPreview = state
+					a.mu.Unlock()
+				}
+			}
+			if err != nil {
+				a.mu.Lock()
+				a.previewErr = err.Error()
+				a.mu.Unlock()
+			}
+			procPostMessageW.Call(a.hwnd, msgPreviewReady, 0, 0)
+		}(e, page, highlight)
+		return
+	}
 	if e.Image != nil {
 		a.mu.Lock()
 		if a.importing {
@@ -1536,9 +1644,11 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 			case 'R':
 				p.rotation = (p.rotation + 90) % 360
 				p.rebuild()
-				_ = app.vault.SetRotation(p.itemID, p.rotation)
+				if !p.isPDF {
+					_ = app.vault.SetRotation(p.itemID, p.rotation)
+				}
 			case 'C':
-				if p.highlight != nil {
+				if p.isPDF || p.highlight != nil {
 					break
 				}
 				if p.cropRect != p.original.Bounds() && !p.cropRect.Empty() {
@@ -1546,7 +1656,7 @@ func previewWndProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 					p.rebuild()
 				}
 			case 'D':
-				if p.highlight != nil {
+				if p.isPDF || p.highlight != nil {
 					break
 				}
 				if math.Abs(p.assessment.SkewCorrectionDegrees) >= 0.25 && p.assessment.SkewConfidence >= 0.08 {
@@ -1685,7 +1795,11 @@ func drawPreview(hwnd uintptr) {
 		highlightState = " · exact source region highlighted"
 	}
 	drawTextFont(hdc, fmt.Sprintf("%d × %d · rotation %d° · %s · %s · %s · zoom %.0f%%%s", p.width, p.height, p.rotation, p.mode, cropState, deskewState, p.zoom*100, highlightState), RECT{24, 39, rc.Right - 24, 64}, app.fontSmall, rgb(196, 232, 228), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
-	drawTextFont(hdc, "R rotate · C auto-crop · D deskew · O original · G greyscale · H fixed contrast · A adaptive · Q quality · +/− zoom · Esc close", RECT{24, 63, rc.Right - 24, 90}, app.fontSmall, rgb(218, 242, 238), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
+	controls := "R rotate · C auto-crop · D deskew · O original · G greyscale · H fixed contrast · A adaptive · Q quality · +/− zoom · Esc close"
+	if p.isPDF {
+		controls = fmt.Sprintf("PDF page %d · R rotate view · O original · G greyscale · H fixed contrast · A adaptive · +/− zoom · Esc close", p.pdfPage)
+	}
+	drawTextFont(hdc, controls, RECT{24, 63, rc.Right - 24, 90}, app.fontSmall, rgb(218, 242, 238), DT_LEFT|DT_SINGLELINE|DT_END_ELLIPSIS)
 	availW := float64(rc.Right - 40)
 	availH := float64(rc.Bottom - 126)
 	scale := minFloat(availW/float64(p.width), availH/float64(p.height)) * p.zoom
@@ -1818,6 +1932,17 @@ func openFileDialog(owner uintptr) ([]string, error) {
 	}
 	return out, nil
 }
+func openExecutableDialog(owner uintptr, title string) string {
+	buf := make([]uint16, 32768)
+	filter := multiString([]string{"Windows executable", "*.exe", "All files", "*.*"})
+	ofn := OPENFILENAME{LStructSize: uint32(unsafe.Sizeof(OPENFILENAME{})), HwndOwner: owner, LpstrFilter: &filter[0], NFilterIndex: 1, LpstrFile: &buf[0], NMaxFile: uint32(len(buf)), LpstrTitle: utf16Ptr(title), Flags: OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_HIDEREADONLY}
+	r, _, _ := procGetOpenFileNameW.Call(uintptr(unsafe.Pointer(&ofn)))
+	if r == 0 {
+		return ""
+	}
+	return syscall.UTF16ToString(buf)
+}
+
 func multiString(parts []string) []uint16 {
 	out := []uint16{}
 	for _, s := range parts {
