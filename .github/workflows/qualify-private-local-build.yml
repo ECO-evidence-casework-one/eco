@@ -1,0 +1,128 @@
+name: Qualify private local Windows preparation
+on:
+  push:
+    branches: [integration/private-local-build-handoff-20260905]
+    paths: [.github/workflows/qualify-private-local-build.yml]
+permissions:
+  contents: write
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/integration/private-local-build-handoff-20260905'
+    runs-on: windows-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 8
+      - name: Check the script under Windows PowerShell 5.1 and retain native output only on the host
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($PSVersionTable.PSVersion.Major -ne 5) { throw 'This qualification must exercise Windows PowerShell 5.1.' }
+          $p = Join-Path $PWD 'scripts/prepare-private-local-build.ps1'
+          $s = [IO.File]::ReadAllText($p)
+          $old = '& $Go @Arguments'
+          if (($s.Split(@($old),[StringSplitOptions]::None).Length - 1) -ne 1) { throw 'Native-output anchor mismatch.' }
+          # Native output must not contaminate the returned receipt object.
+          [IO.File]::WriteAllText($p,$s.Replace($old,'& $Go @Arguments | Out-Host'),(New-Object Text.UTF8Encoding($false)))
+          $tokens = $null; $errors = $null
+          [void][Management.Automation.Language.Parser]::ParseFile($p,[ref]$tokens,[ref]$errors)
+          if ($errors.Count) { throw ($errors | Out-String) }
+          & ./scripts/test-private-local-build.ps1
+          if ($LASTEXITCODE -and $LASTEXITCODE -ne 17) { throw 'Unexpected self-test native state.' }
+      - name: Freeze the source archive and independently build its reference fingerprint
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          . ./scripts/prepare-private-local-build.ps1 -LibraryOnly
+          $commit = '8b69a669b003fe30e84f1d344aa7533eb9cd9045'
+          $root = Join-Path $env:RUNNER_TEMP 'eco-private-reference'
+          [void][IO.Directory]::CreateDirectory($root)
+          $ProgressPreference = 'SilentlyContinue'
+          $sourceZip = Join-Path $root 'source.zip'
+          Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/ECO-evidence-casework-one/eco/zip/$commit" -OutFile $sourceZip -TimeoutSec 300
+          $sourceHash = (Get-FileHash -LiteralPath $sourceZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Expand-EcoCheckedZip $sourceZip (Join-Path $root 'source') "eco-$commit/"
+          $canonicalZip = Join-Path $root 'canonical.zip'
+          & git archive --format=zip "--output=$canonicalZip" $commit
+          if ($LASTEXITCODE -ne 0) { throw 'Could not obtain the exact Git source tree.' }
+          Expand-EcoCheckedZip $canonicalZip (Join-Path $root 'canonical')
+          $files = @(Get-ChildItem -LiteralPath (Join-Path $root 'canonical') -Recurse -File)
+          $actualFiles = @(Get-ChildItem -LiteralPath (Join-Path $root 'source') -Recurse -File)
+          if ($files.Count -ne $actualFiles.Count) { throw 'Source archive file count differs from exact Git tree.' }
+          foreach ($f in $files) {
+              $relative = $f.FullName.Substring((Join-Path $root 'canonical').Length).TrimStart('\')
+              $expected = (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+              [void](Assert-EcoHash (Join-Path (Join-Path $root 'source') $relative) $expected)
+          }
+          $goZip = Join-Path $root 'go.zip'
+          Get-EcoCheckedDownload 'https://go.dev/dl/go1.23.12.windows-amd64.zip' $goZip '07c35866cdd864b81bb6f1cfbf25ac7f87ddc3a976ede1bf5112acbb12dfe6dc'
+          Expand-EcoCheckedZip $goZip (Join-Path $root 'compiler')
+          $env:GOROOT = Join-Path $root 'compiler\go'
+          $go = Join-Path $env:GOROOT 'bin\go.exe'
+          $env:GOENV='off'; $env:GOTOOLCHAIN='local'; $env:GOWORK='off'; $env:GOTELEMETRY='off'
+          $env:GOPATH=Join-Path $root 'cache'; $env:GOCACHE=Join-Path $root 'cache\build'; $env:GOMODCACHE=Join-Path $root 'cache\modules'
+          $env:GOOS='windows'; $env:GOARCH='amd64'; $env:GOAMD64='v1'; $env:CGO_ENABLED='0'
+          $env:GOFLAGS='-mod=readonly -buildvcs=false'; $env:GOPROXY='https://proxy.golang.org'; $env:GOSUMDB='sum.golang.org'
+          Set-Location (Join-Path $root 'source')
+          $exe = Join-Path $root 'ECO-reference.exe'
+          $flags="-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$commit"
+          & $go build -trimpath -buildvcs=false -ldflags $flags -o $exe ./cmd/eco
+          if ($LASTEXITCODE -ne 0) { throw 'Independent reference build failed.' }
+          $expectedExe=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          $manifest=[ordered]@{
+              schema=1; source_commit=$commit; source_archive_sha256=$sourceHash; executable_sha256=$expectedExe
+              executable_size=(Get-Item -LiteralPath $exe).Length; compiler='go1.23.12 windows/amd64'
+              compiler_archive_sha256='07c35866cdd864b81bb6f1cfbf25ac7f87ddc3a976ede1bf5112acbb12dfe6dc'
+              recipient='synthetic-qualification-only'; purpose='Private synthetic-data acceptance preparation; not a public release'
+              expires_utc='2026-09-12T23:59:59Z'; signature='NotSigned'; app_launched=$false
+              qualified_source_files=$files.Count; qualification_run=$env:GITHUB_RUN_ID
+              original_main_ci=33979546078; original_vcs_stamped_exe_sha256='e77b9eb380fdadf4a9eeb233d5a946e27fa06497fad5dfd8146ed643a9844815'
+              recipe_note='Same frozen application source; archive build deliberately omits automatic VCS stamp but injects full SourceCommit. This distinct recipe is separately qualified.'
+          }
+          $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $root 'reference-manifest.json') -Encoding UTF8
+      - name: Run the actual preparation script with fresh downloads and fresh caches
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $kit=Join-Path $env:RUNNER_TEMP 'eco-private-kit'
+          [void][IO.Directory]::CreateDirectory($kit)
+          Copy-Item -LiteralPath ./scripts/prepare-private-local-build.ps1 -Destination (Join-Path $kit 'PREPARE.ps1')
+          $manifest=Join-Path $env:RUNNER_TEMP 'eco-private-reference\reference-manifest.json'
+          $destination=Join-Path $env:RUNNER_TEMP 'eco-private-rehearsal'
+          & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File (Join-Path $kit 'PREPARE.ps1') -ManifestPath $manifest -OutputRoot $destination -NoPrompt
+          if ($LASTEXITCODE -ne 0) { throw 'Actual user-facing preparation failed.' }
+          $receipt=Get-Content -LiteralPath (Join-Path $destination 'candidate\build-receipt.json') -Raw | ConvertFrom-Json
+          if ($receipt.app_launched -ne $false -or $receipt.expected_fingerprint -cne 'PASS' -or $receipt.signature_status -cne 'NotSigned') { throw 'Incorrect private-build receipt.' }
+          $first=Get-Content -LiteralPath (Join-Path $kit 'BUILD_RESULT.txt') -Raw
+          if (-not $first.Contains('PREPARATION PASSED')) { throw 'User-facing result missing.' }
+          # Retrying at an occupied output route must refuse without changing it.
+          $before=(Get-FileHash -LiteralPath (Join-Path $destination 'candidate\ECO.exe') -Algorithm SHA256).Hash
+          & powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File (Join-Path $kit 'PREPARE.ps1') -ManifestPath $manifest -OutputRoot $destination -NoPrompt
+          if ($LASTEXITCODE -eq 0) { throw 'Existing output was accepted.' }
+          $after=(Get-FileHash -LiteralPath (Join-Path $destination 'candidate\ECO.exe') -Algorithm SHA256).Hash
+          if ($before -cne $after) { throw 'Refused retry changed existing output.' }
+          $m=Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json
+          $m | Add-Member -NotePropertyName preparer_sha256 -NotePropertyValue ((Get-FileHash -LiteralPath ./scripts/prepare-private-local-build.ps1 -Algorithm SHA256).Hash.ToLowerInvariant())
+          $m | Add-Member -NotePropertyName preparer_controls -NotePropertyValue '11/11 PASS; actual Windows PowerShell 5.1 build/rebuild/reference match PASS; occupied-output retry refused without mutation'
+          Write-Host 'PRIVATE_MANIFEST_BEGIN'
+          $m | ConvertTo-Json -Depth 6 | Write-Host
+          Write-Host 'PRIVATE_MANIFEST_END'
+          Write-Host 'No ECO executable was launched, signed, uploaded or publicly distributed.'
+      - name: Commit only the qualified preparer output fix
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          & git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Whitespace error.' }
+          & git fetch origin integration/private-local-build-handoff-20260905
+          if ($LASTEXITCODE -ne 0) { throw 'Fetch failed.' }
+          $actual=& git rev-parse FETCH_HEAD
+          if ($LASTEXITCODE -ne 0 -or $actual -cne $env:GITHUB_SHA) { throw 'Working branch moved.' }
+          & git config user.name 'github-actions[bot]'
+          & git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          & git add scripts/prepare-private-local-build.ps1
+          & git commit -m 'Keep native build output out of the private preparation receipt'
+          if ($LASTEXITCODE -ne 0) { throw 'Commit failed.' }
+          & git push origin HEAD:refs/heads/integration/private-local-build-handoff-20260905
+          if ($LASTEXITCODE -ne 0) { throw 'Push failed.' }
