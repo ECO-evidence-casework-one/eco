@@ -1,0 +1,103 @@
+name: Qualify restore rollback
+on:
+  push:
+    branches: [integration/restore-rollback-acceptance-20260905]
+    paths: [.github/workflows/qualify-restore-rollback.yml]
+permissions:
+  contents: write
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/integration/restore-rollback-acceptance-20260905'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 16
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Reproduce old rollback failures with positive controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          baseline="$RUNNER_TEMP/eco-recovery-baseline"
+          git worktree add --detach "$baseline" 4fc6ea21122058bb63182ff456b71256a21305d1
+          cp internal/eco/restore_rollback_acceptance_test.go "$baseline/internal/eco/"
+          set +e
+          (cd "$baseline" && go test -count=1 -json -run '^TestRecovery' ./internal/eco) > "$RUNNER_TEMP/recovery-before.jsonl" 2>&1
+          result=$?
+          set -e
+          test "$result" -eq 1
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          rows = []
+          for s in Path(os.environ['RUNNER_TEMP'], 'recovery-before.jsonl').read_text().splitlines():
+              try: rows.append(json.loads(s))
+              except json.JSONDecodeError: print(s)
+          failed = sorted(r['Test'] for r in rows if r.get('Action') == 'fail' and r.get('Test'))
+          passed = sorted(r['Test'] for r in rows if r.get('Action') == 'pass' and r.get('Test'))
+          required = {'TestRecoveryRollbackRefusesUnsafeState/missing_checkpoint', 'TestRecoveryRollbackRefusesUnsafeState/substituted_checkpoint', 'TestRecoveryRollbackRefusesUnsafeState/occupied_active_empty'}
+          assert required <= set(failed), f'Expected failures not reproduced: {required-set(failed)}; all failures={failed}'
+          assert all(f'TestRecoveryRollbackRenameBoundaries/boundary_{i}' in passed for i in range(1,5)), passed
+          assert 'TestRecoveryMetadataWriteInterruption' in passed, passed
+          summary = {'failed_leaf_cases':[s for s in failed if '/' in s], 'passed_tests':passed}
+          Path(os.environ['RUNNER_TEMP'], 'recovery-before-summary.json').write_text(json.dumps(summary, indent=2))
+          print(json.dumps(summary, indent=2))
+          PY
+      - name: Integrate the checked helper at the exact rollback boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('internal/eco/backup.go')
+          s = p.read_text()
+          signature = 'func rollbackRestoreActivation(activeRoot, stageRoot, preRestore string, activeOwner, stageOwner *workspaceOwnerLease, stageMoved bool) error {'
+          assert s.count(signature) == 1
+          start = s.index(signature)
+          end = s.index('\ntype countingReader struct {', start)
+          assert 'problems := []string{}' in s[start:end]
+          replacement = signature+'\n\treturn checkedRollbackRestoreActivation(activeRoot, stageRoot, preRestore, activeOwner, stageOwner, stageMoved)\n}\n'
+          p.write_text(s[:start]+replacement+s[end:])
+          PY
+          gofmt -w internal/eco/backup.go internal/eco/restore_rollback.go internal/eco/restore_rollback_acceptance_test.go
+          git diff --check
+      - name: Qualify repair and keep executable files ephemeral
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check_source_policy.py
+          go test -count=1 -json -run '^TestRecovery' ./internal/eco | tee "$RUNNER_TEMP/recovery-after.jsonl"
+          go test -count=1 ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go test -c ./internal/eco -o "$RUNNER_TEMP/recovery-windows.test.exe"
+          GOOS=windows GOARCH=amd64 go build -o "$RUNNER_TEMP/recovery-windows.exe" ./cmd/eco
+          git diff --check
+      - name: Record results and commit only bounded source paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          before = json.loads(Path(os.environ['RUNNER_TEMP'], 'recovery-before-summary.json').read_text())
+          rows = [json.loads(s) for s in Path(os.environ['RUNNER_TEMP'], 'recovery-after.jsonl').read_text().splitlines()]
+          assert not any(r.get('Action') in {'fail','skip'} for r in rows)
+          passed = sorted(r['Test'] for r in rows if r.get('Action') == 'pass' and r.get('Test'))
+          leaves = [s for s in passed if '/' in s or s == 'TestRecoveryRollbackFailureRetainsCause']
+          assert len(leaves) == 14, leaves
+          receipt = {'baseline':'4fc6ea21122058bb63182ff456b71256a21305d1','run_id':os.environ['GITHUB_RUN_ID'],'before_failing_leaf_cases':before['failed_leaf_cases'],'after_passing_leaf_cases':leaves,'after_skipped_cases':0,'full_linux_tests':'passed','go_vet':'passed','source_policy':'passed','windows_cross_build':'passed','native_windows_execution':'pending normal PR CI','process_kill_power_loss':'not tested by this slice'}
+          Path('docs/control/RESTORE_ROLLBACK_QUALIFICATION_20260905.json').write_text(json.dumps(receipt, indent=2)+'\n')
+          print(json.dumps(receipt, indent=2))
+          PY
+          branch='integration/restore-rollback-acceptance-20260905'
+          git fetch origin "$branch"
+          test "$(git rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898298282+github-actions[bot]@users.noreply.github.com'
+          git add internal/eco/backup.go internal/eco/restore_rollback.go internal/eco/restore_rollback_acceptance_test.go docs/control/RESTORE_ROLLBACK_QUALIFICATION_20260905.json
+          git commit -m 'Require genuine recovery checkpoints and vacant rollback destinations'
+          git push origin "HEAD:refs/heads/$branch"
