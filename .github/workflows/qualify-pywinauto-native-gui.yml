@@ -1,0 +1,142 @@
+name: Qualify pinned pywinauto native GUI smoke
+on:
+  push:
+    branches: [integration/pywinauto-native-gui-smoke-20260905]
+    paths: [.github/workflows/qualify-pywinauto-native-gui.yml]
+permissions:
+  contents: write
+jobs:
+  qualify:
+    if: github.ref == 'refs/heads/integration/pywinauto-native-gui-smoke-20260905'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 8
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Build the unchanged frozen ECO application recipe
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $source='8b69a669b003fe30e84f1d344aa7533eb9cd9045'
+          $expected='d197748f861bd84b00776aa28c8712126091660fcc436e716f28126e05516dcc'
+          $env:CGO_ENABLED='0';$env:GOOS='windows';$env:GOARCH='amd64';$env:GOAMD64='v1';$env:GOTOOLCHAIN='local'
+          $exe=Join-Path $env:RUNNER_TEMP 'ECO-pywinauto-smoke.exe'
+          $flags="-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$source"
+          & go test ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Source tests failed before FOSS GUI qualification.' }
+          & go build -trimpath -buildvcs=false -ldflags $flags -o $exe ./cmd/eco
+          if ($LASTEXITCODE -ne 0) { throw 'Frozen native candidate build failed.' }
+          $actual=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -cne $expected) { throw "FOSS test slice changed the application candidate: $actual" }
+          "ECO_GUI_SMOKE_EXE=$exe" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ECO_GUI_SMOKE_SHA=$actual" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Acquire exact pywinauto donor and verify retained licence
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $commit='18d2a95cebed2f0061ab4e4c80c3a76ece5dd4f3'
+          $donor=Join-Path $env:RUNNER_TEMP 'pywinauto-source'
+          & git init $donor
+          if ($LASTEXITCODE -ne 0) { throw 'Donor repository initialization failed.' }
+          & git -C $donor remote add origin https://github.com/pywinauto/pywinauto.git
+          & git -C $donor fetch --depth=1 origin $commit
+          if ($LASTEXITCODE -ne 0) { throw 'Exact pywinauto donor commit could not be fetched.' }
+          & git -C $donor checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Exact donor checkout failed.' }
+          $actual=(& git -C $donor rev-parse HEAD).Trim()
+          if ($actual -cne $commit) { throw "Donor commit mismatch: $actual" }
+          $repoLicense=(Get-FileHash -LiteralPath third_party/pywinauto/LICENSE -Algorithm SHA256).Hash.ToLowerInvariant()
+          $donorLicense=(Get-FileHash -LiteralPath (Join-Path $donor 'LICENSE') -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($repoLicense -cne $donorLicense) { throw 'Retained pywinauto licence is not byte-identical to the pinned donor.' }
+          "PYWINAUTO_SOURCE=$donor" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PYWINAUTO_COMMIT=$actual" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "PYWINAUTO_LICENSE_SHA256=$donorLicense" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: First clean install discovers dependency versions and runs real GUI smoke
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $venv=Join-Path $env:RUNNER_TEMP 'pywinauto-venv-discovery'
+          & py -3.12 -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'Python 3.12 venv creation failed.' }
+          $python=Join-Path $venv 'Scripts\python.exe'
+          & $python -m pip install --disable-pip-version-check --no-input $env:PYWINAUTO_SOURCE
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned donor installation failed.' }
+          $versions=Join-Path $env:RUNNER_TEMP 'pywinauto-versions.json'
+          & $python -c "import importlib.metadata as m,json,pathlib; pathlib.Path(r'$versions').write_text(json.dumps({n:m.version(n) for n in ['pywinauto','comtypes','pywin32']},indent=2))"
+          if ($LASTEXITCODE -ne 0) { throw 'Installed-version capture failed.' }
+          Get-Content -LiteralPath $versions | Write-Host
+          $receipt=Join-Path $env:RUNNER_TEMP 'pywinauto-gui-smoke-discovery.json'
+          & $python scripts/gui/pywinauto_native_smoke.py --exe $env:ECO_GUI_SMOKE_EXE --receipt $receipt
+          if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath $receipt -ErrorAction SilentlyContinue | Write-Host; throw 'Real pywinauto native GUI smoke failed.' }
+          Get-Content -LiteralPath $receipt | Write-Host
+      - name: Reinstall exact resolved versions and rerun the GUI smoke
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $versions=Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'pywinauto-versions.json') -Raw | ConvertFrom-Json
+          if ($versions.pywinauto -cne '0.6.9') { throw "Unexpected donor version $($versions.pywinauto)." }
+          foreach ($name in @('comtypes','pywin32')) { if ([string]::IsNullOrWhiteSpace($versions.$name)) { throw "Missing resolved $name version." } }
+          $venv=Join-Path $env:RUNNER_TEMP 'pywinauto-venv-locked'
+          & py -3.12 -m venv $venv
+          if ($LASTEXITCODE -ne 0) { throw 'Locked Python venv creation failed.' }
+          $python=Join-Path $venv 'Scripts\python.exe'
+          & $python -m pip install --disable-pip-version-check --no-input "comtypes==$($versions.comtypes)" "pywin32==$($versions.pywin32)"
+          if ($LASTEXITCODE -ne 0) { throw 'Resolved pywinauto runtime dependencies failed to reinstall.' }
+          & $python -m pip install --disable-pip-version-check --no-input --no-deps $env:PYWINAUTO_SOURCE
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned pywinauto donor failed to reinstall without dependency drift.' }
+          $receipt=Join-Path $env:RUNNER_TEMP 'pywinauto-gui-smoke-locked.json'
+          & $python scripts/gui/pywinauto_native_smoke.py --exe $env:ECO_GUI_SMOKE_EXE --receipt $receipt
+          if ($LASTEXITCODE -ne 0) { Get-Content -LiteralPath $receipt -ErrorAction SilentlyContinue | Write-Host; throw 'Locked native GUI smoke failed.' }
+          Get-Content -LiteralPath $receipt | Write-Host
+      - name: Record only the qualified FOSS test integration
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          $versions=Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'pywinauto-versions.json') -Raw | ConvertFrom-Json
+          @(
+            '# Test-only native GUI acceptance dependencies. Not shipped with ECO.exe.',
+            "# pywinauto source: https://github.com/pywinauto/pywinauto.git@$env:PYWINAUTO_COMMIT",
+            "comtypes==$($versions.comtypes)",
+            "pywin32==$($versions.pywin32)"
+          ) | Set-Content -LiteralPath scripts/gui/pywinauto_requirements.lock -Encoding utf8
+          $receipt=Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'pywinauto-gui-smoke-locked.json') -Raw | ConvertFrom-Json
+          $out=[ordered]@{
+            run_id=$env:GITHUB_RUN_ID
+            application_source='8b69a669b003fe30e84f1d344aa7533eb9cd9045'
+            application_sha256=$env:ECO_GUI_SMOKE_SHA
+            donor='pywinauto/pywinauto'
+            donor_commit=$env:PYWINAUTO_COMMIT
+            donor_version=$versions.pywinauto
+            donor_license='BSD-3-Clause'
+            donor_license_sha256=$env:PYWINAUTO_LICENSE_SHA256
+            comtypes=$versions.comtypes
+            pywin32=$versions.pywin32
+            first_clean_smoke='PASS'
+            locked_reinstall_smoke='PASS'
+            smoke_checks=$receipt.checks
+            localappdata_isolated=$receipt.localappdata_isolated
+            existing_user_workspace_selected=$receipt.existing_user_workspace_selected
+            app_source_changed=$false
+            production_dependency_added=$false
+            actual_acer_acceptance='NOT RUN'
+          }
+          $out | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath docs/foss/PYWINAUTO_NATIVE_GUI_QUALIFICATION_20260905.json -Encoding utf8
+          $out | ConvertTo-Json -Depth 6 | Write-Host
+          & git diff --check
+          if ($LASTEXITCODE -ne 0) { throw 'Whitespace check failed.' }
+          & git fetch origin integration/pywinauto-native-gui-smoke-20260905
+          if ($LASTEXITCODE -ne 0) { throw 'Branch re-read failed.' }
+          $head=(& git rev-parse FETCH_HEAD).Trim()
+          if ($head -cne $env:GITHUB_SHA) { throw 'Qualification branch moved during the run.' }
+          & git config user.name 'github-actions[bot]'
+          & git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          & git add scripts/gui/pywinauto_requirements.lock docs/foss/PYWINAUTO_NATIVE_GUI_QUALIFICATION_20260905.json
+          & git commit -m 'Pin qualified pywinauto GUI acceptance dependencies and receipt'
+          if ($LASTEXITCODE -ne 0) { throw 'Qualification record commit failed.' }
+          & git push origin HEAD:refs/heads/integration/pywinauto-native-gui-smoke-20260905
+          if ($LASTEXITCODE -ne 0) { throw 'Qualification record push failed.' }
