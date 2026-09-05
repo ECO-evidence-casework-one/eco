@@ -26,7 +26,11 @@ jobs:
           cache: false
       - name: Resolve exact known conflicts
         shell: bash
-        run: python3 scripts/resolve_pdf_renderer_collisions.py
+        run: |
+          set -euo pipefail
+          git config user.name 'ECO GitHub integration bot'
+          git config user.email 'actions@users.noreply.github.com'
+          python3 scripts/resolve_pdf_renderer_collisions.py
       - name: Qualify and persist combined source
         shell: bash
         run: |
