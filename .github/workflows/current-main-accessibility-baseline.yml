@@ -33,7 +33,6 @@ jobs:
           $accAssembly = [Accessibility.IAccessible].Assembly.Location
           Add-Type -TypeDefinition @'
           using System;
-          using System.Collections.Generic;
           using System.Runtime.InteropServices;
           using System.Text;
 
@@ -67,11 +66,20 @@ jobs:
               private static Accessibility.IAccessible AccessibleFor(IntPtr hwnd) {
                   Guid iid = typeof(Accessibility.IAccessible).GUID; Accessibility.IAccessible acc; int hr=AccessibleObjectFromWindow(hwnd,OBJID_CLIENT,ref iid,out acc); return hr < 0 ? null : acc;
               }
+              private static EcoA11yRow Row(IntPtr h) {
+                  var row=new EcoA11yRow{Hwnd=h,ControlId=GetDlgCtrlID(h),ClassName=Class(h),WindowText=Text(h),Visible=IsWindowVisible(h)};
+                  try { var acc=AccessibleFor(h); if(acc!=null){ object self=0; try{row.AccessibleName=acc.get_accName(self);}catch{} try{row.DefaultAction=acc.get_accDefaultAction(self);}catch{} try{row.Role=Convert.ToInt32(acc.get_accRole(self));}catch{} try{row.State=Convert.ToInt32(acc.get_accState(self));}catch{} } } catch {}
+                  return row;
+              }
               public static IntPtr MainWindow(uint wantedPid, string wantedClass) {
                   IntPtr found=IntPtr.Zero; EnumWindows((h,l)=>{ uint pid; GetWindowThreadProcessId(h,out pid); if(pid==wantedPid && Class(h)==wantedClass){ found=h; return false;} return true;},IntPtr.Zero); return found;
               }
               public static EcoA11yRow[] Children(IntPtr parent) {
-                  var rows=new List<EcoA11yRow>(); EnumChildWindows(parent,(h,l)=>{ var row=new EcoA11yRow{Hwnd=h,ControlId=GetDlgCtrlID(h),ClassName=Class(h),WindowText=Text(h),Visible=IsWindowVisible(h)}; try { var acc=AccessibleFor(h); if(acc!=null){ object self=0; try{row.AccessibleName=acc.get_accName(self);}catch{} try{row.DefaultAction=acc.get_accDefaultAction(self);}catch{} try{row.Role=Convert.ToInt32(acc.get_accRole(self));}catch{} try{row.State=Convert.ToInt32(acc.get_accState(self));}catch{} } } catch {} rows.Add(row); return true;},IntPtr.Zero); return rows.ToArray();
+                  IntPtr[] handles=new IntPtr[256]; int count=0;
+                  EnumChildWindows(parent,(h,l)=>{ if(count<handles.Length){handles[count++]=h;} return true;},IntPtr.Zero);
+                  EcoA11yRow[] rows=new EcoA11yRow[count];
+                  for(int i=0;i<count;i++){ rows[i]=Row(handles[i]); }
+                  return rows;
               }
           }
           '@ -ReferencedAssemblies $accAssembly
