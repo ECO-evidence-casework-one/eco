@@ -1,0 +1,42 @@
+name: Requalify search UI on current main
+on:
+  push:
+    paths:
+      - .github/workflows/requalify-search-ui-current-main.yml
+permissions:
+  contents: write
+jobs:
+  requalify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Apply exact qualified product commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'ECO Integration Bot'
+          git config user.email 'eco-integration-bot@users.noreply.github.com'
+          git cherry-pick 3fd621783ed0b4ab568d9f183669667c182312dd
+      - name: Requalify on current main
+        shell: bash
+        run: |
+          set -euo pipefail
+          gofmt -w cmd/eco/main_windows.go cmd/eco/ui_regression_test.go
+          git diff --exit-code -- cmd/eco/main_windows.go cmd/eco/ui_regression_test.go
+          go test ./...
+          go vet ./...
+          GOOS=windows GOARCH=amd64 go test -c ./cmd/eco -o /tmp/eco-cmd.test.exe
+          GOOS=windows GOARCH=amd64 go build -o /tmp/ECO.exe ./cmd/eco
+          python3 scripts/check_source_policy.py
+          git diff --check
+      - name: Push rebased product commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          git push origin HEAD:integration/page-aware-search-ui-current-main-20260905
