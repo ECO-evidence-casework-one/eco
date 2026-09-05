@@ -78,7 +78,7 @@ func workspaceFormatTree(t *testing.T, root string) map[string]string {
 		if walkErr != nil {
 			return walkErr
 		}
-		info, err := entry.Info()
+		info, err := workspaceSnapshotInfo(path, entry)
 		if err != nil {
 			return err
 		}
@@ -101,6 +101,33 @@ func workspaceFormatTree(t *testing.T, root string) map[string]string {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// Windows directory enumeration can retain older directory timestamps. File.Stat
+// queries the opened handle instead. Keep every mtime/mode/size/hash assertion;
+// do not turn stale enumeration metadata into a reported recovery mutation.
+// Preserve non-following semantics for links and do not open special files.
+func workspaceSnapshotInfo(path string, entry fs.DirEntry) (fs.FileInfo, error) {
+	info, err := entry.Info()
+	if err != nil {
+		return nil, err
+	}
+	if info.Mode()&os.ModeSymlink != 0 || (!info.IsDir() && !info.Mode().IsRegular()) {
+		return info, nil
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	fresh, statErr := file.Stat()
+	closeErr := file.Close()
+	if statErr != nil {
+		return nil, statErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+	return fresh, nil
 }
 
 func TestWorkspaceFormatRejectsWithoutMutation(t *testing.T) {
