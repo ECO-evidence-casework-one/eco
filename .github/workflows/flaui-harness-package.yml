@@ -1,0 +1,109 @@
+name: Public self-contained FlaUI harness package
+
+on:
+  push:
+    branches: [experiment/flaui-5.0.0-accessibility-harness-20260906]
+    paths:
+      - .github/workflows/flaui-harness-package.yml
+      - experiments/flaui-harness/**
+
+permissions:
+  contents: read
+
+jobs:
+  package-on-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Build known-good synthetic Windows reference
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          & $csc /nologo /target:winexe /out:reference.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll reference.cs
+          if($LASTEXITCODE -ne 0){ throw 'Synthetic reference build failed.' }
+
+      - name: Restore and publish self-contained win-x64 harness
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore Eco.UiaAcceptance.csproj -r win-x64 --nologo
+          if($LASTEXITCODE -ne 0){ throw 'Runtime-specific restore failed.' }
+          dotnet publish Eco.UiaAcceptance.csproj -c Release -r win-x64 --self-contained true --no-restore --nologo -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -p:PublishReadyToRun=false -o publish
+          if($LASTEXITCODE -ne 0){ throw 'Self-contained publish failed.' }
+          $exe=Join-Path $PWD 'publish\Eco.UiaAcceptance.exe'
+          if(!(Test-Path -LiteralPath $exe -PathType Leaf)){ throw 'Published harness executable is missing.' }
+          $bytes=[IO.File]::ReadAllBytes($exe)
+          if($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){ throw 'Published harness is not a PE executable.' }
+          $hash=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "SELF_CONTAINED_SHA256=$hash"
+          Write-Host "SELF_CONTAINED_SIZE=$((Get-Item -LiteralPath $exe).Length)"
+
+      - name: Qualify published harness positive and negative behavior
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $harness=Join-Path $PWD 'publish\Eco.UiaAcceptance.exe'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'synthetic-profile.json') --receipt (Join-Path $PWD 'published-positive.json')
+          if($LASTEXITCODE -ne 0){ throw "Published positive control failed: $LASTEXITCODE" }
+          $receipt=Get-Content -LiteralPath published-positive.json -Raw | ConvertFrom-Json
+          if($receipt.OverallResult -cne 'PASS' -or $receipt.Inventory.Count -lt 3){ throw 'Published positive receipt is incomplete.' }
+          $bad=@'
+          {
+            "windowTitleContains": "ECO FlaUI synthetic reference",
+            "controls": [
+              {"name":"Control that must not exist","controlType":"Button","mustBeKeyboardFocusable":true,"requiredPatterns":["Invoke"]}
+            ]
+          }
+          '@
+          Set-Content -LiteralPath published-negative-profile.json -Value $bad -Encoding UTF8
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'published-negative-profile.json') --receipt (Join-Path $PWD 'published-negative.json')
+          $exit=$LASTEXITCODE
+          if($exit -ne 2){ throw "Published negative control expected exit 2; actual=$exit" }
+          $global:LASTEXITCODE=0
+          Write-Host 'SELF_CONTAINED_RUNTIME_QUALIFICATION=PASS'
+
+      - name: Write package identity receipt
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path $PWD 'publish\Eco.UiaAcceptance.exe'
+          $receipt=[ordered]@{
+            schema=1
+            harness='ECO external FlaUI accessibility acceptance harness'
+            donor='FlaUI.Core + FlaUI.UIA3'
+            donor_version='5.0.0'
+            donor_commit='c5e7eb7af081e68534cb6b6890a38aa791ce4168'
+            donor_license='MIT'
+            source_head=$env:GITHUB_SHA
+            exe_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            exe_size_bytes=(Get-Item -LiteralPath $exe).Length
+            target='win-x64 self-contained single-file'
+            positive_control='PASS'
+            negative_control='PASS'
+            eco_private_source_included=$false
+            app_launched='synthetic reference only'
+          }
+          $receipt|ConvertTo-Json -Depth 5|Set-Content -LiteralPath publish\HARNESS_IDENTITY.json -Encoding UTF8
+          Copy-Item -LiteralPath NOTICE.md -Destination publish\NOTICE.md
+          Get-Content -LiteralPath publish\HARNESS_IDENTITY.json|Write-Host
+
+      - name: Upload qualified harness only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FlaUI-5.0.0-qualified-win-x64
+          path: experiments/flaui-harness/publish/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          Write-Host 'Self-contained FlaUI harness: QUALIFIED AND PACKAGED'
+          Write-Host 'No private ECO source or real evidence is included in this artifact.'
