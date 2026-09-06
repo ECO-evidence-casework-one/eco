@@ -1,0 +1,113 @@
+name: Public FlaUI 5.0.0 acceptance harness qualification
+
+on:
+  push:
+    branches: [experiment/flaui-5.0.0-accessibility-harness-20260906]
+    paths:
+      - experiments/flaui-harness/**
+      - .github/workflows/flaui-acceptance-harness.yml
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-on-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Record Windows and .NET environment
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet --version
+          dotnet --info
+
+      - name: Verify exact FlaUI release source and licence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $expectedCommit='c5e7eb7af081e68534cb6b6890a38aa791ce4168'
+          $repo=Join-Path $env:RUNNER_TEMP 'FlaUI'
+          git init $repo | Out-Host
+          git -C $repo remote add origin https://github.com/FlaUI/FlaUI.git
+          git -C $repo fetch --depth=1 origin refs/tags/v5.0.0 | Out-Host
+          if($LASTEXITCODE -ne 0){ throw 'FlaUI v5.0.0 fetch failed.' }
+          git -C $repo checkout --detach FETCH_HEAD | Out-Host
+          if((git -C $repo rev-parse HEAD).Trim() -cne $expectedCommit){ throw 'FlaUI v5.0.0 commit mismatch.' }
+          if((git -C $repo rev-parse "$expectedCommit`:LICENSE.txt").Trim() -cne 'c490d3cbd0080b502fda655ceb7311fc394eee31'){ throw 'FlaUI licence blob mismatch.' }
+          Write-Host "FLAUI_TAG=v5.0.0"
+          Write-Host "FLAUI_COMMIT=$expectedCommit"
+          Write-Host 'FLAUI_LICENSE=MIT'
+
+      - name: Build known-good synthetic Windows reference
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if(!(Test-Path -LiteralPath $csc -PathType Leaf)){ throw 'Framework C# compiler unavailable.' }
+          & $csc /nologo /target:winexe /out:reference.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll reference.cs
+          if($LASTEXITCODE -ne 0){ throw 'Synthetic reference build failed.' }
+          $bytes=[IO.File]::ReadAllBytes((Join-Path $PWD 'reference.exe'))
+          if($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){ throw 'Reference is not a PE executable.' }
+          Write-Host "REFERENCE_SHA256=$((Get-FileHash -LiteralPath reference.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Restore, build and verify pinned FlaUI harness
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore Eco.UiaAcceptance.csproj --nologo
+          if($LASTEXITCODE -ne 0){ throw 'Harness restore failed.' }
+          dotnet build Eco.UiaAcceptance.csproj -c Release --no-restore --nologo
+          if($LASTEXITCODE -ne 0){ throw 'Harness build failed.' }
+          $assets=Get-Content -LiteralPath obj\project.assets.json -Raw
+          foreach($token in @('FlaUI.Core/5.0.0','FlaUI.UIA3/5.0.0')){ if(!$assets.Contains($token)){ throw "Resolved assets missing exact $token" } }
+          Write-Host 'FLAUI_EXACT_PACKAGE_RESOLUTION=PASS'
+
+      - name: Prove positive acceptance receipt
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'synthetic-profile.json') --receipt (Join-Path $PWD 'positive-receipt.json')
+          if($LASTEXITCODE -ne 0){ throw "Known-good acceptance unexpectedly failed with $LASTEXITCODE." }
+          $receipt=Get-Content -LiteralPath positive-receipt.json -Raw | ConvertFrom-Json
+          if($receipt.OverallResult -cne 'PASS'){ throw 'Positive receipt did not record PASS.' }
+          if($receipt.Controls.Count -ne 3){ throw "Positive receipt expected 3 controls, got $($receipt.Controls.Count)." }
+          Write-Host 'FLAUI_HARNESS_POSITIVE=PASS'
+          Get-Content -LiteralPath positive-receipt.json
+
+      - name: Prove negative expectation is rejected
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $bad=@'
+          {
+            "windowTitleContains": "ECO FlaUI synthetic reference",
+            "controls": [
+              {
+                "name": "Control that must not exist",
+                "controlType": "Button",
+                "mustBeKeyboardFocusable": true,
+                "requiredPatterns": ["Invoke"]
+              }
+            ]
+          }
+          '@
+          Set-Content -LiteralPath negative-profile.json -Value $bad -Encoding UTF8
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'negative-profile.json') --receipt (Join-Path $PWD 'negative-receipt.json')
+          $exit=$LASTEXITCODE
+          if($exit -ne 2){ throw "Negative expectation must exit 2; actual=$exit." }
+          Write-Host 'FLAUI_HARNESS_NEGATIVE_REJECTION=PASS'
+
+      - name: Qualification summary
+        shell: pwsh
+        run: |
+          Write-Host 'FlaUI 5.0.0 external acceptance harness qualification: PASS'
+          Write-Host 'No ECO private source, real evidence, model, executable artifact or release artifact is uploaded.'
