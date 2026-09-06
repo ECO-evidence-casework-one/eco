@@ -105,6 +105,7 @@ jobs:
           $exit=$LASTEXITCODE
           if($exit -ne 2){ throw "Negative expectation must exit 2; actual=$exit." }
           Write-Host 'FLAUI_HARNESS_NEGATIVE_REJECTION=PASS'
+          exit 0
 
       - name: Qualification summary
         shell: pwsh
