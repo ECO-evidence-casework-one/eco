@@ -1,0 +1,159 @@
+name: Public Wlk native UI Automation probe
+
+on:
+  push:
+    branches: [experiment/wlk-native-uia-20260906]
+    paths: [.github/workflows/wlk-native-uia-probe.yml, experiments/wlk-native-uia/**]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-native-uia:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.2'
+          cache: false
+
+      - name: Verify exact Wlk donor source and licence
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $commit='d6740ddf561940bdcad67a3e96201090d2af6d3b'
+          $donor=Join-Path $env:RUNNER_TEMP 'wlk'
+          git init $donor | Out-Host
+          git -C $donor remote add origin https://github.com/xackery/wlk.git
+          git -C $donor fetch --depth=1 origin $commit | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Wlk fetch failed.' }
+          git -C $donor checkout --detach FETCH_HEAD | Out-Host
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Wlk checkout failed.' }
+          if ((git -C $donor rev-parse HEAD).Trim() -cne $commit) { throw 'Pinned Wlk commit mismatch.' }
+          if ((git -C $donor rev-parse "$commit`:LICENSE").Trim() -cne '9f9f8a36c0ac681a46a838a3a9be51858b8b134a') { throw 'Wlk licence blob mismatch.' }
+          if ((git -C $donor rev-parse "$commit`:walk/accessibility.go").Trim() -cne '1f9e2f933be48d01bd5ae122bc4b2bf970ce74d6') { throw 'Wlk accessibility source blob mismatch.' }
+          $access=Get-Content -LiteralPath (Join-Path $donor 'walk\accessibility.go') -Raw
+          foreach($token in @('Dynamic Annotation','SetName','SetDescription','SetRole','SetState')) { if(!$access.Contains($token)){ throw "Pinned accessibility source missing $token" } }
+          $line=Get-Content -LiteralPath (Join-Path $donor 'walk\lineedit.go') -Raw
+          $button=Get-Content -LiteralPath (Join-Path $donor 'walk\pushbutton.go') -Raw
+          $list=Get-Content -LiteralPath (Join-Path $donor 'walk\listbox.go') -Raw
+          foreach($pair in @(@($line,'"EDIT"'),@($button,'"BUTTON"'),@($list,'"LISTBOX"'))) { if(!$pair[0].Contains($pair[1])) { throw "Expected native class missing: $($pair[1])" } }
+          $form=Get-Content -LiteralPath (Join-Path $donor 'walk\form.go') -Raw
+          if(!$form.Contains('WM_DPICHANGED')) { throw 'Pinned Wlk form lacks DPI-change handling.' }
+          Write-Host "WLK_DONOR_COMMIT=$commit"
+          Write-Host 'WLK_NATIVE_CONTROLS_AND_DYNAMIC_ANNOTATION=PASS'
+
+      - name: Resolve exact donor commit and build the native probe
+        working-directory: experiments/wlk-native-uia
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          go mod init eco-wlk-native-uia-probe
+          if ($LASTEXITCODE -ne 0) { throw 'Probe module init failed.' }
+          go get github.com/xackery/wlk@d6740ddf561940bdcad67a3e96201090d2af6d3b
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Wlk module resolution failed.' }
+          go mod tidy
+          if ($LASTEXITCODE -ne 0) { throw 'Probe module tidy failed.' }
+          go mod verify
+          if ($LASTEXITCODE -ne 0) { throw 'Probe module verification failed.' }
+          $module=go list -m -json github.com/xackery/wlk | ConvertFrom-Json
+          if (!$module.Version.EndsWith('-d6740ddf5619')) { throw "Resolved Wlk version is not pinned commit: $($module.Version)" }
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Probe compile test failed.' }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Probe vet failed.' }
+          go build -trimpath -ldflags '-H=windowsgui' -o probe.exe .
+          if ($LASTEXITCODE -ne 0) { throw 'Native Wlk probe build failed.' }
+          Copy-Item -LiteralPath probe.exe.manifest -Destination probe.exe.manifest -Force
+          $bytes=[IO.File]::ReadAllBytes((Join-Path $PWD 'probe.exe'))
+          if($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){ throw 'Output is not Windows PE.' }
+          Write-Host "WLK_PROBE_SHA256=$((Get-FileHash -LiteralPath probe.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "WLK_PROBE_BYTES=$((Get-Item -LiteralPath probe.exe).Length)"
+
+      - name: Prove native UI Automation names, patterns, focus and action
+        working-directory: experiments/wlk-native-uia
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+          public static class EcoDpiProbe {
+            [DllImport("user32.dll")] public static extern IntPtr GetWindowDpiAwarenessContext(IntPtr hwnd);
+            [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool AreDpiAwarenessContextsEqual(IntPtr a, IntPtr b);
+          }
+          '@
+          $exe=Join-Path $PWD 'probe.exe'
+          $proc=Start-Process -FilePath $exe -WorkingDirectory $PWD -PassThru
+          try {
+            $window=$null
+            for($i=0;$i -lt 100 -and !$window;$i++){
+              Start-Sleep -Milliseconds 100
+              $cond=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$proc.Id)
+              $window=[System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,$cond)
+            }
+            if(!$window){ throw 'UI Automation could not discover the native Wlk top-level window.' }
+            function FindElement([string]$name,[int]$controlTypeId){
+              $all=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+              foreach($e in $all){ if($e.Current.Name -ceq $name -and $e.Current.ControlType.Id -eq $controlTypeId){ return $e } }
+              return $null
+            }
+            $edit=FindElement 'Search whole matter' ([System.Windows.Automation.ControlType]::Edit.Id)
+            $button=FindElement 'Run search' ([System.Windows.Automation.ControlType]::Button.Id)
+            $list=FindElement 'Evidence results' ([System.Windows.Automation.ControlType]::List.Id)
+            if(!$edit -or !$button -or !$list){
+              $all=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+              foreach($e in $all){ Write-Host ("UIA_ELEMENT type={0} name={1} focusable={2}" -f $e.Current.ControlType.ProgrammaticName,$e.Current.Name,$e.Current.IsKeyboardFocusable) }
+              throw 'Named Edit/Button/List controls were not all exposed through UI Automation.'
+            }
+            foreach($e in @($edit,$button,$list)){ if(!$e.Current.IsEnabled -or !$e.Current.IsKeyboardFocusable){ throw "Control is not enabled/focusable: $($e.Current.Name)" } }
+
+            $valueObj=$null
+            if(!$edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$valueObj)){ throw 'Native Edit does not expose UIA ValuePattern.' }
+            $value=[System.Windows.Automation.ValuePattern]$valueObj
+            if($value.Current.IsReadOnly){ throw 'Native Edit unexpectedly reports read-only.' }
+            $value.SetValue('synthetic changed search')
+            if($value.Current.Value -cne 'synthetic changed search'){ throw "ValuePattern did not update native Edit: $($value.Current.Value)" }
+            $edit.SetFocus(); Start-Sleep -Milliseconds 100
+            $focused=[System.Windows.Automation.AutomationElement]::FocusedElement
+            if(!$focused -or $focused.Current.Name -cne 'Search whole matter'){ throw "UIA focus did not reach native Edit: $($focused.Current.Name)" }
+
+            $invokeObj=$null
+            if(!$button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$invokeObj)){ throw 'Native Button does not expose UIA InvokePattern.' }
+            ([System.Windows.Automation.InvokePattern]$invokeObj).Invoke()
+            $status=$null
+            for($i=0;$i -lt 30 -and !$status;$i++){
+              Start-Sleep -Milliseconds 100
+              $status=FindElement 'Search complete: synthetic changed search' ([System.Windows.Automation.ControlType]::Text.Id)
+            }
+            if(!$status){ throw 'InvokePattern did not activate the Go button handler and update native status text.' }
+
+            $selectionObj=$null
+            if(!$list.TryGetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern,[ref]$selectionObj)){ throw 'Native ListBox does not expose UIA SelectionPattern.' }
+            $items=$list.FindAll([System.Windows.Automation.TreeScope]::Children,[System.Windows.Automation.Condition]::TrueCondition)
+            if($items.Count -lt 3){ throw "Native ListBox exposes only $($items.Count) child items." }
+            $itemPattern=$null
+            if(!$items[0].TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern,[ref]$itemPattern)){ throw 'Native ListBox item lacks SelectionItemPattern.' }
+            ([System.Windows.Automation.SelectionItemPattern]$itemPattern).Select()
+            $selected=([System.Windows.Automation.SelectionPattern]$selectionObj).Current.GetSelection()
+            if($selected.Count -ne 1){ throw "SelectionPattern reports $($selected.Count) selected items." }
+
+            $hwnd=[IntPtr]$window.Current.NativeWindowHandle
+            $ctx=[EcoDpiProbe]::GetWindowDpiAwarenessContext($hwnd)
+            $perMonitorV2=New-Object IntPtr(-4)
+            if(![EcoDpiProbe]::AreDpiAwarenessContextsEqual($ctx,$perMonitorV2)){ throw 'Probe window is not Per-Monitor-V2 DPI aware.' }
+
+            Write-Host 'WLK_UIA_EDIT_VALUE_PATTERN=PASS'
+            Write-Host 'WLK_UIA_BUTTON_INVOKE_PATTERN=PASS'
+            Write-Host 'WLK_UIA_LIST_SELECTION_PATTERN=PASS'
+            Write-Host 'WLK_UIA_FOCUS=PASS'
+            Write-Host 'WLK_PER_MONITOR_V2=PASS'
+            Write-Host 'No executable artifact is uploaded.'
+          }
+          finally {
+            if($proc -and !$proc.HasExited){ Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue; $proc.WaitForExit(5000) | Out-Null }
+          }
