@@ -45,7 +45,8 @@ internal sealed record InventoryElement(
     bool Enabled,
     bool KeyboardFocusable,
     bool Offscreen,
-    IReadOnlyList<string> SupportedPatterns);
+    IReadOnlyList<string> SupportedPatterns,
+    IReadOnlyList<string> PropertyErrors);
 
 internal sealed record AcceptanceReceipt(
     string Target,
@@ -224,39 +225,62 @@ internal static class Program
 
     private static InventoryElement Inventory(AutomationElement e, int index)
     {
+        var errors = new List<string>();
+        var name = ReadProperty("Name", () => e.Name, "", errors);
+        var automationId = ReadProperty("AutomationId", () => e.AutomationId, "", errors);
+        var className = ReadProperty("ClassName", () => e.ClassName, "", errors);
+        var controlType = ReadProperty("ControlType", () => e.ControlType.ToString(), "Unknown", errors);
+        var enabled = ReadProperty("IsEnabled", () => e.IsEnabled, false, errors);
+        var focusable = ReadProperty("IsKeyboardFocusable", () => e.Properties.IsKeyboardFocusable.ValueOrDefault, false, errors);
+        var offscreen = ReadProperty("IsOffscreen", () => e.IsOffscreen, false, errors);
+        var patterns = SupportedPatterns(e, errors);
+        return new InventoryElement(index, name, automationId, className, controlType, enabled, focusable, offscreen, patterns, errors);
+    }
+
+    private static T ReadProperty<T>(string property, Func<T> read, T fallback, List<string> errors)
+    {
         try
         {
-            return new InventoryElement(
-                index,
-                e.Name,
-                e.AutomationId,
-                e.ClassName,
-                e.ControlType.ToString(),
-                e.IsEnabled,
-                e.Properties.IsKeyboardFocusable.ValueOrDefault,
-                e.IsOffscreen,
-                SupportedPatterns(e));
+            return read();
         }
         catch (Exception ex)
         {
-            return new InventoryElement(index, "<unavailable: " + ex.GetType().Name + ">", "", "", "Unknown", false, false, true, Array.Empty<string>());
+            errors.Add(property + ": " + ex.GetType().Name);
+            return fallback;
         }
     }
 
     private static IReadOnlyList<string> SupportedPatterns(AutomationElement e)
     {
+        var ignored = new List<string>();
+        return SupportedPatterns(e, ignored);
+    }
+
+    private static IReadOnlyList<string> SupportedPatterns(AutomationElement e, List<string> errors)
+    {
         var result = new List<string>();
-        if (e.Patterns.Value.IsSupported) result.Add("Value");
-        if (e.Patterns.Invoke.IsSupported) result.Add("Invoke");
-        if (e.Patterns.Selection.IsSupported) result.Add("Selection");
-        if (e.Patterns.SelectionItem.IsSupported) result.Add("SelectionItem");
-        if (e.Patterns.Text.IsSupported) result.Add("Text");
-        if (e.Patterns.Toggle.IsSupported) result.Add("Toggle");
-        if (e.Patterns.ExpandCollapse.IsSupported) result.Add("ExpandCollapse");
-        if (e.Patterns.Scroll.IsSupported) result.Add("Scroll");
+        AddPattern("Value", () => e.Patterns.Value.IsSupported, result, errors);
+        AddPattern("Invoke", () => e.Patterns.Invoke.IsSupported, result, errors);
+        AddPattern("Selection", () => e.Patterns.Selection.IsSupported, result, errors);
+        AddPattern("SelectionItem", () => e.Patterns.SelectionItem.IsSupported, result, errors);
+        AddPattern("Text", () => e.Patterns.Text.IsSupported, result, errors);
+        AddPattern("Toggle", () => e.Patterns.Toggle.IsSupported, result, errors);
+        AddPattern("ExpandCollapse", () => e.Patterns.ExpandCollapse.IsSupported, result, errors);
+        AddPattern("Scroll", () => e.Patterns.Scroll.IsSupported, result, errors);
         return result;
     }
 
+    private static void AddPattern(string name, Func<bool> supported, List<string> result, List<string> errors)
+    {
+        try
+        {
+            if (supported()) result.Add(name);
+        }
+        catch (Exception ex)
+        {
+            errors.Add(name + "Pattern: " + ex.GetType().Name);
+        }
+    }
     private static string RunExercise(
         AutomationElement element,
         ControlExpectation expectation,
