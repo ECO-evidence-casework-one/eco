@@ -56,6 +56,7 @@ internal sealed record AcceptanceReceipt(
     IReadOnlyList<string> LaunchArguments,
     IReadOnlyList<InventoryElement> Inventory,
     IReadOnlyList<ControlReceipt> Controls,
+    IReadOnlyList<string> Failures,
     string OverallResult);
 
 internal static class Program
@@ -91,17 +92,16 @@ internal static class Program
             var window = app.GetMainWindow(automation, TimeSpan.FromSeconds(15))
                 ?? throw new InvalidOperationException("No main window was discovered within 15 seconds.");
 
-            if (!string.IsNullOrWhiteSpace(profile.WindowTitleContains) &&
-                !window.Title.Contains(profile.WindowTitleContains, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Window title '{window.Title}' does not contain expected text '{profile.WindowTitleContains}'.");
-            }
-
             var descendants = window.FindAllDescendants();
             var inventory = descendants.Select((element, index) => Inventory(element, index)).ToArray();
             var receipts = new List<ControlReceipt>();
             var failures = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(profile.WindowTitleContains) &&
+                !window.Title.Contains(profile.WindowTitleContains, StringComparison.OrdinalIgnoreCase))
+            {
+                failures.Add($"Window title '{window.Title}' does not contain expected text '{profile.WindowTitleContains}'.");
+            }
 
             foreach (var expectation in profile.Controls)
             {
@@ -177,6 +177,7 @@ internal static class Program
                 launchArguments,
                 inventory,
                 receipts,
+                failures,
                 overall);
 
             var json = JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true });
