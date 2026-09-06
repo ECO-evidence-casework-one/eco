@@ -60,11 +60,16 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Probe module verification failed.' }
           $module=go list -m -json github.com/xackery/wlk | ConvertFrom-Json
           if ($module.Version -cne 'v0.0.22') { throw "Resolved Wlk version is not expected release: $($module.Version)" }
-          $donor=Join-Path $env:RUNNER_TEMP 'wlk'
-          foreach($rel in @('LICENSE','walk\accessibility.go','walk\lineedit.go','walk\pushbutton.go','walk\listbox.go')) {
-            $resolved=(Get-FileHash -LiteralPath (Join-Path $module.Dir $rel) -Algorithm SHA256).Hash.ToLowerInvariant()
-            $pinned=(Get-FileHash -LiteralPath (Join-Path $donor $rel) -Algorithm SHA256).Hash.ToLowerInvariant()
-            if($resolved -cne $pinned){ throw "Resolved v0.0.22 bytes differ from pinned d6740dd commit for $rel" }
+          $expected=@{
+            'LICENSE'='9f9f8a36c0ac681a46a838a3a9be51858b8b134a'
+            'walk\accessibility.go'='1f9e2f933be48d01bd5ae122bc4b2bf970ce74d6'
+            'walk\lineedit.go'='5c0b032f195e8ced66debb1bcc12e0a551151e0e'
+            'walk\pushbutton.go'='2fc5c5c6d4bf0720f269a0455899ffb45c722976'
+            'walk\listbox.go'='ad5f2cb63bc112542a737d7d9546dde6a03f6143'
+          }
+          foreach($rel in $expected.Keys){
+            $blob=(git hash-object --no-filters (Join-Path $module.Dir $rel)).Trim()
+            if($LASTEXITCODE -ne 0 -or $blob -cne $expected[$rel]){ throw "Resolved v0.0.22 Git blob differs from pinned donor for $rel`: $blob" }
           }
           go test -count=1 ./...
           if ($LASTEXITCODE -ne 0) { throw 'Probe compile test failed.' }
