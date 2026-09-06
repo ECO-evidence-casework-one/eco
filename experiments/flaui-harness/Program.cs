@@ -35,12 +35,24 @@ internal sealed record ControlReceipt(
     string? Exercise,
     string Result);
 
+internal sealed record InventoryElement(
+    int Index,
+    string Name,
+    string AutomationId,
+    string ClassName,
+    string ControlType,
+    bool Enabled,
+    bool KeyboardFocusable,
+    bool Offscreen,
+    IReadOnlyList<string> SupportedPatterns);
+
 internal sealed record AcceptanceReceipt(
     string Target,
     DateTimeOffset TimestampUtc,
     string WindowTitle,
     string FlaUiCoreVersion,
     string FlaUiUia3Version,
+    IReadOnlyList<InventoryElement> Inventory,
     IReadOnlyList<ControlReceipt> Controls,
     string OverallResult);
 
@@ -74,6 +86,7 @@ internal static class Program
             }
 
             var descendants = window.FindAllDescendants();
+            var inventory = descendants.Select((element, index) => Inventory(element, index)).ToArray();
             var receipts = new List<ControlReceipt>();
             var failures = new List<string>();
 
@@ -148,6 +161,7 @@ internal static class Program
                 window.Title,
                 coreVersion,
                 uia3Version,
+                inventory,
                 receipts,
                 overall);
 
@@ -156,6 +170,7 @@ internal static class Program
             File.WriteAllText(receiptPath, json + Environment.NewLine);
 
             Console.WriteLine($"ECO_UIA_ACCEPTANCE={overall}");
+            Console.WriteLine($"ECO_UIA_INVENTORY={inventory.Length}");
             Console.WriteLine($"ECO_UIA_RECEIPT={Path.GetFullPath(receiptPath)}");
             foreach (var failure in failures)
             {
@@ -168,6 +183,27 @@ internal static class Program
         {
             Console.Error.WriteLine("HARNESS_ERROR: " + ex);
             return 1;
+        }
+    }
+
+    private static InventoryElement Inventory(AutomationElement e, int index)
+    {
+        try
+        {
+            return new InventoryElement(
+                index,
+                e.Name,
+                e.AutomationId,
+                e.ClassName,
+                e.ControlType.ToString(),
+                e.IsEnabled,
+                e.Properties.IsKeyboardFocusable.ValueOrDefault,
+                e.IsOffscreen,
+                SupportedPatterns(e));
+        }
+        catch (Exception ex)
+        {
+            return new InventoryElement(index, "<unavailable: " + ex.GetType().Name + ">", "", "", "Unknown", false, false, true, Array.Empty<string>());
         }
     }
 
