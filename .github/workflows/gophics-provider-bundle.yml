@@ -1,0 +1,56 @@
+name: Export qualified gophics UIA provider source bundle
+
+on:
+  push:
+    branches: [experiment/gophics-uia-provider-20260906]
+    paths:
+      - .github/workflows/gophics-provider-bundle.yml
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Fetch and verify exact donor files
+        shell: bash
+        run: |
+          set -euo pipefail
+          commit='6688eb057b6afc821cc3e797ea3e6ca64bfadd81'
+          donor="$RUNNER_TEMP/gophics"
+          git init "$donor"
+          git -C "$donor" remote add origin https://github.com/doug/gophics.git
+          git -C "$donor" fetch --depth=1 origin "$commit"
+          git -C "$donor" checkout --detach FETCH_HEAD
+          test "$(git -C "$donor" rev-parse HEAD)" = "$commit"
+          test "$(git -C "$donor" rev-parse "$commit:LICENSE")" = 'd645695673349e3947e8e5ae42332d0ac3164cd7'
+          test "$(git -C "$donor" rev-parse "$commit:NOTICE")" = 'f6c67cc7b6b24a2fa8e9236b4d47cd71aac0ff2d'
+          test "$(git -C "$donor" rev-parse "$commit:internal/gfx/gogpu/internal/platform/uia_windows.go")" = 'e220ee4fd02571d52bad26566e2c45e3f221bf6e'
+          test "$(git -C "$donor" rev-parse "$commit:internal/gfx/gogpu/internal/platform/uia_provider_windows.go")" = 'edf52836daa1720ca9cb7aaa0844eea17bcf3897'
+          mkdir -p bundle/platform
+          cp "$donor/LICENSE" bundle/LICENSE.gophics
+          cp "$donor/NOTICE" bundle/NOTICE.gophics
+          for file in a11y.go a11ytree.go uia_windows.go uia_provider_windows.go uia_tree_windows.go uia_vtables_windows.go uia_hook_windows.go; do
+            cp "$donor/internal/gfx/gogpu/internal/platform/$file" "bundle/platform/$file"
+          done
+          cat > bundle/SOURCE_IDENTITY.txt <<EOF
+          upstream=https://github.com/doug/gophics
+          commit=$commit
+          licence=Apache-2.0
+          qualification_run=34037311519
+          purpose=qualified pure-Go Windows UI Automation provider donor for bounded ECO adaptation
+          EOF
+          find bundle -type f -print0 | sort -z | xargs -0 sha256sum > bundle/SHA256SUMS.txt
+          cat bundle/SHA256SUMS.txt
+
+      - name: Upload source-only donor bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: gophics-uia-provider-qualified-source-6688eb0
+          path: bundle/
+          if-no-files-found: error
+          retention-days: 7
