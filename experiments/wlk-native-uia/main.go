@@ -32,8 +32,8 @@ func main() {
 	if _, err := (MainWindow{
 		AssignTo: &mw,
 		Title:    "ECO native accessibility donor probe",
-		MinSize:  Size{520, 360},
-		Size:     Size{700, 460},
+		MinSize:  Size{Width: 520, Height: 360},
+		Size:     Size{Width: 700, Height: 460},
 		Layout:   VBox{},
 		Children: []Widget{
 			Label{
