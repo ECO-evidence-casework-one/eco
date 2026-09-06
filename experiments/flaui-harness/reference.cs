@@ -1,26 +1,43 @@
 using System;
 using System.Drawing;
+using System.Linq;
 using System.Windows.Forms;
 
 internal static class ReferenceApp
 {
     [STAThread]
-    private static void Main()
+    private static void Main(string[] args)
     {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
 
+        var argumentSelfTest = args.Contains("--arg-self-test", StringComparer.Ordinal);
+        var required = new[]
+        {
+            "--arg-self-test",
+            "--test-mode",
+            "--test-workspace=C:\\Synthetic Root\\workspace",
+            "--test-fixture-root=C:\\Synthetic Root\\fixtures",
+            "--test-bridge-token=ECOAccessibilitySyntheticToken20260906R1",
+            "--test-bridge-endpoint=C:\\Synthetic Root\\bridge\\endpoint.json"
+        };
+        var argumentForwardingPassed = !argumentSelfTest || required.All(expected => args.Contains(expected, StringComparer.Ordinal));
+
         var form = new Form
         {
-            Text = "ECO FlaUI synthetic reference",
+            Text = argumentSelfTest
+                ? (argumentForwardingPassed ? "ECO FlaUI argument forwarding PASS" : "ECO FlaUI argument forwarding FAIL")
+                : "ECO FlaUI synthetic reference",
             StartPosition = FormStartPosition.CenterScreen,
             ClientSize = new Size(640, 420)
         };
 
         var title = new Label
         {
-            Text = "Synthetic ECO accessibility reference — no private data",
-            AccessibleName = "Synthetic ECO accessibility reference",
+            Text = argumentSelfTest
+                ? string.Join("\r\n", args)
+                : "Synthetic ECO accessibility reference — no private data",
+            AccessibleName = argumentSelfTest ? "Forwarded command line" : "Synthetic ECO accessibility reference",
             AutoSize = true,
             Location = new Point(24, 24)
         };
@@ -69,7 +86,7 @@ internal static class ReferenceApp
 
         var status = new Label
         {
-            Text = "Ready",
+            Text = argumentSelfTest ? (argumentForwardingPassed ? "Arguments received exactly" : "Arguments missing") : "Ready",
             AccessibleName = "Status",
             AutoSize = true,
             Location = new Point(24, 344)
