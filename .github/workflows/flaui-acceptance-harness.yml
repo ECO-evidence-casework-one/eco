@@ -84,7 +84,39 @@ jobs:
           }
           Write-Host "FLAUI_HARNESS_INVENTORY_COUNT=$($receipt.Inventory.Count)"
           Write-Host 'FLAUI_HARNESS_POSITIVE=PASS'
-          Get-Content -LiteralPath positive-receipt.json
+
+      - name: Prove args-file forwards ECO-style arguments exactly
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $argsLines=@(
+            '--arg-self-test',
+            '--test-mode',
+            '--test-workspace=C:\Synthetic Root\workspace',
+            '--test-fixture-root=C:\Synthetic Root\fixtures',
+            '--test-bridge-token=ECOAccessibilitySyntheticToken20260906R1',
+            '--test-bridge-endpoint=C:\Synthetic Root\bridge\endpoint.json'
+          )
+          [IO.File]::WriteAllLines((Join-Path $PWD 'forwarding-args.txt'),$argsLines,(New-Object Text.UTF8Encoding($false)))
+          $profile=@'
+          {
+            "windowTitleContains": "ECO FlaUI argument forwarding PASS",
+            "controls": []
+          }
+          '@
+          Set-Content -LiteralPath forwarding-profile.json -Value $profile -Encoding UTF8
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'forwarding-profile.json') --receipt (Join-Path $PWD 'forwarding-receipt.json') --args-file (Join-Path $PWD 'forwarding-args.txt')
+          if($LASTEXITCODE -ne 0){ throw "args-file forwarding control failed with $LASTEXITCODE." }
+          $receipt=Get-Content -LiteralPath forwarding-receipt.json -Raw | ConvertFrom-Json
+          if($receipt.OverallResult -cne 'PASS'){ throw 'Forwarding receipt did not record PASS.' }
+          if($receipt.WindowTitle -cne 'ECO FlaUI argument forwarding PASS'){ throw "Unexpected forwarding title: $($receipt.WindowTitle)" }
+          if($receipt.LaunchArguments.Count -ne $argsLines.Count){ throw "Expected $($argsLines.Count) forwarded arguments; got $($receipt.LaunchArguments.Count)." }
+          for($i=0;$i -lt $argsLines.Count;$i++){
+            if($receipt.LaunchArguments[$i] -cne $argsLines[$i]){ throw "Argument $i mismatch: '$($receipt.LaunchArguments[$i])'" }
+          }
+          Write-Host 'FLAUI_ARGS_FILE_FORWARDING=PASS'
 
       - name: Prove negative expectation is rejected
         working-directory: experiments/flaui-harness
@@ -115,5 +147,5 @@ jobs:
       - name: Qualification summary
         shell: pwsh
         run: |
-          Write-Host 'FlaUI 5.0.0 external acceptance + inventory harness qualification: PASS'
+          Write-Host 'FlaUI 5.0.0 external acceptance + inventory + args-file qualification: PASS'
           Write-Host 'No ECO private source, real evidence, model, executable artifact or release artifact is uploaded.'
