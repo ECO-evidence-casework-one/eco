@@ -113,13 +113,25 @@ jobs:
               foreach($e in $all){ if($e.Current.Name -ceq $name -and $e.Current.ControlType.Id -eq $controlTypeId){ return $e } }
               return $null
             }
-            $edit=FindElement 'Search whole matter' ([System.Windows.Automation.ControlType]::Edit.Id)
-            $button=FindElement 'Run search' ([System.Windows.Automation.ControlType]::Button.Id)
-            $list=FindElement 'Evidence results' ([System.Windows.Automation.ControlType]::List.Id)
+            function WaitElement([string]$name,[int]$controlTypeId){
+              for($i=0;$i -lt 50;$i++){
+                $found=FindElement $name $controlTypeId
+                if($found){ return $found }
+                Start-Sleep -Milliseconds 100
+              }
+              return $null
+            }
+            # Wlk applies its Dynamic Annotation metadata during declarative
+            # initialization. The same-runner WinForms control proved that UIA
+            # is available; wait for Wlk's final native control types rather
+            # than treating the first transient generic Pane snapshot as final.
+            $edit=WaitElement 'Search whole matter' ([System.Windows.Automation.ControlType]::Edit.Id)
+            $button=WaitElement 'Run search' ([System.Windows.Automation.ControlType]::Button.Id)
+            $list=WaitElement 'Evidence results' ([System.Windows.Automation.ControlType]::List.Id)
             if(!$edit -or !$button -or !$list){
               $all=$window.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
               foreach($e in $all){ Write-Host ("UIA_ELEMENT type={0} name={1} focusable={2}" -f $e.Current.ControlType.ProgrammaticName,$e.Current.Name,$e.Current.IsKeyboardFocusable) }
-              throw 'Named Edit/Button/List controls were not all exposed through UI Automation.'
+              throw 'Named Edit/Button/List controls did not converge into the UI Automation tree.'
             }
             foreach($e in @($edit,$button,$list)){ if(!$e.Current.IsEnabled -or !$e.Current.IsKeyboardFocusable){ throw "Control is not enabled/focusable: $($e.Current.Name)" } }
 
@@ -158,6 +170,7 @@ jobs:
             $perMonitorV2=New-Object IntPtr(-4)
             if(![EcoDpiProbe]::AreDpiAwarenessContextsEqual($ctx,$perMonitorV2)){ throw 'Probe window is not Per-Monitor-V2 DPI aware.' }
 
+            Write-Host 'WLK_UIA_TREE_CONVERGENCE=PASS'
             Write-Host 'WLK_UIA_EDIT_VALUE_PATTERN=PASS'
             Write-Host 'WLK_UIA_BUTTON_INVOKE_PATTERN=PASS'
             Write-Host 'WLK_UIA_LIST_SELECTION_PATTERN=PASS'
