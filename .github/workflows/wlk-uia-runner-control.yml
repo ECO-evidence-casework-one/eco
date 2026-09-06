@@ -80,10 +80,10 @@ jobs:
           }
           '@
 
-          function Find-TopWindow([int]$pid) {
+          function Find-TopWindow([int]$processId) {
             for($i=0;$i -lt 100;$i++) {
               Start-Sleep -Milliseconds 100
-              $cond=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$pid)
+              $cond=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$processId)
               $w=[System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,$cond)
               if($w){ return $w }
             }
