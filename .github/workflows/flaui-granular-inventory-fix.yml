@@ -145,8 +145,11 @@ jobs:
           & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'synthetic-profile.json') --receipt (Join-Path $PWD 'granular-reference.json')
           if($LASTEXITCODE -ne 0){ throw 'Reference UIA run failed.' }
           $r=Get-Content granular-reference.json -Raw|ConvertFrom-Json
-          $search=@($r.Inventory|Where-Object {$_.Name -ceq 'Search whole matter'})
-          if($search.Count -ne 1 -or $search[0].ControlType -ceq 'Unknown'){ throw 'Known-good Edit collapsed in granular inventory.' }
+          $search=@($r.Inventory|Where-Object {$_.AutomationId -ceq 'SearchWholeMatter'})
+          if($search.Count -ne 1){ throw "Expected one SearchWholeMatter element; got $($search.Count)." }
+          if($search[0].Name -cne 'Search whole matter'){ throw "Known-good Edit lost its accessible name: '$($search[0].Name)'" }
+          if($search[0].ControlType -ceq 'Unknown'){ throw 'Known-good Edit collapsed in granular inventory.' }
+          Write-Host "WINFORMS_PROPERTY_ERRORS=$($search[0].PropertyErrors.Count)"
 
       - name: Prove unsupported donor properties do not collapse the whole element
         shell: pwsh
