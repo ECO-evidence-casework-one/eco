@@ -1,0 +1,176 @@
+name: Public mixed native and virtual UIA coexistence
+
+on:
+  push:
+    branches: [experiment/gophics-uia-provider-20260906]
+    paths: [.github/workflows/gophics-mixed-native-virtual-uia.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.27.0'
+          cache: false
+
+      - name: Build exact donor mixed-control probe
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $commit='6688eb057b6afc821cc3e797ea3e6ca64bfadd81'
+          $donor=Join-Path $env:RUNNER_TEMP 'gophics'
+          git init $donor | Out-Host
+          git -C $donor remote add origin https://github.com/doug/gophics.git
+          git -C $donor fetch --depth=1 origin $commit | Out-Host
+          git -C $donor checkout --detach FETCH_HEAD | Out-Host
+          if((git -C $donor rev-parse HEAD).Trim() -cne $commit){ throw 'Pinned donor commit mismatch.' }
+          $cmd=Join-Path $donor 'internal\gfx\gogpu\cmd\mixeduia'
+          New-Item -ItemType Directory -Force -Path $cmd | Out-Null
+          @'
+          package main
+
+          import (
+            "fmt"
+            "os"
+            "runtime"
+            "time"
+            "unsafe"
+
+            "github.com/doug/gophics/internal/gfx/gogpu/internal/platform"
+            "golang.org/x/sys/windows"
+          )
+
+          var createWindowExW = windows.NewLazySystemDLL("user32.dll").NewProc("CreateWindowExW")
+
+          const (
+            wsChild = 0x40000000
+            wsVisible = 0x10000000
+            wsTabStop = 0x00010000
+            wsBorder = 0x00800000
+            esAutoHScroll = 0x0080
+          )
+
+          func wide(s string) *uint16 {
+            p, err := windows.UTF16PtrFromString(s)
+            if err != nil { panic(err) }
+            return p
+          }
+
+          func child(className, text string, style uint32, x, y, width, height int, parent, instance, id uintptr) uintptr {
+            hwnd, _, callErr := createWindowExW.Call(
+              0,
+              uintptr(unsafe.Pointer(wide(className))),
+              uintptr(unsafe.Pointer(wide(text))),
+              uintptr(style), uintptr(x), uintptr(y), uintptr(width), uintptr(height),
+              parent, id, instance, 0,
+            )
+            if hwnd == 0 { panic(fmt.Sprintf("CreateWindowExW(%s) failed: %v", className, callErr)) }
+            return hwnd
+          }
+
+          func main() {
+            runtime.LockOSThread()
+            defer runtime.UnlockOSThread()
+
+            manager := platform.NewManager()
+            if err := manager.Init(); err != nil { panic(err) }
+            defer manager.Destroy()
+
+            win, err := manager.CreateWindow(platform.Config{Title: "gophics mixed UIA probe", Width: 680, Height: 360, Resizable: false})
+            if err != nil { panic(err) }
+            instance, parent := win.GetHandle()
+            if instance == 0 || parent == 0 { panic("missing native gophics HWND") }
+
+            child("EDIT", "Native editable", wsChild|wsVisible|wsTabStop|wsBorder|esAutoHScroll, 24, 36, 250, 30, parent, instance, 101)
+            child("BUTTON", "Native action", wsChild|wsVisible|wsTabStop, 24, 86, 150, 36, parent, instance, 102)
+
+            a11y, ok := win.(platform.A11yWindow)
+            if !ok { panic("platform window does not expose A11yWindow") }
+            marker := os.Getenv("MIXED_UIA_MARKER")
+            a11y.SetA11yTree([]platform.A11yNode{
+              {ID: 1, ParentID: -1, Role: "button", Label: "Virtual action", X: 340, Y: 86, W: 160, H: 40, Tappable: true},
+            }, func(id int) {
+              if id == 1 && marker != "" {
+                if err := os.WriteFile(marker, []byte("virtual invoked\n"), 0600); err != nil { panic(err) }
+              }
+            })
+
+            win.Show()
+            deadline := time.Now().Add(90 * time.Second)
+            for time.Now().Before(deadline) {
+              ev := manager.PollEvents()
+              if ev.Type == platform.EventClose || win.ShouldClose() { return }
+              time.Sleep(10 * time.Millisecond)
+            }
+          }
+          '@ | Set-Content -LiteralPath (Join-Path $cmd 'main.go') -Encoding UTF8
+          Push-Location $donor
+          try {
+            gofmt -w internal/gfx/gogpu/cmd/mixeduia/main.go
+            go vet ./internal/gfx/gogpu/cmd/mixeduia
+            if($LASTEXITCODE -ne 0){ throw 'Mixed probe vet failed.' }
+            go build -trimpath -o (Join-Path $env:RUNNER_TEMP 'mixed-uia.exe') ./internal/gfx/gogpu/cmd/mixeduia
+            if($LASTEXITCODE -ne 0){ throw 'Mixed probe build failed.' }
+          } finally { Pop-Location }
+
+      - name: Build corrected FlaUI inventory client
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore Eco.UiaAcceptance.csproj --nologo
+          if($LASTEXITCODE -ne 0){ throw 'FlaUI restore failed.' }
+          dotnet build Eco.UiaAcceptance.csproj -c Release --no-restore --nologo
+          if($LASTEXITCODE -ne 0){ throw 'FlaUI build failed.' }
+          $assets=Get-Content -LiteralPath obj\project.assets.json -Raw
+          foreach($token in @('FlaUI.Core/5.0.0','FlaUI.UIA3/5.0.0')){ if(!$assets.Contains($token)){ throw "Missing exact FlaUI package $token" } }
+
+      - name: Prove native HWND controls and virtual provider coexist
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $profile=@'
+          {
+            "windowTitleContains": "gophics mixed UIA probe",
+            "controls": [
+              {"name":"Virtual action","controlType":"Button","mustBeKeyboardFocusable":true,"requiredPatterns":["Invoke"],"exercise":"invoke"},
+              {"name":"Native action","controlType":"Button","mustBeKeyboardFocusable":true,"requiredPatterns":["Invoke"]}
+            ]
+          }
+          '@
+          Set-Content -LiteralPath mixed-profile.json -Value $profile -Encoding UTF8
+          $env:MIXED_UIA_MARKER=Join-Path $env:RUNNER_TEMP 'virtual-invoked.txt'
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          $target=Join-Path $env:RUNNER_TEMP 'mixed-uia.exe'
+          $receipt=Join-Path $PWD 'mixed-receipt.json'
+          & $harness --exe $target --profile (Join-Path $PWD 'mixed-profile.json') --receipt $receipt
+          if($LASTEXITCODE -ne 0){ throw "Mixed-control UIA acceptance failed with $LASTEXITCODE." }
+          $r=Get-Content -LiteralPath $receipt -Raw|ConvertFrom-Json
+          if($r.OverallResult -cne 'PASS'){ throw 'Mixed receipt not PASS.' }
+          $edit=@($r.Inventory|Where-Object { $_.ControlType -ceq 'Edit' -and $_.ClassName -match '(?i)edit' })
+          if($edit.Count -lt 1){ throw 'Native Edit disappeared from UIA tree.' }
+          if(-not ($edit|Where-Object { $_.KeyboardFocusable }).Count){ throw 'Native Edit lost keyboard focusability.' }
+          if(-not ($edit|Where-Object { $_.SupportedPatterns -contains 'Value' }).Count){ throw 'Native Edit lost ValuePattern.' }
+          $virtual=@($r.Controls|Where-Object { $_.Name -ceq 'Virtual action' })
+          $native=@($r.Controls|Where-Object { $_.Name -ceq 'Native action' })
+          if($virtual.Count -ne 1 -or $native.Count -ne 1){ throw 'Expected both virtual and native buttons.' }
+          if(-not (Test-Path -LiteralPath $env:MIXED_UIA_MARKER)){ throw 'Virtual Invoke did not reach activation callback.' }
+          Write-Host "MIXED_UIA_INVENTORY=$($r.Inventory.Count)"
+          Write-Host 'NATIVE_EDIT_UIA=PASS'
+          Write-Host 'NATIVE_BUTTON_UIA=PASS'
+          Write-Host 'VIRTUAL_BUTTON_UIA=PASS'
+          Write-Host 'MIXED_NATIVE_VIRTUAL_UIA=PASS'
+
+      - name: Qualification summary
+        shell: pwsh
+        run: |
+          Write-Host 'Mixed native Win32 + gophics virtual UIA coexistence gate completed.'
+          Write-Host 'No private ECO source, user data or real evidence used.'
