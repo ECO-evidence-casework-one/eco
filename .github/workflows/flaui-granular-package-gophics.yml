@@ -1,0 +1,98 @@
+name: Public granular FlaUI package for ECO adapter acceptance
+
+on:
+  push:
+    branches: [experiment/gophics-uia-provider-20260906]
+    paths: [.github/workflows/flaui-granular-package-gophics.yml]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Build known-good WinForms reference
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          & $csc /nologo /target:winexe /out:reference.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll reference.cs
+          if($LASTEXITCODE -ne 0){ throw 'reference build failed' }
+
+      - name: Publish exact granular harness as self-contained win-x64
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore Eco.UiaAcceptance.csproj -r win-x64 --nologo
+          if($LASTEXITCODE -ne 0){ throw 'restore failed' }
+          dotnet publish Eco.UiaAcceptance.csproj -c Release -r win-x64 --self-contained true --no-restore --nologo -p:PublishSingleFile=true -p:DebugType=None -p:DebugSymbols=false -p:PublishReadyToRun=false -o granular-publish
+          if($LASTEXITCODE -ne 0){ throw 'publish failed' }
+          $exe=Join-Path $PWD 'granular-publish\Eco.UiaAcceptance.exe'
+          if(!(Test-Path -LiteralPath $exe -PathType Leaf)){ throw 'published harness missing' }
+          $hash=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "GRANULAR_HARNESS_SHA256=$hash"
+          Write-Host "GRANULAR_HARNESS_SIZE=$((Get-Item -LiteralPath $exe).Length)"
+
+      - name: Re-prove positive interaction and granular inventory
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $harness=Join-Path $PWD 'granular-publish\Eco.UiaAcceptance.exe'
+          $receipt=Join-Path $PWD 'granular-positive.json'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'synthetic-profile.json') --receipt $receipt
+          if($LASTEXITCODE -ne 0){ throw "positive control failed: $LASTEXITCODE" }
+          $r=Get-Content -LiteralPath $receipt -Raw | ConvertFrom-Json
+          if($r.OverallResult -cne 'PASS'){ throw 'positive receipt not PASS' }
+          if($r.Inventory.Count -lt 3){ throw 'inventory unexpectedly small' }
+          $edit=@($r.Inventory | Where-Object { $_.AutomationId -eq 'SearchWholeMatter' })
+          if($edit.Count -ne 1){ throw 'unique native Edit missing from granular inventory' }
+          if($edit[0].ControlType -cne 'Edit' -or -not $edit[0].KeyboardFocusable){ throw 'granular inventory lost Edit semantics' }
+          if($null -eq $edit[0].PropertyErrors){ throw 'granular PropertyErrors field is missing' }
+          Write-Host 'GRANULAR_REFERENCE_RUNTIME=PASS'
+
+      - name: Write identity and retain FlaUI license
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $exe=Join-Path $PWD 'granular-publish\Eco.UiaAcceptance.exe'
+          $license=Join-Path $PWD 'FLAUI_LICENSE.txt'
+          if(!(Test-Path -LiteralPath $license -PathType Leaf)){ throw 'FlaUI license missing' }
+          $receipt=[ordered]@{
+            schema=1
+            harness='ECO granular external FlaUI accessibility harness'
+            donor='FlaUI.Core + FlaUI.UIA3'
+            donor_version='5.0.0'
+            donor_commit='c5e7eb7af081e68534cb6b6890a38aa791ce4168'
+            donor_license='MIT'
+            source_head=$env:GITHUB_SHA
+            exe_sha256=(Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+            exe_size_bytes=(Get-Item -LiteralPath $exe).Length
+            granular_per_property_inventory='PASS'
+            positive_value_invoke_selection='PASS'
+            private_eco_source_included=$false
+          }
+          $receipt|ConvertTo-Json -Depth 4|Set-Content -LiteralPath granular-publish\HARNESS_IDENTITY.json -Encoding UTF8
+          Copy-Item -LiteralPath $license -Destination granular-publish\FLAUI_LICENSE.txt
+          $receipt|ConvertTo-Json -Depth 4|Write-Host
+
+      - name: Upload qualified granular harness
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FlaUI-Granular-5.0.0-qualified-win-x64
+          path: experiments/flaui-harness/granular-publish/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Summary
+        shell: pwsh
+        run: |
+          Write-Host 'Granular self-contained FlaUI harness: QUALIFIED AND PACKAGED'
+          Write-Host 'No private ECO source or real evidence included.'
