@@ -1,0 +1,28 @@
+{
+  "windowTitleContains": "ECO FlaUI synthetic reference",
+  "controls": [
+    {
+      "name": "Search whole matter",
+      "controlType": "Edit",
+      "mustBeKeyboardFocusable": true,
+      "requiredPatterns": ["Value"],
+      "exercise": "setvalue",
+      "exerciseValue": "synthetic changed search"
+    },
+    {
+      "name": "Run search",
+      "controlType": "Button",
+      "mustBeKeyboardFocusable": true,
+      "requiredPatterns": ["Invoke"],
+      "exercise": "invoke"
+    },
+    {
+      "name": "Evidence results",
+      "controlType": "List",
+      "mustBeKeyboardFocusable": true,
+      "requiredPatterns": ["Selection"],
+      "exercise": "select",
+      "selectIndex": 0
+    }
+  ]
+}
