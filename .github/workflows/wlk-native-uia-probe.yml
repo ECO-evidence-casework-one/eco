@@ -45,7 +45,7 @@ jobs:
           Write-Host "WLK_DONOR_COMMIT=$commit"
           Write-Host 'WLK_NATIVE_CONTROLS_AND_DYNAMIC_ANNOTATION=PASS'
 
-      - name: Resolve exact donor commit and build the native probe
+      - name: Resolve exact donor release and build the native probe
         working-directory: experiments/wlk-native-uia
         shell: pwsh
         run: |
@@ -59,16 +59,22 @@ jobs:
           go mod verify
           if ($LASTEXITCODE -ne 0) { throw 'Probe module verification failed.' }
           $module=go list -m -json github.com/xackery/wlk | ConvertFrom-Json
-          if (!$module.Version.EndsWith('-d6740ddf5619')) { throw "Resolved Wlk version is not pinned commit: $($module.Version)" }
+          if ($module.Version -cne 'v0.0.22') { throw "Resolved Wlk version is not expected release: $($module.Version)" }
+          $donor=Join-Path $env:RUNNER_TEMP 'wlk'
+          foreach($rel in @('LICENSE','walk\accessibility.go','walk\lineedit.go','walk\pushbutton.go','walk\listbox.go')) {
+            $resolved=(Get-FileHash -LiteralPath (Join-Path $module.Dir $rel) -Algorithm SHA256).Hash.ToLowerInvariant()
+            $pinned=(Get-FileHash -LiteralPath (Join-Path $donor $rel) -Algorithm SHA256).Hash.ToLowerInvariant()
+            if($resolved -cne $pinned){ throw "Resolved v0.0.22 bytes differ from pinned d6740dd commit for $rel" }
+          }
           go test -count=1 ./...
           if ($LASTEXITCODE -ne 0) { throw 'Probe compile test failed.' }
           go vet ./...
           if ($LASTEXITCODE -ne 0) { throw 'Probe vet failed.' }
           go build -trimpath -ldflags '-H=windowsgui' -o probe.exe .
           if ($LASTEXITCODE -ne 0) { throw 'Native Wlk probe build failed.' }
-          Copy-Item -LiteralPath probe.exe.manifest -Destination probe.exe.manifest -Force
           $bytes=[IO.File]::ReadAllBytes((Join-Path $PWD 'probe.exe'))
           if($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){ throw 'Output is not Windows PE.' }
+          Write-Host "WLK_MODULE_VERSION=$($module.Version)"
           Write-Host "WLK_PROBE_SHA256=$((Get-FileHash -LiteralPath probe.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
           Write-Host "WLK_PROBE_BYTES=$((Get-Item -LiteralPath probe.exe).Length)"
 
