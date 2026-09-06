@@ -81,11 +81,6 @@ func main() {
 			Label{
 				AssignTo: &status,
 				Text:     "Ready",
-				Accessibility: Accessibility{
-					Name:        "Search status",
-					Description: "Synthetic search status",
-					Role:        AccRoleStatictext,
-				},
 			},
 		},
 	}.Run()); err != nil {
