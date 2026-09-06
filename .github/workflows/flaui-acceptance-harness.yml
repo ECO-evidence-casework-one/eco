@@ -79,6 +79,7 @@ jobs:
           if($receipt.OverallResult -cne 'PASS'){ throw 'Positive receipt did not record PASS.' }
           if($receipt.Controls.Count -ne 3){ throw "Positive receipt expected 3 controls, got $($receipt.Controls.Count)." }
           if($receipt.Inventory.Count -lt 3){ throw "UIA inventory unexpectedly small: $($receipt.Inventory.Count)." }
+          if($receipt.Failures.Count -ne 0){ throw 'Positive receipt unexpectedly contains failures.' }
           foreach($name in @('Search whole matter','Run search','Evidence results')){
             if(!($receipt.Inventory | Where-Object { $_.Name -ceq $name })){ throw "UIA inventory missing expected element: $name" }
           }
@@ -118,6 +119,30 @@ jobs:
           }
           Write-Host 'FLAUI_ARGS_FILE_FORWARDING=PASS'
 
+      - name: Prove unexpected title still writes a diagnostic receipt
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $profile=@'
+          {
+            "windowTitleContains": "Title that is deliberately absent",
+            "controls": []
+          }
+          '@
+          Set-Content -LiteralPath title-mismatch-profile.json -Value $profile -Encoding UTF8
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'title-mismatch-profile.json') --receipt (Join-Path $PWD 'title-mismatch-receipt.json')
+          $exit=$LASTEXITCODE
+          if($exit -ne 2){ throw "Title mismatch expected exit 2; actual=$exit." }
+          if(!(Test-Path -LiteralPath title-mismatch-receipt.json -PathType Leaf)){ throw 'Title mismatch did not write a receipt.' }
+          $receipt=Get-Content -LiteralPath title-mismatch-receipt.json -Raw | ConvertFrom-Json
+          if($receipt.OverallResult -cne 'FAIL'){ throw 'Title mismatch receipt did not record FAIL.' }
+          if($receipt.Inventory.Count -lt 3){ throw 'Title mismatch receipt did not retain UIA inventory.' }
+          if(-not ($receipt.Failures -join "`n").Contains('Window title')){ throw 'Title mismatch receipt did not retain the failure reason.' }
+          Write-Host 'FLAUI_TITLE_MISMATCH_DIAGNOSTIC=PASS'
+          $global:LASTEXITCODE=0
+
       - name: Prove negative expectation is rejected
         working-directory: experiments/flaui-harness
         shell: pwsh
@@ -147,5 +172,5 @@ jobs:
       - name: Qualification summary
         shell: pwsh
         run: |
-          Write-Host 'FlaUI 5.0.0 external acceptance + inventory + args-file qualification: PASS'
+          Write-Host 'FlaUI 5.0.0 external acceptance + inventory + args-file + diagnostic qualification: PASS'
           Write-Host 'No ECO private source, real evidence, model, executable artifact or release artifact is uploaded.'
