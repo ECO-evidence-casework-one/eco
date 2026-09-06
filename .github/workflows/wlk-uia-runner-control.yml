@@ -1,0 +1,147 @@
+name: Public Wlk UIA runner control
+
+on:
+  push:
+    branches: [experiment/wlk-native-uia-20260906]
+    paths: [.github/workflows/wlk-uia-runner-control.yml, experiments/wlk-native-uia/**]
+
+permissions:
+  contents: read
+
+jobs:
+  compare-wlk-with-winforms-reference:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.23.2'
+          cache: false
+
+      - name: Build exact Wlk probe and same-runner WinForms reference
+        working-directory: experiments/wlk-native-uia
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          go mod init eco-wlk-native-uia-control
+          if ($LASTEXITCODE -ne 0) { throw 'Module init failed.' }
+          go get github.com/xackery/wlk@d6740ddf561940bdcad67a3e96201090d2af6d3b
+          if ($LASTEXITCODE -ne 0) { throw 'Pinned Wlk resolution failed.' }
+          go mod tidy
+          if ($LASTEXITCODE -ne 0) { throw 'Module tidy failed.' }
+          go mod verify
+          if ($LASTEXITCODE -ne 0) { throw 'Module verify failed.' }
+          $module=go list -m -json github.com/xackery/wlk | ConvertFrom-Json
+          if ($module.Version -cne 'v0.0.22') { throw "Wrong Wlk module: $($module.Version)" }
+          go test -count=1 ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Wlk probe compile test failed.' }
+          go vet ./...
+          if ($LASTEXITCODE -ne 0) { throw 'Wlk probe vet failed.' }
+          go build -trimpath -ldflags '-H=windowsgui' -o probe.exe .
+          if ($LASTEXITCODE -ne 0) { throw 'Wlk probe build failed.' }
+
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          if (!(Test-Path -LiteralPath $csc -PathType Leaf)) { throw 'Framework C# compiler unavailable.' }
+          & $csc /nologo /target:winexe /out:reference.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll reference.cs
+          if ($LASTEXITCODE -ne 0) { throw 'WinForms reference build failed.' }
+          foreach($exe in @('probe.exe','reference.exe')) {
+            $bytes=[IO.File]::ReadAllBytes((Join-Path $PWD $exe))
+            if($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){ throw "$exe is not a PE executable." }
+          }
+          Write-Host "WLK_CONTROL_PROBE_SHA256=$((Get-FileHash -LiteralPath probe.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+          Write-Host "WINFORMS_REFERENCE_SHA256=$((Get-FileHash -LiteralPath reference.exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Compare UI Automation tree and raw HWND descendants
+        working-directory: experiments/wlk-native-uia
+        shell: powershell
+        run: |
+          $ErrorActionPreference='Stop'
+          Add-Type -AssemblyName UIAutomationClient
+          Add-Type -AssemblyName UIAutomationTypes
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Collections.Generic;
+          using System.Runtime.InteropServices;
+          using System.Text;
+          public static class EcoWin32Tree {
+            public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+            [DllImport("user32.dll")] static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+            [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+            [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] public static extern bool IsWindowVisible(IntPtr hWnd);
+            public static IntPtr[] Children(IntPtr parent) {
+              var found=new List<IntPtr>();
+              EnumChildWindows(parent, delegate(IntPtr hwnd, IntPtr p){ found.Add(hwnd); return true; }, IntPtr.Zero);
+              return found.ToArray();
+            }
+            public static string ClassName(IntPtr hwnd) { var b=new StringBuilder(256); GetClassName(hwnd,b,b.Capacity); return b.ToString(); }
+            public static string WindowText(IntPtr hwnd) { var b=new StringBuilder(1024); GetWindowText(hwnd,b,b.Capacity); return b.ToString(); }
+          }
+          '@
+
+          function Find-TopWindow([int]$pid) {
+            for($i=0;$i -lt 100;$i++) {
+              Start-Sleep -Milliseconds 100
+              $cond=New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ProcessIdProperty,$pid)
+              $w=[System.Windows.Automation.AutomationElement]::RootElement.FindFirst([System.Windows.Automation.TreeScope]::Children,$cond)
+              if($w){ return $w }
+            }
+            return $null
+          }
+          function Find-Named([System.Windows.Automation.AutomationElement]$root,[string]$name,[int]$typeId) {
+            $all=$root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+            foreach($e in $all){ if($e.Current.Name -ceq $name -and $e.Current.ControlType.Id -eq $typeId){ return $e } }
+            return $null
+          }
+          function Dump-App([System.Windows.Automation.AutomationElement]$root,[string]$label) {
+            Write-Host "--- $label UIA descendants ---"
+            $all=$root.FindAll([System.Windows.Automation.TreeScope]::Descendants,[System.Windows.Automation.Condition]::TrueCondition)
+            foreach($e in $all){ Write-Host ("{0}_UIA type={1} name={2} hwnd={3} focusable={4}" -f $label,$e.Current.ControlType.ProgrammaticName,$e.Current.Name,$e.Current.NativeWindowHandle,$e.Current.IsKeyboardFocusable) }
+            $rootHwnd=[IntPtr]$root.Current.NativeWindowHandle
+            $children=[EcoWin32Tree]::Children($rootHwnd)
+            Write-Host "--- $label raw HWND descendants: $($children.Count) ---"
+            foreach($h in $children){
+              $class=[EcoWin32Tree]::ClassName($h); $text=[EcoWin32Tree]::WindowText($h); $visible=[EcoWin32Tree]::IsWindowVisible($h)
+              try {
+                $a=[System.Windows.Automation.AutomationElement]::FromHandle($h)
+                Write-Host ("{0}_HWND hwnd={1} class={2} text={3} visible={4} uiaType={5} uiaName={6} focusable={7}" -f $label,$h,$class,$text,$visible,$a.Current.ControlType.ProgrammaticName,$a.Current.Name,$a.Current.IsKeyboardFocusable)
+              } catch {
+                Write-Host ("{0}_HWND hwnd={1} class={2} text={3} visible={4} UIA_FROM_HANDLE_ERROR={5}" -f $label,$h,$class,$text,$visible,$_.Exception.Message)
+              }
+            }
+          }
+          function Assert-Reference([System.Windows.Automation.AutomationElement]$root) {
+            $edit=Find-Named $root 'Reference search' ([System.Windows.Automation.ControlType]::Edit.Id)
+            $button=Find-Named $root 'Reference run' ([System.Windows.Automation.ControlType]::Button.Id)
+            $list=Find-Named $root 'Reference results' ([System.Windows.Automation.ControlType]::List.Id)
+            if(!$edit -or !$button -or !$list){ throw 'RUNNER_UIA_REFERENCE_TREE=FAIL' }
+            $v=$null; if(!$edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern,[ref]$v)){ throw 'RUNNER_UIA_REFERENCE_VALUE=FAIL' }
+            $i=$null; if(!$button.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern,[ref]$i)){ throw 'RUNNER_UIA_REFERENCE_INVOKE=FAIL' }
+            $s=$null; if(!$list.TryGetCurrentPattern([System.Windows.Automation.SelectionPattern]::Pattern,[ref]$s)){ throw 'RUNNER_UIA_REFERENCE_SELECTION=FAIL' }
+            Write-Host 'RUNNER_UIA_REFERENCE=PASS'
+          }
+
+          $reference=Start-Process -FilePath (Join-Path $PWD 'reference.exe') -WorkingDirectory $PWD -PassThru
+          try {
+            $rw=Find-TopWindow $reference.Id
+            if(!$rw){ throw 'Reference top-level window missing.' }
+            Dump-App $rw 'REFERENCE'
+            Assert-Reference $rw
+          } finally {
+            if($reference -and !$reference.HasExited){ Stop-Process -Id $reference.Id -Force -ErrorAction SilentlyContinue; $reference.WaitForExit(5000)|Out-Null }
+          }
+
+          $wlk=Start-Process -FilePath (Join-Path $PWD 'probe.exe') -WorkingDirectory $PWD -PassThru
+          try {
+            $ww=Find-TopWindow $wlk.Id
+            if(!$ww){ throw 'Wlk top-level window missing.' }
+            Dump-App $ww 'WLK'
+            $edit=Find-Named $ww 'Search whole matter' ([System.Windows.Automation.ControlType]::Edit.Id)
+            $button=Find-Named $ww 'Run search' ([System.Windows.Automation.ControlType]::Button.Id)
+            $list=Find-Named $ww 'Evidence results' ([System.Windows.Automation.ControlType]::List.Id)
+            if(!$edit -or !$button -or !$list){ throw 'WLK_UIA_TREE=FAIL_WHILE_REFERENCE_PASSED' }
+            Write-Host 'WLK_UIA_TREE=PASS_WHILE_REFERENCE_PASSED'
+          } finally {
+            if($wlk -and !$wlk.HasExited){ Stop-Process -Id $wlk.Id -Force -ErrorAction SilentlyContinue; $wlk.WaitForExit(5000)|Out-Null }
+          }
