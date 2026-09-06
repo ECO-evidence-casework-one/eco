@@ -21,6 +21,7 @@ func main() {
 	var mw *walk.MainWindow
 	var search *walk.LineEdit
 	var results *walk.ListBox
+	var runSearch *walk.PushButton
 	var status *walk.Label
 
 	model := &stringList{items: []string{
@@ -29,38 +30,24 @@ func main() {
 		"Northvale Devices — synthetic organisation",
 	}}
 
-	if _, err := (MainWindow{
+	if err := (MainWindow{
 		AssignTo: &mw,
 		Title:    "ECO native accessibility donor probe",
-		Visible:  true,
 		MinSize:  Size{Width: 520, Height: 360},
 		Size:     Size{Width: 700, Height: 460},
 		Layout:   VBox{},
 		Children: []Widget{
 			Label{
-				Text:    "Synthetic ECO accessibility donor probe — no private case data",
-				Visible: true,
+				Text: "Synthetic ECO accessibility donor probe — no private case data",
 			},
-			Label{Text: "Search whole matter", Visible: true},
+			Label{Text: "Search whole matter"},
 			LineEdit{
 				AssignTo: &search,
 				Text:     "warranty confirmation",
-				Visible:  true,
-				// Preserve the native EDIT control's own UIA role and patterns.
-				// Dynamic Annotation supplies only the human-facing name/detail.
-				Accessibility: Accessibility{
-					Name:        "Search whole matter",
-					Description: "Synthetic search text entry",
-				},
 			},
 			PushButton{
-				Text:    "Run search",
-				Visible: true,
-				// Preserve the native BUTTON provider and InvokePattern.
-				Accessibility: Accessibility{
-					Name:        "Run search",
-					Description: "Activate the synthetic search",
-				},
+				AssignTo: &runSearch,
+				Text:     "Run search",
 				OnClicked: func() {
 					status.SetText("Search complete: " + search.Text())
 				},
@@ -68,20 +55,38 @@ func main() {
 			ListBox{
 				AssignTo: &results,
 				Model:    model,
-				Visible:  true,
-				// Preserve the native LISTBOX provider and SelectionPattern.
-				Accessibility: Accessibility{
-					Name:        "Evidence results",
-					Description: "Synthetic evidence and casework result list",
-				},
 			},
 			Label{
 				AssignTo: &status,
 				Text:     "Ready",
-				Visible:  true,
 			},
 		},
-	}.Run()); err != nil {
+	}).Create(); err != nil {
 		log.Fatal(err)
 	}
+
+	// Let Windows create/show the real native Edit, Button and ListBox first.
+	// Only then add human-facing Name/Description metadata. We deliberately do
+	// not override native roles/states/default actions, so Windows keeps its own
+	// ValuePattern, InvokePattern, SelectionPattern and keyboard-focus behavior.
+	mw.Show()
+	if err := search.Accessibility().SetName("Search whole matter"); err != nil {
+		log.Fatal(err)
+	}
+	if err := search.Accessibility().SetDescription("Synthetic search text entry"); err != nil {
+		log.Fatal(err)
+	}
+	if err := runSearch.Accessibility().SetName("Run search"); err != nil {
+		log.Fatal(err)
+	}
+	if err := runSearch.Accessibility().SetDescription("Activate the synthetic search"); err != nil {
+		log.Fatal(err)
+	}
+	if err := results.Accessibility().SetName("Evidence results"); err != nil {
+		log.Fatal(err)
+	}
+	if err := results.Accessibility().SetDescription("Synthetic evidence and casework result list"); err != nil {
+		log.Fatal(err)
+	}
+	mw.Run()
 }
