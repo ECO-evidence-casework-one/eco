@@ -40,33 +40,26 @@ func main() {
 			Label{
 				Text:    "Synthetic ECO accessibility donor probe — no private case data",
 				Visible: true,
-				Accessibility: Accessibility{
-					Name:        "Synthetic ECO accessibility donor probe",
-					Description: "Public FOSS donor qualification only",
-					Role:        AccRoleStatictext,
-				},
 			},
 			Label{Text: "Search whole matter", Visible: true},
 			LineEdit{
 				AssignTo: &search,
 				Text:     "warranty confirmation",
 				Visible:  true,
+				// Preserve the native EDIT control's own UIA role and patterns.
+				// Dynamic Annotation supplies only the human-facing name/detail.
 				Accessibility: Accessibility{
 					Name:        "Search whole matter",
 					Description: "Synthetic search text entry",
-					Role:        AccRoleText,
-					State:       AccStateFocusable,
 				},
 			},
 			PushButton{
 				Text:    "Run search",
 				Visible: true,
+				// Preserve the native BUTTON provider and InvokePattern.
 				Accessibility: Accessibility{
-					Name:          "Run search",
-					Description:   "Activate the synthetic search",
-					DefaultAction: "Press",
-					Role:          AccRolePushbutton,
-					State:         AccStateFocusable,
+					Name:        "Run search",
+					Description: "Activate the synthetic search",
 				},
 				OnClicked: func() {
 					status.SetText("Search complete: " + search.Text())
@@ -76,11 +69,10 @@ func main() {
 				AssignTo: &results,
 				Model:    model,
 				Visible:  true,
+				// Preserve the native LISTBOX provider and SelectionPattern.
 				Accessibility: Accessibility{
 					Name:        "Evidence results",
 					Description: "Synthetic evidence and casework result list",
-					Role:        AccRoleList,
-					State:       AccStateFocusable | AccStateSelectable,
 				},
 			},
 			Label{
