@@ -67,7 +67,7 @@ jobs:
           foreach($token in @('FlaUI.Core/5.0.0','FlaUI.UIA3/5.0.0')){ if(!$assets.Contains($token)){ throw "Resolved assets missing exact $token" } }
           Write-Host 'FLAUI_EXACT_PACKAGE_RESOLUTION=PASS'
 
-      - name: Prove positive acceptance receipt
+      - name: Prove positive acceptance and inventory receipt
         working-directory: experiments/flaui-harness
         shell: pwsh
         run: |
@@ -78,6 +78,11 @@ jobs:
           $receipt=Get-Content -LiteralPath positive-receipt.json -Raw | ConvertFrom-Json
           if($receipt.OverallResult -cne 'PASS'){ throw 'Positive receipt did not record PASS.' }
           if($receipt.Controls.Count -ne 3){ throw "Positive receipt expected 3 controls, got $($receipt.Controls.Count)." }
+          if($receipt.Inventory.Count -lt 3){ throw "UIA inventory unexpectedly small: $($receipt.Inventory.Count)." }
+          foreach($name in @('Search whole matter','Run search','Evidence results')){
+            if(!($receipt.Inventory | Where-Object { $_.Name -ceq $name })){ throw "UIA inventory missing expected element: $name" }
+          }
+          Write-Host "FLAUI_HARNESS_INVENTORY_COUNT=$($receipt.Inventory.Count)"
           Write-Host 'FLAUI_HARNESS_POSITIVE=PASS'
           Get-Content -LiteralPath positive-receipt.json
 
@@ -110,5 +115,5 @@ jobs:
       - name: Qualification summary
         shell: pwsh
         run: |
-          Write-Host 'FlaUI 5.0.0 external acceptance harness qualification: PASS'
+          Write-Host 'FlaUI 5.0.0 external acceptance + inventory harness qualification: PASS'
           Write-Host 'No ECO private source, real evidence, model, executable artifact or release artifact is uploaded.'
