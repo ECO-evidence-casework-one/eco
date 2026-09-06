@@ -1,0 +1,123 @@
+name: Public gophics pure-Go UIA provider qualification
+
+on:
+  push:
+    branches: [experiment/gophics-uia-provider-20260906]
+    paths:
+      - .github/workflows/gophics-uia-provider.yml
+      - experiments/flaui-harness/**
+
+permissions:
+  contents: read
+
+jobs:
+  qualify-on-windows:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.27.0'
+          cache: false
+
+      - name: Verify exact gophics donor, licence and provider blobs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $commit='6688eb057b6afc821cc3e797ea3e6ca64bfadd81'
+          $donor=Join-Path $env:RUNNER_TEMP 'gophics'
+          git init $donor | Out-Host
+          git -C $donor remote add origin https://github.com/doug/gophics.git
+          git -C $donor fetch --depth=1 origin $commit | Out-Host
+          if($LASTEXITCODE -ne 0){ throw 'Pinned gophics fetch failed.' }
+          git -C $donor checkout --detach FETCH_HEAD | Out-Host
+          if((git -C $donor rev-parse HEAD).Trim() -cne $commit){ throw 'gophics commit mismatch.' }
+          $expected=@{
+            'LICENSE'='d645695673349e3947e8e5ae42332d0ac3164cd7'
+            'NOTICE'='f6c67cc7b6b24a2fa8e9236b4d47cd71aac0ff2d'
+            'internal/gfx/gogpu/internal/platform/uia_windows.go'='e220ee4fd02571d52bad26566e2c45e3f221bf6e'
+            'internal/gfx/gogpu/internal/platform/uia_provider_windows.go'='edf52836daa1720ca9cb7aaa0844eea17bcf3897'
+            'internal/gfx/gogpu/internal/platform/a11ytree.go'='ebe9f707045797c9a11266cb713bfb47cc179650'
+          }
+          foreach($path in $expected.Keys){
+            $actual=(git -C $donor rev-parse "$commit`:$path").Trim()
+            if($actual -cne $expected[$path]){ throw "Pinned donor blob mismatch for $path : $actual" }
+          }
+          if(-not (Get-Content -LiteralPath (Join-Path $donor 'LICENSE') -Raw).Contains('Apache License')){ throw 'Expected Apache-2.0 licence text not found.' }
+          Write-Host "GOPHICS_COMMIT=$commit"
+          Write-Host 'GOPHICS_LICENSE=Apache-2.0'
+          Write-Host 'GOPHICS_PROVIDER_BLOBS=PINNED'
+
+      - name: Run donor semantic accessibility tests and build Windows counter
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $donor=Join-Path $env:RUNNER_TEMP 'gophics'
+          Push-Location $donor
+          try {
+            go test ./app ./layout ./widget
+            if($LASTEXITCODE -ne 0){ throw 'gophics semantic accessibility package tests failed.' }
+            go build -trimpath -o (Join-Path $env:RUNNER_TEMP 'gophics-counter.exe') ./examples/counter
+            if($LASTEXITCODE -ne 0){ throw 'gophics counter Windows build failed.' }
+          } finally { Pop-Location }
+          $exe=Join-Path $env:RUNNER_TEMP 'gophics-counter.exe'
+          if(!(Test-Path -LiteralPath $exe -PathType Leaf)){ throw 'gophics counter executable missing.' }
+          $bytes=[IO.File]::ReadAllBytes($exe)
+          if($bytes.Length -lt 2 -or $bytes[0] -ne 0x4d -or $bytes[1] -ne 0x5a){ throw 'gophics counter is not a PE executable.' }
+          Write-Host "GOPHICS_COUNTER_SHA256=$((Get-FileHash -LiteralPath $exe -Algorithm SHA256).Hash.ToLowerInvariant())"
+
+      - name: Build the already-qualified FlaUI client
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore Eco.UiaAcceptance.csproj --nologo
+          if($LASTEXITCODE -ne 0){ throw 'FlaUI harness restore failed.' }
+          dotnet build Eco.UiaAcceptance.csproj -c Release --no-restore --nologo
+          if($LASTEXITCODE -ne 0){ throw 'FlaUI harness build failed.' }
+          $assets=Get-Content -LiteralPath obj\project.assets.json -Raw
+          foreach($token in @('FlaUI.Core/5.0.0','FlaUI.UIA3/5.0.0')){ if(!$assets.Contains($token)){ throw "FlaUI exact package missing: $token" } }
+
+      - name: Prove late-attaching UIA sees and invokes the custom-drawn button
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $profile=@'
+          {
+            "windowTitleContains": "counter",
+            "controls": [
+              {
+                "name": "Increment",
+                "controlType": "Button",
+                "mustBeKeyboardFocusable": true,
+                "requiredPatterns": ["Invoke"],
+                "exercise": "invoke"
+              }
+            ]
+          }
+          '@
+          Set-Content -LiteralPath gophics-profile.json -Value $profile -Encoding UTF8
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          $target=Join-Path $env:RUNNER_TEMP 'gophics-counter.exe'
+          & $harness --exe $target --profile (Join-Path $PWD 'gophics-profile.json') --receipt (Join-Path $PWD 'gophics-receipt.json')
+          if($LASTEXITCODE -ne 0){ throw "Pinned gophics UIA acceptance failed with $LASTEXITCODE." }
+          $r=Get-Content -LiteralPath gophics-receipt.json -Raw | ConvertFrom-Json
+          if($r.OverallResult -cne 'PASS'){ throw 'gophics receipt did not record PASS.' }
+          $button=@($r.Controls | Where-Object { $_.Name -ceq 'Increment' -and $_.ControlType -ceq 'Button' })
+          if($button.Count -ne 1){ throw "Expected one accessible Increment button; got $($button.Count)." }
+          if(-not $button[0].KeyboardFocusable){ throw 'Increment was not keyboard-focusable through UIA.' }
+          if(-not ($button[0].SupportedPatterns -contains 'Invoke')){ throw 'Increment lacks InvokePattern.' }
+          if($button[0].Result -cne 'invoke completed'){ throw "Invoke exercise did not complete: $($button[0].Result)" }
+          Write-Host "GOPHICS_UIA_INVENTORY=$($r.Inventory.Count)"
+          Write-Host 'GOPHICS_LATE_ATTACH_UIA=PASS'
+          Write-Host 'GOPHICS_BUTTON_INVOKE=PASS'
+
+      - name: Qualification summary
+        shell: pwsh
+        run: |
+          Write-Host 'gophics pure-Go Windows UIA provider donor gate: PASS'
+          Write-Host 'This run used public donor code and the public synthetic FlaUI client only.'
+          Write-Host 'No private Slice-10 ECO source or real evidence was uploaded.'
