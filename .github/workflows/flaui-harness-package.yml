@@ -74,6 +74,8 @@ jobs:
         run: |
           $ErrorActionPreference='Stop'
           $exe=Join-Path $PWD 'publish\Eco.UiaAcceptance.exe'
+          $license=Join-Path $PWD 'FLAUI_LICENSE.txt'
+          if(!(Test-Path -LiteralPath $license -PathType Leaf)){ throw 'Retained FlaUI license is missing.' }
           $receipt=[ordered]@{
             schema=1
             harness='ECO external FlaUI accessibility acceptance harness'
@@ -91,7 +93,7 @@ jobs:
             app_launched='synthetic reference only'
           }
           $receipt|ConvertTo-Json -Depth 5|Set-Content -LiteralPath publish\HARNESS_IDENTITY.json -Encoding UTF8
-          Copy-Item -LiteralPath NOTICE.md -Destination publish\NOTICE.md
+          Copy-Item -LiteralPath $license -Destination publish\FLAUI_LICENSE.txt
           Get-Content -LiteralPath publish\HARNESS_IDENTITY.json|Write-Host
 
       - name: Upload qualified harness only
