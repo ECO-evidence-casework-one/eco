@@ -1,0 +1,196 @@
+name: Qualify granular FlaUI inventory diagnostics
+
+on:
+  push:
+    branches: [experiment/gophics-uia-provider-20260906]
+    paths: [.github/workflows/flaui-granular-inventory-fix.yml]
+
+permissions:
+  contents: write
+
+jobs:
+  qualify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 8
+
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5
+        with:
+          go-version: '1.27.0'
+          cache: false
+
+      - name: Apply bounded per-property inventory repair
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $path='experiments/flaui-harness/Program.cs'
+          $s=[IO.File]::ReadAllText((Join-Path $PWD $path))
+          $old=@'
+          internal sealed record InventoryElement(
+              int Index,
+              string Name,
+              string AutomationId,
+              string ClassName,
+              string ControlType,
+              bool Enabled,
+              bool KeyboardFocusable,
+              bool Offscreen,
+              IReadOnlyList<string> SupportedPatterns);
+          '@.Replace("`r`n","`n")
+          $new=@'
+          internal sealed record InventoryElement(
+              int Index,
+              string Name,
+              string AutomationId,
+              string ClassName,
+              string ControlType,
+              bool Enabled,
+              bool KeyboardFocusable,
+              bool Offscreen,
+              IReadOnlyList<string> SupportedPatterns,
+              IReadOnlyList<string> PropertyErrors);
+          '@.Replace("`r`n","`n")
+          $s=$s.Replace("`r`n","`n")
+          if(-not $s.Contains($old)){ throw 'InventoryElement anchor changed.' }
+          $s=$s.Replace($old,$new)
+          $start=$s.IndexOf('    private static InventoryElement Inventory(AutomationElement e, int index)')
+          $end=$s.IndexOf('    private static string RunExercise(', $start)
+          if($start -lt 0 -or $end -lt 0){ throw 'Inventory method anchors changed.' }
+          $replacement=@'
+              private static InventoryElement Inventory(AutomationElement e, int index)
+              {
+                  var errors = new List<string>();
+                  var name = ReadProperty("Name", () => e.Name, "", errors);
+                  var automationId = ReadProperty("AutomationId", () => e.AutomationId, "", errors);
+                  var className = ReadProperty("ClassName", () => e.ClassName, "", errors);
+                  var controlType = ReadProperty("ControlType", () => e.ControlType.ToString(), "Unknown", errors);
+                  var enabled = ReadProperty("IsEnabled", () => e.IsEnabled, false, errors);
+                  var focusable = ReadProperty("IsKeyboardFocusable", () => e.Properties.IsKeyboardFocusable.ValueOrDefault, false, errors);
+                  var offscreen = ReadProperty("IsOffscreen", () => e.IsOffscreen, false, errors);
+                  var patterns = SupportedPatterns(e, errors);
+                  return new InventoryElement(index, name, automationId, className, controlType, enabled, focusable, offscreen, patterns, errors);
+              }
+
+              private static T ReadProperty<T>(string property, Func<T> read, T fallback, List<string> errors)
+              {
+                  try
+                  {
+                      return read();
+                  }
+                  catch (Exception ex)
+                  {
+                      errors.Add(property + ": " + ex.GetType().Name);
+                      return fallback;
+                  }
+              }
+
+              private static IReadOnlyList<string> SupportedPatterns(AutomationElement e)
+              {
+                  var ignored = new List<string>();
+                  return SupportedPatterns(e, ignored);
+              }
+
+              private static IReadOnlyList<string> SupportedPatterns(AutomationElement e, List<string> errors)
+              {
+                  var result = new List<string>();
+                  AddPattern("Value", () => e.Patterns.Value.IsSupported, result, errors);
+                  AddPattern("Invoke", () => e.Patterns.Invoke.IsSupported, result, errors);
+                  AddPattern("Selection", () => e.Patterns.Selection.IsSupported, result, errors);
+                  AddPattern("SelectionItem", () => e.Patterns.SelectionItem.IsSupported, result, errors);
+                  AddPattern("Text", () => e.Patterns.Text.IsSupported, result, errors);
+                  AddPattern("Toggle", () => e.Patterns.Toggle.IsSupported, result, errors);
+                  AddPattern("ExpandCollapse", () => e.Patterns.ExpandCollapse.IsSupported, result, errors);
+                  AddPattern("Scroll", () => e.Patterns.Scroll.IsSupported, result, errors);
+                  return result;
+              }
+
+              private static void AddPattern(string name, Func<bool> supported, List<string> result, List<string> errors)
+              {
+                  try
+                  {
+                      if (supported()) result.Add(name);
+                  }
+                  catch (Exception ex)
+                  {
+                      errors.Add(name + "Pattern: " + ex.GetType().Name);
+                  }
+              }
+
+          '@.Replace("`r`n","`n")
+          $s=$s.Substring(0,$start)+$replacement+$s.Substring($end)
+          [IO.File]::WriteAllText((Join-Path $PWD $path),$s,(New-Object Text.UTF8Encoding($false)))
+
+      - name: Build granular harness
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          dotnet restore Eco.UiaAcceptance.csproj --nologo
+          if($LASTEXITCODE -ne 0){ throw 'Harness restore failed.' }
+          dotnet build Eco.UiaAcceptance.csproj -c Release --no-restore --nologo
+          if($LASTEXITCODE -ne 0){ throw 'Harness build failed.' }
+
+      - name: Prove ordinary WinForms inventory remains precise
+        working-directory: experiments/flaui-harness
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $csc=Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
+          & $csc /nologo /target:winexe /out:reference.exe /reference:System.Windows.Forms.dll /reference:System.Drawing.dll reference.cs
+          if($LASTEXITCODE -ne 0){ throw 'Reference build failed.' }
+          $harness=Join-Path $PWD 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          & $harness --exe (Join-Path $PWD 'reference.exe') --profile (Join-Path $PWD 'synthetic-profile.json') --receipt (Join-Path $PWD 'granular-reference.json')
+          if($LASTEXITCODE -ne 0){ throw 'Reference UIA run failed.' }
+          $r=Get-Content granular-reference.json -Raw|ConvertFrom-Json
+          $search=@($r.Inventory|Where-Object {$_.Name -ceq 'Search whole matter'})
+          if($search.Count -ne 1 -or $search[0].ControlType -ceq 'Unknown'){ throw 'Known-good Edit collapsed in granular inventory.' }
+
+      - name: Prove unsupported donor properties do not collapse the whole element
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          $commit='6688eb057b6afc821cc3e797ea3e6ca64bfadd81'
+          $donor=Join-Path $env:RUNNER_TEMP 'gophics'
+          git init $donor | Out-Host
+          git -C $donor remote add origin https://github.com/doug/gophics.git
+          git -C $donor fetch --depth=1 origin $commit | Out-Host
+          git -C $donor checkout --detach FETCH_HEAD | Out-Host
+          if((git -C $donor rev-parse HEAD).Trim() -cne $commit){ throw 'Donor commit mismatch.' }
+          Push-Location $donor
+          go build -trimpath -o (Join-Path $env:RUNNER_TEMP 'gophics-counter.exe') ./examples/counter
+          if($LASTEXITCODE -ne 0){ Pop-Location; throw 'Donor build failed.' }
+          Pop-Location
+          $profile=@'
+          {"windowTitleContains":"counter","controls":[{"name":"Increment","controlType":"Button","mustBeKeyboardFocusable":true,"requiredPatterns":["Invoke"]}]}
+          '@
+          Set-Content -LiteralPath experiments\flaui-harness\granular-gophics-profile.json -Value $profile -Encoding UTF8
+          $dir=Join-Path $PWD 'experiments\flaui-harness'
+          $harness=Join-Path $dir 'bin\Release\net8.0-windows\Eco.UiaAcceptance.exe'
+          $receipt=Join-Path $dir 'granular-gophics.json'
+          & $harness --exe (Join-Path $env:RUNNER_TEMP 'gophics-counter.exe') --profile (Join-Path $dir 'granular-gophics-profile.json') --receipt $receipt
+          if($LASTEXITCODE -ne 0){ throw 'gophics granular UIA run failed.' }
+          $r=Get-Content $receipt -Raw|ConvertFrom-Json
+          $button=@($r.Inventory|Where-Object {$_.Name -ceq 'Increment'})
+          if($button.Count -ne 1){ throw "Expected one Increment inventory element; got $($button.Count)." }
+          if($button[0].ControlType -cne 'Button'){ throw "Increment collapsed to $($button[0].ControlType)." }
+          if(-not $button[0].KeyboardFocusable){ throw 'Increment lost focusability.' }
+          if(-not ($button[0].SupportedPatterns -contains 'Invoke')){ throw 'Increment lost Invoke pattern.' }
+          if($button[0].Name -like '<unavailable:*'){ throw 'Placeholder name survived granular repair.' }
+          Write-Host "GOPHICS_PROPERTY_ERRORS=$($button[0].PropertyErrors.Count)"
+          Write-Host 'GRANULAR_UIA_INVENTORY=PASS'
+
+      - name: Commit only the qualified harness source repair
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          git fetch origin experiment/gophics-uia-provider-20260906
+          if((git rev-parse FETCH_HEAD).Trim() -cne $env:GITHUB_SHA){ throw 'Branch moved during qualification.' }
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add experiments/flaui-harness/Program.cs
+          git diff --cached --check
+          git commit -m 'Record UIA inventory properties independently'
+          git push origin HEAD:refs/heads/experiment/gophics-uia-provider-20260906
