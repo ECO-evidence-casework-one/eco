@@ -38,16 +38,19 @@ func main() {
 		Layout:   VBox{},
 		Children: []Widget{
 			Label{
-				Text: "Synthetic ECO accessibility donor probe — no private case data",
+				Text:    "Synthetic ECO accessibility donor probe — no private case data",
+				Visible: true,
 			},
-			Label{Text: "Search whole matter"},
+			Label{Text: "Search whole matter", Visible: true},
 			LineEdit{
 				AssignTo: &search,
 				Text:     "warranty confirmation",
+				Visible:  true,
 			},
 			PushButton{
 				AssignTo: &runSearch,
 				Text:     "Run search",
+				Visible:  true,
 				OnClicked: func() {
 					status.SetText("Search complete: " + search.Text())
 				},
@@ -55,10 +58,12 @@ func main() {
 			ListBox{
 				AssignTo: &results,
 				Model:    model,
+				Visible:  true,
 			},
 			Label{
 				AssignTo: &status,
 				Text:     "Ready",
+				Visible:  true,
 			},
 		},
 	}).Create(); err != nil {
