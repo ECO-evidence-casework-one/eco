@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
@@ -52,6 +53,7 @@ internal sealed record AcceptanceReceipt(
     string WindowTitle,
     string FlaUiCoreVersion,
     string FlaUiUia3Version,
+    IReadOnlyList<string> LaunchArguments,
     IReadOnlyList<InventoryElement> Inventory,
     IReadOnlyList<ControlReceipt> Controls,
     string OverallResult);
@@ -66,13 +68,24 @@ internal static class Program
             var exe = Require(options, "exe");
             var profilePath = Require(options, "profile");
             var receiptPath = Require(options, "receipt");
+            var launchArguments = ReadLaunchArguments(options);
 
             var profile = JsonSerializer.Deserialize<AcceptanceProfile>(
                 File.ReadAllText(profilePath),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 ?? throw new InvalidOperationException("Profile JSON was empty or invalid.");
 
-            using var app = Application.Launch(exe);
+            var startInfo = new ProcessStartInfo(Path.GetFullPath(exe))
+            {
+                WorkingDirectory = Path.GetDirectoryName(Path.GetFullPath(exe)) ?? Environment.CurrentDirectory,
+                UseShellExecute = false,
+            };
+            foreach (var argument in launchArguments)
+            {
+                startInfo.ArgumentList.Add(argument);
+            }
+
+            using var app = Application.Launch(startInfo);
             using var automation = new UIA3Automation();
 
             var window = app.GetMainWindow(automation, TimeSpan.FromSeconds(15))
@@ -161,6 +174,7 @@ internal static class Program
                 window.Title,
                 coreVersion,
                 uia3Version,
+                launchArguments,
                 inventory,
                 receipts,
                 overall);
@@ -184,6 +198,27 @@ internal static class Program
             Console.Error.WriteLine("HARNESS_ERROR: " + ex);
             return 1;
         }
+    }
+
+    private static IReadOnlyList<string> ReadLaunchArguments(Dictionary<string, string> options)
+    {
+        if (!options.TryGetValue("args-file", out var path) || string.IsNullOrWhiteSpace(path))
+        {
+            return Array.Empty<string>();
+        }
+        var full = Path.GetFullPath(path);
+        if (!File.Exists(full))
+        {
+            throw new FileNotFoundException("Launch argument file was not found.", full);
+        }
+        var result = new List<string>();
+        foreach (var line in File.ReadAllLines(full))
+        {
+            var value = line.Trim();
+            if (value.Length == 0 || value.StartsWith('#')) continue;
+            result.Add(value);
+        }
+        return result;
     }
 
     private static InventoryElement Inventory(AutomationElement e, int index)
