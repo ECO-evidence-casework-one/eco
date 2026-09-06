@@ -32,22 +32,25 @@ func main() {
 	if _, err := (MainWindow{
 		AssignTo: &mw,
 		Title:    "ECO native accessibility donor probe",
+		Visible:  true,
 		MinSize:  Size{Width: 520, Height: 360},
 		Size:     Size{Width: 700, Height: 460},
 		Layout:   VBox{},
 		Children: []Widget{
 			Label{
-				Text: "Synthetic ECO accessibility donor probe — no private case data",
+				Text:    "Synthetic ECO accessibility donor probe — no private case data",
+				Visible: true,
 				Accessibility: Accessibility{
 					Name:        "Synthetic ECO accessibility donor probe",
 					Description: "Public FOSS donor qualification only",
 					Role:        AccRoleStatictext,
 				},
 			},
-			Label{Text: "Search whole matter"},
+			Label{Text: "Search whole matter", Visible: true},
 			LineEdit{
 				AssignTo: &search,
 				Text:     "warranty confirmation",
+				Visible:  true,
 				Accessibility: Accessibility{
 					Name:        "Search whole matter",
 					Description: "Synthetic search text entry",
@@ -56,7 +59,8 @@ func main() {
 				},
 			},
 			PushButton{
-				Text: "Run search",
+				Text:    "Run search",
+				Visible: true,
 				Accessibility: Accessibility{
 					Name:          "Run search",
 					Description:   "Activate the synthetic search",
@@ -71,6 +75,7 @@ func main() {
 			ListBox{
 				AssignTo: &results,
 				Model:    model,
+				Visible:  true,
 				Accessibility: Accessibility{
 					Name:        "Evidence results",
 					Description: "Synthetic evidence and casework result list",
@@ -81,6 +86,7 @@ func main() {
 			Label{
 				AssignTo: &status,
 				Text:     "Ready",
+				Visible:  true,
 			},
 		},
 	}.Run()); err != nil {
