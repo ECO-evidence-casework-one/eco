@@ -15,12 +15,12 @@ const (
 )
 
 var (
-	procSetWindowsHookExW       = user32.NewProc("SetWindowsHookExW")
-	procUnhookWindowsHookEx     = user32.NewProc("UnhookWindowsHookEx")
-	procCallNextHookEx          = user32.NewProc("CallNextHookEx")
+	procSetWindowsHookExW        = user32.NewProc("SetWindowsHookExW")
+	procUnhookWindowsHookEx      = user32.NewProc("UnhookWindowsHookEx")
+	procCallNextHookEx           = user32.NewProc("CallNextHookEx")
 	procGetWindowThreadProcessID = user32.NewProc("GetWindowThreadProcessId")
-	procIsDialogMessageW        = user32.NewProc("IsDialogMessageW")
-	tabNavigationCallback       = syscall.NewCallback(tabNavigationHookProc)
+	procIsDialogMessageW         = user32.NewProc("IsDialogMessageW")
+	tabNavigationCallback        = syscall.NewCallback(tabNavigationHookProc)
 )
 
 // ECO's top-level window is custom rather than a dialog resource. Several real
@@ -61,8 +61,8 @@ func installTabNavigationHook() {
 	}
 }
 
-func tabNavigationHookProc(code int, wparam, lparam uintptr) uintptr {
-	if code >= 0 && lparam >= minimumWindowsUserAddress && app != nil && app.hwnd != 0 {
+func tabNavigationHookProc(code, wparam, lparam uintptr) uintptr {
+	if int32(code) >= 0 && lparam >= minimumWindowsUserAddress && app != nil && app.hwnd != 0 {
 		var msg MSG
 		copyWindowsMemoryToGo(unsafe.Pointer(&msg), lparam, unsafe.Sizeof(msg))
 		if msg.Message == WM_KEYDOWN && msg.WParam == vkTab {
@@ -78,6 +78,6 @@ func tabNavigationHookProc(code int, wparam, lparam uintptr) uintptr {
 			}
 		}
 	}
-	next, _, _ := procCallNextHookEx.Call(0, uintptr(code), wparam, lparam)
+	next, _, _ := procCallNextHookEx.Call(0, code, wparam, lparam)
 	return next
 }
