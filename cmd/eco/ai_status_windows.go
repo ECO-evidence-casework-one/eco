@@ -37,7 +37,6 @@ func monitorLocalAIStatus() {
 	setWindowText(a.answerEdit, initialAIStatusText(status))
 
 	lastDecoratedReceipt := ""
-	runningShown := false
 	ticker := time.NewTicker(120 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
@@ -52,7 +51,6 @@ func monitorLocalAIStatus() {
 			} else {
 				setWindowText(a.answerEdit, "SOURCE-ONLY SEARCH — Qwen is not ready; ECO is searching verified local source passages…")
 			}
-			runningShown = true
 		}
 
 		a.mu.Lock()
@@ -71,8 +69,6 @@ func monitorLocalAIStatus() {
 		prefix := questionAIStatusText(a, status, rec)
 		setWindowText(a.answerEdit, prefix+"\r\n\r\n"+rec.Answer)
 		lastDecoratedReceipt = rec.ReceiptID
-		runningShown = false
-		_ = runningShown
 	}
 }
 
@@ -100,25 +96,45 @@ func questionAIStatusText(a *application, startup eco.LocalAIStatus, rec eco.Que
 	}
 
 	// A ready model can still be blocked, rejected or fail its grounding contract.
-	// The workspace audit records those reasons. Keep the ordinary UI concise but
-	// distinguish a rejected model output from a generic fallback where possible.
+	// The workspace audit records those reasons. Bind fallback/rejection records to
+	// this exact question before describing them, so an older failure cannot colour
+	// the status of a later answer.
 	ws := a.vault.Snapshot()
 	for i, change := range ws.Changes {
-		if i >= 12 {
+		if i >= 16 {
 			break
 		}
 		switch change.Type {
-		case "local-ai-grounding-rejected":
-			return "QWEN REJECTED — the model ran, but ECO did not accept its grounded output. SOURCE FALLBACK USED."
-		case "local-ai-resource-blocked":
-			return "QWEN UNAVAILABLE FOR THIS QUESTION — ECO blocked model launch because local resources were critically constrained. SOURCE FALLBACK USED."
-		case "configured-local-ai-fallback":
-			return "SOURCE FALLBACK USED — Qwen was configured, but it did not produce an accepted grounded answer."
 		case "grounded-local-ai-question":
 			if id, ok := change.Details["question_id"].(string); ok && id == rec.ID {
 				return "QWEN CHECKED — the local model ran. ECO released only claims that passed deterministic source grounding."
 			}
+		case "local-ai-grounding-rejected":
+			if auditQuestionMatches(change, rec.Question) {
+				return "QWEN REJECTED — the model ran, but ECO did not accept its grounded output. SOURCE FALLBACK USED."
+			}
+		case "local-ai-resource-blocked":
+			if auditQuestionMatches(change, rec.Question) {
+				return "QWEN UNAVAILABLE FOR THIS QUESTION — ECO blocked model launch because local resources were critically constrained. SOURCE FALLBACK USED."
+			}
+		case "configured-local-ai-fallback":
+			if auditQuestionMatches(change, rec.Question) {
+				return "SOURCE FALLBACK USED — Qwen was configured, but it did not produce an accepted grounded answer."
+			}
 		}
 	}
 	return "SOURCE FALLBACK USED — Qwen was ready at startup, but this answer was released by ECO's deterministic source-backed engine."
+}
+
+func auditQuestionMatches(change eco.ChangeRecord, question string) bool {
+	got, ok := change.Details["question"].(string)
+	if !ok {
+		return false
+	}
+	want := strings.TrimSpace(question)
+	runes := []rune(want)
+	if len(runes) > 300 {
+		want = string(runes[:300]) + "…"
+	}
+	return strings.TrimSpace(got) == want
 }
