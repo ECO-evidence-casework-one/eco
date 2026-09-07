@@ -24,6 +24,13 @@ E:\ECO_RIG_AI_PREVIEW
 
 Otherwise it uses an ECO_RIG_AI_PREVIEW folder next to these setup files.
 
+RETRY AFTER A STOPPED SETUP
+
+If E:\ECO_RIG_AI_PREVIEW already contains AI_SETUP_RESULT.txt whose first line is
+ECO RIG AI SETUP STOPPED, the corrected setup preserves that whole failed attempt
+under a timestamped .failed-... folder and creates a fresh preview automatically.
+Do not delete the old failed attempt yourself.
+
 IF IT WORKS
 
 The setup window will say:
