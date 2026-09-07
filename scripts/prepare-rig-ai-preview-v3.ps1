@@ -1,5 +1,9 @@
 # ECO rig AI preview preparer v3.
 # GitHub-first, hash-pinned, private synthetic-data preview.
+# This deliberately builds from GitHub's source archive with buildvcs=false.
+# Its executable is source-equivalent to commit 24170e4 but has its own
+# deterministic fingerprint rather than claiming byte identity with the
+# Git-checkout artifact produced by GitHub Actions.
 [CmdletBinding()]
 param(
     [string]$OutputRoot = '',
@@ -11,7 +15,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $EcoSource = '24170e4505cfaadf97d37bc172ebf3097af7de55'
-$EcoExeSHA = '190d06468a9cf282c1837ee08bf854f20724d42e70fc1e0bcb44479a015f36ba'
+$EcoExeSHA = '8ca12dafdd78182d0984aafebed2b7ed0894b3471a45f7d1e0602b67ac382426'
 $EcoExeSize = 4880384
 $GoURL = 'https://github.com/actions/go-versions/releases/download/1.23.12-16792118003/go-1.23.12-win32-x64.zip'
 $GoZipSHA = 'c27b02f15d4ceb89fbce6ffe2a28df3dd293608cf79e9f12839f672863622845'
@@ -96,7 +100,7 @@ function Build-Eco([string]$Work) {
         Set-Location -LiteralPath $src;$version=(& $go version|Out-String).Trim();if($version-cne 'go version go1.23.12 windows/amd64'){throw "Wrong Go identity: $version"}
         Write-Host '[3/7] Verifying dependencies.';Run-Native 'go mod download' $go @('mod','download');Run-Native 'go mod verify' $go @('mod','verify');$env:GOPROXY='off'
         Write-Host '[4/7] Running ECO tests and vet.';Run-Native 'go test' $go @('test','-count=1','-p=2','./...');Run-Native 'go vet' $go @('vet','-p=2','./...')
-        Write-Host '[5/7] Reproducing the qualified ECO executable twice.';$a=Join-Path $Work 'ECO.exe';$b=Join-Path $Work 'ECO.rebuild.exe';$flags="-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$EcoSource";Run-Native 'ECO build 1' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$a,'./cmd/eco');Run-Native 'ECO build 2' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$b,'./cmd/eco');[void](Assert-Sha $a $EcoExeSHA);[void](Assert-Sha $b $EcoExeSHA);if((Get-Item $a).Length-ne $EcoExeSize){throw 'ECO size mismatch.'};Remove-Item $b -Force
+        Write-Host '[5/7] Reproducing the qualified archive-source ECO executable twice.';$a=Join-Path $Work 'ECO.exe';$b=Join-Path $Work 'ECO.rebuild.exe';$flags="-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$EcoSource";Run-Native 'ECO build 1' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$a,'./cmd/eco');Run-Native 'ECO build 2' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$b,'./cmd/eco');[void](Assert-Sha $a $EcoExeSHA);[void](Assert-Sha $b $EcoExeSHA);if((Get-Item $a).Length-ne $EcoExeSize){throw 'ECO size mismatch.'};Remove-Item $b -Force
         [pscustomobject]@{Exe=$a;GoVersion=$version;SourceZipSHA=(Sha $sourceZip);Source=$src}
     }finally{Set-Location $old;foreach($n in $names){[Environment]::SetEnvironmentVariable($n,$saved[$n],'Process')}}
 }
@@ -121,6 +125,6 @@ if(-not [Environment]::Is64BitOperatingSystem){throw '64-bit Windows is required
 if(-not $OutputRoot){$OutputRoot=Join-Path $PSScriptRoot 'ECO_RIG_AI_PREVIEW'};$OutputRoot=[IO.Path]::GetFullPath($OutputRoot);if(Test-Path $OutputRoot){throw "Output already exists: $OutputRoot"};[void][IO.Directory]::CreateDirectory($OutputRoot);$work=Join-Path $OutputRoot '.work';[void][IO.Directory]::CreateDirectory($work);$result=Join-Path $OutputRoot 'AI_SETUP_RESULT.txt'
 try{
     Hardware-Receipt (Join-Path $OutputRoot 'RIG_AI_HARDWARE.json');$build=Build-Eco $work;Copy-Item $build.Exe (Join-Path $OutputRoot 'ECO.exe');[void](Assert-Sha (Join-Path $OutputRoot 'ECO.exe') $EcoExeSHA);$llama=Install-Llama $work (Join-Path $OutputRoot 'Runtime')
-    if($QualificationOnly){@('RIG AI QUALIFICATION PASS',"ECO SHA-256: $EcoExeSHA","llama archive SHA-256: $LlamaZipSHA","llama-cli SHA-256: $($llama.SHA)","llama version: $($llama.Version)",'Official Qwen model is intentionally not downloaded in CI qualification.')|Set-Content $result -Encoding utf8;Get-Content $result|Write-Host;exit 0}
-    $model=Get-Model (Join-Path $OutputRoot 'AIAssets');$probe=Probe-Qwen $llama.Exe $model $work;Write-Launcher $OutputRoot $llama.Exe $llama.SHA;@('ECO RIG AI SETUP PASS','Real offline Qwen generation: PASS',"ECO SHA-256: $EcoExeSHA","Qwen SHA-256: $ModelSHA","llama-cli SHA-256: $($llama.SHA)",'Use START_ECO_WITH_AI.cmd to reopen. Synthetic/test material only.')|Set-Content $result -Encoding utf8;@('ECO RIG AI PREVIEW','','Double-click START_ECO_WITH_AI.cmd.','This preview uses its own PreviewUserData folder.','Qwen and llama.cpp are local; ECO has no cloud AI fallback.','Synthetic/test material only.')|Set-Content (Join-Path $OutputRoot 'README_FIRST.txt') -Encoding utf8;Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue;Get-Content $result|Write-Host;if(-not $NoLaunch){Start-Process (Join-Path $OutputRoot 'START_ECO_WITH_AI.cmd') -WorkingDirectory $OutputRoot}
+    if($QualificationOnly){@('RIG AI QUALIFICATION PASS',"ECO archive-source SHA-256: $EcoExeSHA","ECO source commit: $EcoSource","llama archive SHA-256: $LlamaZipSHA","llama-cli SHA-256: $($llama.SHA)","llama version: $($llama.Version)",'Official Qwen model is intentionally not downloaded in CI qualification.')|Set-Content $result -Encoding utf8;Get-Content $result|Write-Host;exit 0}
+    $model=Get-Model (Join-Path $OutputRoot 'AIAssets');$probe=Probe-Qwen $llama.Exe $model $work;Write-Launcher $OutputRoot $llama.Exe $llama.SHA;@('ECO RIG AI SETUP PASS','Real offline Qwen generation: PASS',"ECO source commit: $EcoSource","ECO archive-source SHA-256: $EcoExeSHA","Qwen SHA-256: $ModelSHA","llama-cli SHA-256: $($llama.SHA)",'Use START_ECO_WITH_AI.cmd to reopen. Synthetic/test material only.')|Set-Content $result -Encoding utf8;@('ECO RIG AI PREVIEW','','Double-click START_ECO_WITH_AI.cmd.','This preview uses its own PreviewUserData folder.','Qwen and llama.cpp are local; ECO has no cloud AI fallback.','Synthetic/test material only.')|Set-Content (Join-Path $OutputRoot 'README_FIRST.txt') -Encoding utf8;Remove-Item $work -Recurse -Force -ErrorAction SilentlyContinue;Get-Content $result|Write-Host;if(-not $NoLaunch){Start-Process (Join-Path $OutputRoot 'START_ECO_WITH_AI.cmd') -WorkingDirectory $OutputRoot}
 }catch{$m=$_.Exception.Message;if($env:USERPROFILE){$m=$m.Replace($env:USERPROFILE,'[user-profile]')};@('ECO RIG AI SETUP STOPPED',$m,'Do not weaken Windows security. Send this file back to the ECO development chat.')|Set-Content $result -Encoding utf8;Write-Host $m;exit 1}
