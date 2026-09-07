@@ -35,11 +35,11 @@ function Capture([string]$exe,[string[]]$arguments,[string]$work){
  Remove-Item $o,$e -Force -ErrorAction SilentlyContinue;[pscustomobject]@{ExitCode=[int]$code;Stdout=[string]$stdout;Stderr=[string]$stderr}
 }
 function Diag($c){($c.Stdout+"`n"+$c.Stderr).Trim()}
-function Curl{ $c=Get-Command curl.exe -ErrorAction SilentlyContinue;if($null-eq$c-or-not$c.Source){throw'Windows curl.exe was not found.'};$c.Source }
+function Find-CurlExe{ $c=Get-Command curl.exe -ErrorAction SilentlyContinue;if($null-eq$c-or-not$c.Source){throw'Windows curl.exe was not found.'};$c.Source }
 function ArgLine([string[]]$a){(($a|ForEach-Object{'"'+([string]$_).Replace('"','\"')+'"'})-join' ')}
 
 function Endpoint([string]$work){
- $curl=Curl;$probe=Join-Path $work ('qwen-probe-'+[guid]::NewGuid().ToString('N'));$headers=$probe+'.headers'
+ $curl=Find-CurlExe;$probe=Join-Path $work ('qwen-probe-'+[guid]::NewGuid().ToString('N'));$headers=$probe+'.headers'
  try{
   $c=Capture $curl @('--location','--fail','--silent','--show-error','--connect-timeout','30','--max-time','90','--range','0-0','--max-filesize','1048576','--dump-header',$headers,'--output',$probe,$ModelURL) $work
   if($c.ExitCode-ne0){throw "Qwen endpoint probe failed: $(Diag $c)"}
@@ -53,7 +53,7 @@ function Endpoint([string]$work){
 
 function Download-Model([string]$path,[string]$work,[int64]$total){
  if(Test-Path $path){[void](Assert-Sha $path $ModelSHA);return}
- $curl=Curl;$part=$path+'.part';$max=4;if($total-le0){$total=$ModelApproxBytes}
+ $curl=Find-CurlExe;$part=$path+'.part';$max=4;if($total-le0){$total=$ModelApproxBytes}
  for($attempt=1;$attempt-le$max;$attempt++){
   [int64]$before=0;if(Test-Path $part){$before=(Get-Item $part).Length}
   if($before){Write-Host("Qwen attempt $attempt/$max · resuming from "+(Fmt $before))}else{Write-Host"Qwen attempt $attempt/$max · starting."}
@@ -84,7 +84,7 @@ function Utf8([string]$p,[string]$t){[IO.File]::WriteAllText($p,$t,(New-Object T
 
 function SelfTest{
  $r=Join-Path([IO.Path]::GetTempPath())('eco-ai-'+[guid]::NewGuid().ToString('N'));[void][IO.Directory]::CreateDirectory($r)
- try{$f=Join-Path $r x;Set-Content $f x -NoNewline -Encoding ascii;$h=Sha $f;[void](Assert-Sha $f $h);$c=Capture $env:ComSpec @('/d','/c','echo version: ECO_CAPTURE_TEST 1>&2 & exit /b 0') $r;if($c.ExitCode-ne0-or$c.Stderr-notmatch'ECO_CAPTURE_TEST'){throw'native stderr capture failed'};$cc=Capture (Curl) @('--version') $r;if($cc.ExitCode-ne0){throw'curl self-test failed'};Write-Host'Rig AI preparer self-test PASS.'}
+ try{$f=Join-Path $r x;Set-Content $f x -NoNewline -Encoding ascii;$h=Sha $f;[void](Assert-Sha $f $h);$c=Capture $env:ComSpec @('/d','/c','echo version: ECO_CAPTURE_TEST 1>&2 & exit /b 0') $r;if($c.ExitCode-ne0-or$c.Stderr-notmatch'ECO_CAPTURE_TEST'){throw'native stderr capture failed'};$cc=Capture (Find-CurlExe) @('--version') $r;if($cc.ExitCode-ne0){throw'curl self-test failed'};Write-Host'Rig AI preparer self-test PASS.'}
  finally{Remove-Item $r -Recurse -Force -ErrorAction SilentlyContinue}
 }
 
