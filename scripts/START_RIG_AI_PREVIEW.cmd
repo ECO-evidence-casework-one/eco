@@ -10,7 +10,7 @@ echo tests Qwen offline, then opens an isolated developer preview.
 echo.
 echo No administrator elevation or Windows security changes are made.
 echo.
-powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0prepare-rig-ai-preview.ps1"
+powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0prepare-rig-ai-preview-v2.ps1"
 set "ECO_EXIT=%ERRORLEVEL%"
 echo.
 if not "%ECO_EXIT%"=="0" (
