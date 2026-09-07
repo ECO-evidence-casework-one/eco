@@ -1,0 +1,129 @@
+package eco
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+)
+
+const (
+	envLlamaCPPExecutable       = "ECO_LLAMA_CPP"
+	envLlamaCPPExecutableSHA256 = "ECO_LLAMA_CPP_SHA256"
+	envLlamaCPPModel            = "ECO_LLAMA_MODEL"
+	envLlamaCPPModelSHA256      = "ECO_LLAMA_MODEL_SHA256"
+)
+
+type configuredLocalAI struct {
+	Executable       string
+	ExecutableSHA256 string
+	Model            string
+	ModelSHA256      string
+}
+
+// Ask is ECO's application-facing question route. When a complete, explicitly
+// hash-pinned local llama.cpp configuration is present it uses the already
+// grounded local-AI workflow. With no local-AI configuration it preserves the
+// deterministic source-backed behaviour. A configured engine that cannot be
+// verified or run is audited and falls back rather than making Ask ECO unusable.
+func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
+	cfg, configured, err := loadConfiguredLocalAI()
+	if !configured {
+		return v.askDeterministic(question, scopeIDs)
+	}
+	if err == nil {
+		var result LlamaCPPAnswerResult
+		result, err = v.AskWithLlamaCPP(question, scopeIDs, cfg.Executable, cfg.Model)
+		if err == nil && result.Question.ID != "" {
+			return result.Question
+		}
+		if err == nil {
+			err = errors.New("configured local AI returned no accepted question record")
+		}
+	}
+	_ = v.recordConfiguredLocalAIFallback(question, err)
+	return v.askDeterministic(question, scopeIDs)
+}
+
+func loadConfiguredLocalAI() (configuredLocalAI, bool, error) {
+	cfg := configuredLocalAI{
+		Executable:       strings.TrimSpace(os.Getenv(envLlamaCPPExecutable)),
+		ExecutableSHA256: normalizeSHA256(os.Getenv(envLlamaCPPExecutableSHA256)),
+		Model:            strings.TrimSpace(os.Getenv(envLlamaCPPModel)),
+		ModelSHA256:      normalizeSHA256(os.Getenv(envLlamaCPPModelSHA256)),
+	}
+	if cfg.Executable == "" && cfg.ExecutableSHA256 == "" && cfg.Model == "" && cfg.ModelSHA256 == "" {
+		return configuredLocalAI{}, false, nil
+	}
+	if cfg.Executable == "" || cfg.ExecutableSHA256 == "" || cfg.Model == "" || cfg.ModelSHA256 == "" {
+		return configuredLocalAI{}, true, errors.New("local AI configuration is incomplete; executable, executable SHA-256, GGUF model and model SHA-256 are all required")
+	}
+	if !validSHA256(cfg.ExecutableSHA256) || !validSHA256(cfg.ModelSHA256) {
+		return configuredLocalAI{}, true, errors.New("local AI configuration contains an invalid SHA-256 identity")
+	}
+
+	executable, err := requireAbsoluteRegularFile(cfg.Executable, "configured llama.cpp executable")
+	if err != nil {
+		return configuredLocalAI{}, true, err
+	}
+	executableHash, err := hashFile(executable)
+	if err != nil {
+		return configuredLocalAI{}, true, fmt.Errorf("fingerprint configured llama.cpp executable: %w", err)
+	}
+	if !strings.EqualFold(executableHash, cfg.ExecutableSHA256) {
+		return configuredLocalAI{}, true, errors.New("configured llama.cpp executable SHA-256 does not match its approved identity")
+	}
+
+	model, err := inspectLlamaCPPModel(cfg.Model)
+	if err != nil {
+		return configuredLocalAI{}, true, err
+	}
+	if !strings.EqualFold(model.SHA256, cfg.ModelSHA256) {
+		return configuredLocalAI{}, true, errors.New("configured llama.cpp GGUF model SHA-256 does not match its approved identity")
+	}
+
+	cfg.Executable = executable
+	cfg.ExecutableSHA256 = strings.ToLower(executableHash)
+	cfg.Model = model.Path
+	cfg.ModelSHA256 = strings.ToLower(model.SHA256)
+	return cfg, true, nil
+}
+
+func normalizeSHA256(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
+}
+
+func validSHA256(value string) bool {
+	if len(value) != 64 {
+		return false
+	}
+	for _, r := range value {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func (v *Vault) recordConfiguredLocalAIFallback(question string, cause error) error {
+	reason := "configured local AI did not produce an accepted grounded answer"
+	if cause != nil {
+		reason = truncate(cause.Error(), 500)
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
+	oldUpdatedAt := v.Workspace.UpdatedAt
+	oldBuildID := v.Workspace.BuildID
+	v.addChangeUnlocked("local-ai", "configured-local-ai-fallback", "Configured local AI failed; ECO used its deterministic source-backed fallback", map[string]any{
+		"question": truncate(strings.TrimSpace(question), 300),
+		"reason":   reason,
+	})
+	if err := v.saveUnlocked(); err != nil {
+		v.Workspace.Changes = oldChanges
+		v.Workspace.UpdatedAt = oldUpdatedAt
+		v.Workspace.BuildID = oldBuildID
+		return err
+	}
+	return nil
+}
