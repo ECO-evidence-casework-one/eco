@@ -13,6 +13,9 @@ WHAT THE SETUP DOES
 - Runs ECO's tests before building the app.
 - Downloads the checked llama.cpp runtime.
 - Downloads Qwen2.5 1.5B Instruct Q4_K_M (about 1.1 GB).
+- Shows Qwen download size, percentage and transfer speed about every 15 seconds.
+- Stops/retries a transfer that makes no progress for 3 minutes.
+- Keeps partial Qwen bytes and resumes them on the next attempt/run when possible.
 - Checks the exact model/runtime fingerprints.
 - Makes Qwen generate a real offline test answer.
 - Opens ECO only if all required checks pass.
@@ -24,12 +27,17 @@ E:\ECO_RIG_AI_PREVIEW
 
 Otherwise it uses an ECO_RIG_AI_PREVIEW folder next to these setup files.
 
-RETRY AFTER A STOPPED SETUP
+RETRY AFTER A STOPPED OR INTERRUPTED SETUP
 
-If E:\ECO_RIG_AI_PREVIEW already contains AI_SETUP_RESULT.txt whose first line is
-ECO RIG AI SETUP STOPPED, the corrected setup preserves that whole failed attempt
-under a timestamped .failed-... folder and creates a fresh preview automatically.
-Do not delete the old failed attempt yourself.
+The corrected setup recognises both a recorded STOPPED setup and an interrupted setup
+that was closed before AI_SETUP_RESULT.txt could be written. It preserves the old
+attempt under a timestamped .interrupted-... folder and creates a clean preview route.
+
+If the interrupted attempt contains:
+AIAssets\qwen2.5-1.5b-instruct-q4_k_m.gguf.part
+
+the partial model download is carried into the new attempt and curl resumes it rather
+than deliberately starting from zero. Do not delete the previous attempt yourself.
 
 IF IT WORKS
 
@@ -43,6 +51,7 @@ IF IT STOPS
 
 Do not change Defender, Smart App Control or PowerShell machine policy.
 Open AI_SETUP_RESULT.txt in the preview folder and send that file back to the ECO development chat.
+Any .part model file is intentionally retained for another safe resume attempt.
 
 TEST BOUNDARY
 
