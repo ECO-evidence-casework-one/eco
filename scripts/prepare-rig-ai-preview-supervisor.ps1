@@ -75,27 +75,32 @@ function Resolve-RigOutput([string]$RequestedRoot) {
     }
 
     $stamp = Get-Date -Format 'yyyyMMdd-HHmmss'
-    $archive = $RequestedRoot + '.interrupted-' + $stamp
+    $suffix = [guid]::NewGuid().ToString('N').Substring(0,8)
+    $archive = $RequestedRoot + '.supervisor-interrupted-' + $stamp + '-' + $suffix
+    $archiveError = ''
+    $archived = $false
     try {
         Move-Item -LiteralPath $RequestedRoot -Destination $archive
+        $archived = $true
+    } catch {
+        $archiveError = $_.Exception.Message
+    }
+
+    if ($archived) {
         Write-Host "Preserved previous interrupted attempt at: $archive"
         Seed-FailedRetryRoot $archive $RequestedRoot
         return $RequestedRoot
-    } catch {
-        $moveError = $_.Exception.Message
-        if (Test-Path -LiteralPath $archive -and -not (Test-Path -LiteralPath $RequestedRoot)) { throw }
-        $suffix = [guid]::NewGuid().ToString('N').Substring(0,8)
-        $retryRoot = $RequestedRoot + '.retry-' + $stamp + '-' + $suffix
-        Write-Host "Previous failed preview contains a Windows-locked work file. Leaving it untouched instead of failing again."
-        Write-Host "Locked-folder error: $moveError"
-        Write-Host "Fresh retry location: $retryRoot"
-        Seed-FailedRetryRoot $RequestedRoot $retryRoot
-        return $retryRoot
     }
+
+    $retryRoot = $RequestedRoot + '.retry-' + $stamp + '-' + $suffix
+    Write-Host 'Previous failed preview contains a Windows-locked work file. Leaving it untouched instead of failing again.'
+    Write-Host "Locked-folder error: $archiveError"
+    Write-Host "Fresh retry location: $retryRoot"
+    Seed-FailedRetryRoot $RequestedRoot $retryRoot
+    return $retryRoot
 }
 
 function Invoke-SupervisorSelfTest {
-    if (-not $IsWindows -and $PSVersionTable.PSVersion.Major -ge 6) { throw 'Restart supervisor self-test requires Windows.' }
     $root = Join-Path ([IO.Path]::GetTempPath()) ('eco-rig-restart-selftest-' + [guid]::NewGuid().ToString('N'))
     $requested = Join-Path $root 'ECO_RIG_AI_PREVIEW'
     $retryRoot = ''
@@ -118,8 +123,6 @@ function Invoke-SupervisorSelfTest {
     } finally {
         $stream.Dispose()
         Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
-        if ($retryRoot) { Remove-Item -LiteralPath $retryRoot -Recurse -Force -ErrorAction SilentlyContinue }
-        Get-ChildItem -LiteralPath ([IO.Path]::GetTempPath()) -Directory -Filter 'ECO_RIG_AI_PREVIEW.interrupted-*' -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
     }
     Write-Host 'Rig AI locked-restart supervisor self-test PASS.'
 }
