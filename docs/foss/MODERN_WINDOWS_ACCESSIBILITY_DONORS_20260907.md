@@ -27,10 +27,37 @@
 - ECO use: retain accessibility acceptance evidence alongside keyboard-only, Narrator and NVDA testing.
 - Boundary: automated inspection alone does not prove cognitive accessibility, complete screen-reader usability or legal conformance.
 
+## `microsoft/terminal` — native UI Automation provider reference
+
+- Licence: MIT.
+- Status: **REFERENCE / bounded donor candidate.**
+- Evidence: the current `HwndTerminalWndProc` handles `WM_GETOBJECT`, checks `UiaRootObjectId`, and returns the provider through `UiaReturnRawElementProvider`.
+- ECO use: concrete production reference for the Win32 window-procedure/provider boundary when a genuinely custom region must expose a UI Automation tree.
+- Boundary: do not copy Terminal's wider architecture or dependency graph. Extract only the provider-boundary principles needed by ECO.
+
+## `MicrosoftDocs/sdk-api` — authoritative UI Automation API contract
+
+- Status: **AUTHORITATIVE PLATFORM REFERENCE.**
+- Evidence: the GitHub-hosted Windows SDK documentation states that controls respond to `WM_GETOBJECT` with `UiaReturnRawElementProvider`; the original `wParam`/`lParam` should be passed through; provider maps should be released when the window is destroyed.
+- ECO use: implementation and test contract for any app-defined provider path.
+
+## `flutter/flutter` Windows accessibility architecture — reference
+
+- Licence: BSD-style 3-clause licence.
+- Status: **REFERENCE — do not import Flutter.**
+- Evidence: Flutter's Windows accessibility documentation describes the UIA fragment/root model, `IRawElementProviderFragment`, `IRawElementProviderFragmentRoot`, point/focus navigation, patterns, and the `WM_GETOBJECT` → `UiaReturnRawElementProvider` root path used by Narrator/NVDA.
+- ECO use: architecture reference for what a complete custom accessibility tree must expose if native controls cannot represent a region.
+
 ## Native Windows UI Automation
 
 - Status: **PLATFORM API — preferred semantics path, not a third-party UI framework.**
 - ECO use: standard HWND controls should be preferred for ordinary interactive elements where practical. Genuinely custom interactive regions must expose appropriate UI Automation semantics/provider behaviour rather than relying on pixels/hit testing alone.
+
+## Decision after GitHub reconnaissance
+
+For ECO's **primary navigation, ordinary buttons and simple lists**, converting painted hit regions to standard accessible HWND controls is the lower-risk route and remains preferred.
+
+Use a custom UI Automation provider only for regions where replacing the custom rendering would materially damage required evidence/document interaction. If that route is needed, base the provider boundary on the Microsoft SDK contract and production references above, then verify it with Accessibility Insights, Narrator and NVDA.
 
 ## Rejected direction for this stage
 
