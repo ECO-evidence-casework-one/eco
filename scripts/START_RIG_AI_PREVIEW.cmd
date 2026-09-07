@@ -5,7 +5,7 @@ title ECO Rig AI Preview Setup
 echo.
 echo ECO Rig AI Preview Setup
 echo ------------------------
-echo This builds the exact qualified ECO source, installs the pinned local AI assets,
+echo This builds the exact controlled ECO source, installs the pinned local AI assets,
 echo tests Qwen offline, then opens an isolated developer preview.
 echo.
 echo No administrator elevation or Windows security changes are made.
