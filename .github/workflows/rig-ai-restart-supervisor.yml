@@ -1,0 +1,49 @@
+name: Rig AI restart supervisor
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/prepare-rig-ai-preview-supervisor.ps1'
+      - 'scripts/prepare-rig-ai-preview-v3.ps1'
+      - 'scripts/START_RIG_AI_PREVIEW.cmd'
+      - '.github/workflows/rig-ai-restart-supervisor.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/prepare-rig-ai-preview-supervisor.ps1'
+      - 'scripts/prepare-rig-ai-preview-v3.ps1'
+      - 'scripts/START_RIG_AI_PREVIEW.cmd'
+      - '.github/workflows/rig-ai-restart-supervisor.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  locked-restart:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.2.2
+      - name: Reproduce and survive locked failed-work file under Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $supervisor = (Resolve-Path './scripts/prepare-rig-ai-preview-supervisor.ps1').Path
+          & $winPS -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $supervisor -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Restart supervisor self-test failed with exit code $LASTEXITCODE" }
+      - name: Preserve qualified v3 capture self-test under Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $v3 = (Resolve-Path './scripts/prepare-rig-ai-preview-v3.ps1').Path
+          & $winPS -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $v3 -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Qualified v3 preparer self-test failed with exit code $LASTEXITCODE" }
+      - name: Verify one-click launcher uses supervisor and actual-output pointer
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $text = Get-Content -LiteralPath './scripts/START_RIG_AI_PREVIEW.cmd' -Raw
+          foreach ($required in @('prepare-rig-ai-preview-supervisor.ps1','LAST_OUTPUT.txt','Actual preview location')) {
+            if ($text -notmatch [regex]::Escape($required)) { throw "Launcher is missing required restart control: $required" }
+          }

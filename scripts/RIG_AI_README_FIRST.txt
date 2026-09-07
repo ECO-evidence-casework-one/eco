@@ -22,22 +22,36 @@ WHAT THE SETUP DOES
 
 WHERE IT GOES
 
-If your E: drive is available, the preview is created at:
+If your E: drive is available, the requested preview location is:
 E:\ECO_RIG_AI_PREVIEW
 
 Otherwise it uses an ECO_RIG_AI_PREVIEW folder next to these setup files.
 
+If Windows still has a disposable file from a failed attempt locked, the corrected
+setup will leave that failed folder untouched and automatically use a fresh sibling
+folder such as:
+E:\ECO_RIG_AI_PREVIEW.retry-...
+
+The setup window always prints:
+Actual preview location: ...
+
+Use that actual location for AI_SETUP_RESULT.txt and START_ECO_WITH_AI.cmd.
+
 RETRY AFTER A STOPPED OR INTERRUPTED SETUP
 
 The corrected setup recognises both a recorded STOPPED setup and an interrupted setup
-that was closed before AI_SETUP_RESULT.txt could be written. It preserves the old
-attempt under a timestamped .interrupted-... folder and creates a clean preview route.
+that was closed before AI_SETUP_RESULT.txt could be written. It first attempts the
+normal timestamped archive. If Windows refuses because an old work file is still in
+use, the failed directory is preserved in place instead of making the whole setup fail.
 
 If the interrupted attempt contains:
 AIAssets\qwen2.5-1.5b-instruct-q4_k_m.gguf.part
 
-the partial model download is carried into the new attempt and curl resumes it rather
-than deliberately starting from zero. Do not delete the previous attempt yourself.
+the partial model download is moved intact into the clean retry seed and the qualified
+v3 preparer resumes it rather than deliberately starting from zero. The setup never
+starts a second downloader against a partial file that is still locked.
+
+Do not delete the previous attempt yourself.
 
 IF IT WORKS
 
@@ -50,7 +64,8 @@ ECO should then open. In Ask ECO, the answer area should identify Qwen as ready/
 IF IT STOPS
 
 Do not change Defender, Smart App Control or PowerShell machine policy.
-Open AI_SETUP_RESULT.txt in the preview folder and send that file back to the ECO development chat.
+Use the folder shown after "Actual preview location". Open AI_SETUP_RESULT.txt there
+and send that file back to the ECO development chat.
 Any .part model file is intentionally retained for another safe resume attempt.
 
 TEST BOUNDARY
