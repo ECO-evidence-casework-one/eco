@@ -64,7 +64,7 @@ jobs:
   build-windows:
     needs: [source-policy, secret-scan, test-linux]
     runs-on: windows-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
@@ -77,15 +77,30 @@ jobs:
       - name: Prove every Windows native stage stops later work
         shell: pwsh
         run: ./scripts/test-build-windows-failure-matrix.ps1
-      - name: Self-test rig AI preparer safety controls
+      - name: Self-test rig AI preparer under Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          if (-not (Test-Path -LiteralPath $winPS -PathType Leaf)) { throw 'Windows PowerShell 5.1 executable not found on runner.' }
+          $script = (Resolve-Path './scripts/prepare-rig-ai-preview-v3.ps1').Path
+          & $winPS -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -SelfTest
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 preparer self-test failed with exit code $LASTEXITCODE" }
+      - name: Self-test rig AI preparer under PowerShell 7
         shell: pwsh
         run: ./scripts/prepare-rig-ai-preview-v3.ps1 -SelfTest
       - name: Deterministic Windows build and tests
         shell: pwsh
         run: ./scripts/build-windows.ps1
-      - name: Qualify pinned rig AI build and GitHub runtime route
+      - name: Qualify pinned rig AI build and GitHub runtime route under Windows PowerShell 5.1
         shell: pwsh
-        run: ./scripts/prepare-rig-ai-preview-v3.ps1 -QualificationOnly -OutputRoot (Join-Path $env:RUNNER_TEMP 'eco-rig-ai-qualification')
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $script = (Resolve-Path './scripts/prepare-rig-ai-preview-v3.ps1').Path
+          $out = Join-Path $env:RUNNER_TEMP 'eco-rig-ai-qualification'
+          & $winPS -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $script -QualificationOnly -OutputRoot $out
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 rig-AI qualification failed with exit code $LASTEXITCODE" }
       - name: Install pinned Syft v1.51.1
         shell: pwsh
         run: |
