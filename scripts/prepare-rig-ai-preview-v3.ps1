@@ -15,11 +15,10 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $EcoSource = 'b03ec2358dbf437deb922ad1cbb96d4e5c6faedb'
-# The next independent Windows qualification deliberately starts with the prior
-# archive-source identity as a sentinel. CI prints the newly observed hash/size
-# before refusing it, then this pin is updated only from that retained evidence.
-$EcoExeSHA = '8ca12dafdd78182d0984aafebed2b7ed0894b3471a45f7d1e0602b67ac382426'
-$EcoExeSize = 4880384
+# Independently observed on fresh Windows CI after source tests/vet and two
+# archive-source builds. The next qualification must reproduce this exactly.
+$EcoExeSHA = 'eb6159cb0406a0d1b7195285f03848048026726e6abe3c73b9f7a4f52a9fbee3'
+$EcoExeSize = 4892672
 $GoURL = 'https://github.com/actions/go-versions/releases/download/1.23.12-16792118003/go-1.23.12-win32-x64.zip'
 $GoZipSHA = 'c27b02f15d4ceb89fbce6ffe2a28df3dd293608cf79e9f12839f672863622845'
 $LlamaURL = 'https://github.com/ggml-org/llama.cpp/releases/download/b10259/llama-b10259-bin-win-cpu-x64.zip'
