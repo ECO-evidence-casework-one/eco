@@ -69,7 +69,10 @@ func TestLoadConfiguredLocalAIAcceptsHashPinnedLocalFiles(t *testing.T) {
 	if !configured {
 		t.Fatal("complete hash-pinned environment must enable local AI")
 	}
-	if cfg.Executable != executable || cfg.Model != model {
+	// Windows may canonicalize the same temporary directory with different case.
+	// Compare cleaned paths case-insensitively here; product code still requires
+	// absolute regular files and validates their exact byte identities by SHA-256.
+	if !strings.EqualFold(filepath.Clean(cfg.Executable), filepath.Clean(executable)) || !strings.EqualFold(filepath.Clean(cfg.Model), filepath.Clean(model)) {
 		t.Fatalf("unexpected resolved paths: %#v", cfg)
 	}
 	if cfg.ExecutableSHA256 != executableHash || cfg.ModelSHA256 != modelHash {
