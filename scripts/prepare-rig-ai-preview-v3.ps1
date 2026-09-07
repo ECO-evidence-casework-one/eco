@@ -1,8 +1,8 @@
 # ECO rig AI preview preparer v3.
 # GitHub-first, hash-pinned, private synthetic-data preview.
 # This deliberately builds from GitHub's source archive with buildvcs=false.
-# Its executable is source-equivalent to commit 24170e4 but has its own
-# deterministic fingerprint rather than claiming byte identity with the
+# Its executable is source-equivalent to the pinned source commit but has its
+# own deterministic fingerprint rather than claiming byte identity with the
 # Git-checkout artifact produced by GitHub Actions.
 [CmdletBinding()]
 param(
@@ -14,7 +14,10 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$EcoSource = '24170e4505cfaadf97d37bc172ebf3097af7de55'
+$EcoSource = 'b03ec2358dbf437deb922ad1cbb96d4e5c6faedb'
+# The next independent Windows qualification deliberately starts with the prior
+# archive-source identity as a sentinel. CI prints the newly observed hash/size
+# before refusing it, then this pin is updated only from that retained evidence.
 $EcoExeSHA = '8ca12dafdd78182d0984aafebed2b7ed0894b3471a45f7d1e0602b67ac382426'
 $EcoExeSize = 4880384
 $GoURL = 'https://github.com/actions/go-versions/releases/download/1.23.12-16792118003/go-1.23.12-win32-x64.zip'
@@ -100,7 +103,7 @@ function Build-Eco([string]$Work) {
         Set-Location -LiteralPath $src;$version=(& $go version|Out-String).Trim();if($version-cne 'go version go1.23.12 windows/amd64'){throw "Wrong Go identity: $version"}
         Write-Host '[3/7] Verifying dependencies.';Run-Native 'go mod download' $go @('mod','download');Run-Native 'go mod verify' $go @('mod','verify');$env:GOPROXY='off'
         Write-Host '[4/7] Running ECO tests and vet.';Run-Native 'go test' $go @('test','-count=1','-p=2','./...');Run-Native 'go vet' $go @('vet','-p=2','./...')
-        Write-Host '[5/7] Reproducing the qualified archive-source ECO executable twice.';$a=Join-Path $Work 'ECO.exe';$b=Join-Path $Work 'ECO.rebuild.exe';$flags="-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$EcoSource";Run-Native 'ECO build 1' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$a,'./cmd/eco');Run-Native 'ECO build 2' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$b,'./cmd/eco');[void](Assert-Sha $a $EcoExeSHA);[void](Assert-Sha $b $EcoExeSHA);if((Get-Item $a).Length-ne $EcoExeSize){throw 'ECO size mismatch.'};Remove-Item $b -Force
+        Write-Host '[5/7] Reproducing the qualified archive-source ECO executable twice.';$a=Join-Path $Work 'ECO.exe';$b=Join-Path $Work 'ECO.rebuild.exe';$flags="-s -w -H windowsgui -buildid= -X github.com/ECO-evidence-casework-one/eco/internal/eco.SourceCommit=$EcoSource";Run-Native 'ECO build 1' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$a,'./cmd/eco');Run-Native 'ECO build 2' $go @('build','-trimpath','-buildvcs=false','-ldflags',$flags,'-o',$b,'./cmd/eco');$observedSha=Sha $a;$observedSize=(Get-Item -LiteralPath $a).Length;Write-Host "Archive-source candidate observed SHA-256: $observedSha";Write-Host "Archive-source candidate observed size: $observedSize bytes";[void](Assert-Sha $a $EcoExeSHA);[void](Assert-Sha $b $EcoExeSHA);if($observedSize-ne $EcoExeSize){throw "ECO size mismatch: $observedSize"};Remove-Item $b -Force
         [pscustomobject]@{Exe=$a;GoVersion=$version;SourceZipSHA=(Sha $sourceZip);Source=$src}
     }finally{Set-Location $old;foreach($n in $names){[Environment]::SetEnvironmentVariable($n,$saved[$n],'Process')}}
 }
