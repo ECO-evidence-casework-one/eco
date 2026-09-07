@@ -69,11 +69,27 @@ func TestLoadConfiguredLocalAIAcceptsHashPinnedLocalFiles(t *testing.T) {
 	if !configured {
 		t.Fatal("complete hash-pinned environment must enable local AI")
 	}
-	// Windows may canonicalize the same temporary directory with different case.
-	// Compare cleaned paths case-insensitively here; product code still requires
-	// absolute regular files and validates their exact byte identities by SHA-256.
-	if !strings.EqualFold(filepath.Clean(cfg.Executable), filepath.Clean(executable)) || !strings.EqualFold(filepath.Clean(cfg.Model), filepath.Clean(model)) {
-		t.Fatalf("unexpected resolved paths: %#v", cfg)
+	// Windows may expand an 8.3 short temp path to its long form. Compare the
+	// actual file identities rather than spelling; product code separately
+	// requires absolute regular files and validates their exact bytes by SHA-256.
+	wantExeInfo, err := os.Stat(executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotExeInfo, err := os.Stat(cfg.Executable)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantModelInfo, err := os.Stat(model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotModelInfo, err := os.Stat(cfg.Model)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(wantExeInfo, gotExeInfo) || !os.SameFile(wantModelInfo, gotModelInfo) {
+		t.Fatalf("resolved paths do not identify the configured files: %#v", cfg)
 	}
 	if cfg.ExecutableSHA256 != executableHash || cfg.ModelSHA256 != modelHash {
 		t.Fatalf("hashes were not normalized/preserved: %#v", cfg)
