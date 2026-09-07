@@ -20,7 +20,7 @@ type rankedSegment struct {
 	Score    float64
 }
 
-func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
+func (v *Vault) askDeterministic(question string, scopeIDs []string) QuestionRecord {
 	question = strings.TrimSpace(question)
 	intent := classifyIntent(question)
 	verificationFailures := v.verifyEvidenceForUse(scopeIDs)
