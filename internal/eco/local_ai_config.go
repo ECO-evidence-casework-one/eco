@@ -23,17 +23,21 @@ type configuredLocalAI struct {
 
 // Ask is ECO's application-facing question route. When a complete, explicitly
 // hash-pinned local llama.cpp configuration is present it uses the already
-// grounded local-AI workflow. With no local-AI configuration it preserves the
-// deterministic source-backed behaviour. A configured engine that cannot be
-// verified or run is audited and falls back rather than making Ask ECO unusable.
+// grounded local-AI workflow through ECO's verified local-tool registry. With
+// no local-AI configuration it preserves the deterministic source-backed
+// behaviour. A configured engine that cannot be verified or run is audited and
+// falls back rather than making Ask ECO unusable.
 func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
 	cfg, configured, err := loadConfiguredLocalAI()
 	if !configured {
 		return v.askDeterministic(question, scopeIDs)
 	}
 	if err == nil {
+		err = v.ensureConfiguredLlamaCPPRegistered(cfg)
+	}
+	if err == nil {
 		var result LlamaCPPAnswerResult
-		result, err = v.AskWithLlamaCPP(question, scopeIDs, cfg.Executable, cfg.Model)
+		result, err = v.AskWithRegisteredLlamaCPP(question, scopeIDs, cfg.Model)
 		if err == nil && result.Question.ID != "" {
 			return result.Question
 		}
@@ -87,6 +91,33 @@ func loadConfiguredLocalAI() (configuredLocalAI, bool, error) {
 	cfg.Model = model.Path
 	cfg.ModelSHA256 = strings.ToLower(model.SHA256)
 	return cfg, true, nil
+}
+
+// ensureConfiguredLlamaCPPRegistered keeps the application-facing AI route on
+// the same donor provenance/identity path as ECO's other optional local tools.
+// A matching current registration is re-verified. A missing, stale or different
+// registration is replaced only by successfully registering the explicitly
+// hash-pinned executable from the process configuration.
+func (v *Vault) ensureConfiguredLlamaCPPRegistered(cfg configuredLocalAI) error {
+	registration, err := v.RegisteredLocalTool("llama.cpp")
+	if err == nil && registration.SHA256 == cfg.ExecutableSHA256 {
+		verified, verifyErr := v.VerifyRegisteredLocalTool("llama.cpp")
+		if verifyErr == nil && verified.SHA256 == cfg.ExecutableSHA256 {
+			return nil
+		}
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("read registered llama.cpp runtime: %w", err)
+	}
+
+	registration, err = v.RegisterLocalTool("llama.cpp", cfg.Executable)
+	if err != nil {
+		return fmt.Errorf("register configured llama.cpp runtime: %w", err)
+	}
+	if registration.SHA256 != cfg.ExecutableSHA256 {
+		return errors.New("registered llama.cpp runtime does not match the configured approved SHA-256 identity")
+	}
+	return nil
 }
 
 func normalizeSHA256(value string) string {
