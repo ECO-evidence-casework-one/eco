@@ -219,14 +219,14 @@ func buildLlamaCPPPrompt(grounding GroundingContext) (string, error) {
 func llamaCPPArgs(modelPath, promptPath, schemaPath string) []string {
 	return []string{
 		"--offline",
+		"--conversation",
+		"--single-turn",
 		"--model", modelPath,
 		"--file", promptPath,
 		"--json-schema-file", schemaPath,
 		"--simple-io",
-		"--no-conversation",
 		"--no-display-prompt",
 		"--color", "off",
-		"--log-disable",
 		"--seed", "0",
 		"--temp", "0",
 		"--top-k", "1",
@@ -292,7 +292,17 @@ func offlineLlamaCPPEnvironment(base []string) []string {
 	return out
 }
 
+func normalizeLlamaCPPEmission(data []byte) []byte {
+	trimmed := bytes.TrimSpace(data)
+	marker := []byte("[end of text]")
+	if bytes.HasSuffix(trimmed, marker) {
+		trimmed = bytes.TrimSpace(bytes.TrimSuffix(trimmed, marker))
+	}
+	return trimmed
+}
+
 func parseLlamaCPPEmission(data []byte) (GroundingEmission, error) {
+	data = normalizeLlamaCPPEmission(data)
 	if len(data) == 0 {
 		return GroundingEmission{}, errors.New("llama.cpp returned an empty emission")
 	}
