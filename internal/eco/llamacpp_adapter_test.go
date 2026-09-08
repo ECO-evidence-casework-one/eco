@@ -13,7 +13,7 @@ func TestLlamaCPPArgsStayLocalAndDeterministic(t *testing.T) {
 	args := llamaCPPArgs(`C:\models\qwen.gguf`, `C:\work\prompt.txt`, `C:\work\schema.json`)
 	joined := strings.Join(args, " ")
 	for _, required := range []string{
-		"--offline", "--model", "--file", "--json-schema-file", "--simple-io", "--no-conversation",
+		"--offline", "--conversation", "--single-turn", "--model", "--file", "--json-schema-file", "--simple-io",
 		"--no-display-prompt", "--seed 0", "--temp 0", "--n-predict 2048",
 		"--device none", "--n-gpu-layers 0", "--fit off", "--no-context-shift",
 	} {
@@ -21,9 +21,9 @@ func TestLlamaCPPArgsStayLocalAndDeterministic(t *testing.T) {
 			t.Fatalf("missing controlled llama.cpp argument %q in %q", required, joined)
 		}
 	}
-	for _, forbidden := range []string{"--conversation", "--model-url", "--hf-repo", "--hf-file", "--hf-token", "--docker-repo", "--rpc", "--server-base"} {
+	for _, forbidden := range []string{"--no-conversation", "--log-disable", "--interactive", "--interactive-first", "--model-url", "--hf-repo", "--hf-file", "--hf-token", "--docker-repo", "--rpc", "--server-base"} {
 		if strings.Contains(joined, forbidden) {
-			t.Fatalf("llama.cpp adapter unexpectedly contains interactive/network-capable flag %q: %q", forbidden, joined)
+			t.Fatalf("llama.cpp adapter unexpectedly contains unsafe or output-suppressing flag %q: %q", forbidden, joined)
 		}
 	}
 }
@@ -64,9 +64,20 @@ func TestLlamaCPPEmissionParserIsStrict(t *testing.T) {
 	if len(emission.Claims) != 1 || emission.Claims[0].Text != "12 August 2026" {
 		t.Fatalf("unexpected parsed emission: %+v", emission)
 	}
+
+	withKnownMarker := append(append([]byte(nil), valid...), []byte("\r\n[end of text]\r\n")...)
+	emission, err = parseLlamaCPPEmission(withKnownMarker)
+	if err != nil {
+		t.Fatalf("expected exact llama.cpp terminal marker to be normalized: %v", err)
+	}
+	if len(emission.Claims) != 1 || emission.Claims[0].Text != "12 August 2026" {
+		t.Fatalf("unexpected marked emission: %+v", emission)
+	}
+
 	bad := [][]byte{
 		[]byte("```json\n" + string(valid) + "\n```"),
 		append(append([]byte(nil), valid...), []byte(" trailing prose")...),
+		append(append([]byte(nil), valid...), []byte(" [end of text] trailing prose")...),
 		[]byte("{\"answer\":\"x\",\"claims\":[{\"kind\":\"presence\",\"evidence_id\":\"E\",\"segment_id\":\"S\"}],\"unexpected\":true}"),
 		[]byte("{\"answer\":\"\",\"claims\":[]}"),
 	}
