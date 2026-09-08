@@ -1,0 +1,43 @@
+name: Wails v2 UI architecture spike
+
+on:
+  pull_request:
+    paths:
+      - 'spikes/wails-v2-ui/**'
+      - 'internal/app/**'
+      - '.github/workflows/wails-v2-ui-spike.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  spike-windows:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v4.4.0
+        with:
+          node-version: '22'
+          cache: false
+      - name: Build React TypeScript frontend
+        shell: pwsh
+        working-directory: spikes/wails-v2-ui/frontend
+        run: |
+          npm install --ignore-scripts --no-audit --no-fund
+          npm run build
+      - name: Build isolated Wails v2.14 spike
+        shell: pwsh
+        working-directory: spikes/wails-v2-ui
+        run: |
+          go mod download
+          go build -trimpath -o eco-ui-spike.exe .
+          if (-not (Test-Path ./eco-ui-spike.exe)) { throw 'Wails spike binary was not produced' }
+      - name: Re-run ECO service contract tests
+        shell: pwsh
+        run: go test ./internal/app

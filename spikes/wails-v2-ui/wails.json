@@ -1,0 +1,13 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "ECO UI Architecture Spike",
+  "outputfilename": "eco-ui-spike",
+  "frontend:install": "npm install --ignore-scripts",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "ECO Evidence Casework One",
+    "email": ""
+  }
+}
