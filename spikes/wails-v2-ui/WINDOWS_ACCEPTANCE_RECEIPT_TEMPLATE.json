@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "status": "template_only_not_an_acceptance_result",
+  "eco_commit": "",
+  "spike_build_sha256": "",
+  "windows_version": "",
+  "display_scale_percent": null,
+  "text_scale_percent": null,
+  "theme": "",
+  "high_contrast": null,
+  "synthetic_fixture_id": "",
+  "automated": {
+    "flaui": {
+      "version": "",
+      "scenario": "",
+      "result": "NOT_RUN"
+    },
+    "axe_windows": {
+      "version": "",
+      "errors": null,
+      "warnings": null,
+      "report_sha256": "",
+      "result": "NOT_RUN"
+    }
+  },
+  "manual": {
+    "keyboard_only": "NOT_RUN",
+    "narrator": {
+      "version": "",
+      "result": "NOT_RUN",
+      "notes": ""
+    },
+    "nvda": {
+      "version": "",
+      "result": "NOT_RUN",
+      "notes": ""
+    },
+    "scaling": {
+      "100": "NOT_RUN",
+      "125": "NOT_RUN",
+      "150": "NOT_RUN",
+      "175": "NOT_RUN",
+      "200": "NOT_RUN"
+    },
+    "high_contrast": "NOT_RUN",
+    "shutdown_reopen": "NOT_RUN"
+  },
+  "critical_open_defects": [],
+  "known_limitations": [],
+  "promotion_gate": "NOT_EVALUATED",
+  "notes": "Do not convert NOT_RUN to PASS without actual evidence. Automated success alone is not an accessibility conformance claim."
+}
