@@ -88,13 +88,65 @@ func TestLlamaCPPEmissionParserIsStrict(t *testing.T) {
 	}
 }
 
-func TestLlamaCPPJSONSchemaIsValidJSON(t *testing.T) {
+func TestLlamaCPPJSONSchemaIsValidAndGrammarCompatible(t *testing.T) {
 	var schema map[string]any
 	if err := json.Unmarshal([]byte(llamaCPPEmissionSchema), &schema); err != nil {
 		t.Fatalf("invalid llama.cpp emission schema: %v", err)
 	}
 	if schema["type"] != "object" {
 		t.Fatalf("unexpected schema root: %+v", schema)
+	}
+	assertNoOversizedSchemaRepetition(t, schema, "root")
+}
+
+func assertNoOversizedSchemaRepetition(t *testing.T, value any, path string) {
+	t.Helper()
+	switch typed := value.(type) {
+	case map[string]any:
+		for key, child := range typed {
+			childPath := path + "." + key
+			if key == "maxLength" {
+				n, ok := child.(float64)
+				if !ok {
+					t.Fatalf("%s is not numeric: %#v", childPath, child)
+				}
+				// llama.cpp's grammar parser rejects explicit repetition bounds above
+				// its sane threshold (currently 2000). ECO therefore keeps large
+				// answer/claim bounds in post-generation validation instead.
+				if n > 2000 {
+					t.Fatalf("%s=%v exceeds llama.cpp grammar repetition threshold", childPath, n)
+				}
+			}
+			assertNoOversizedSchemaRepetition(t, child, childPath)
+		}
+	case []any:
+		for i, child := range typed {
+			assertNoOversizedSchemaRepetition(t, child, path+"[]"+string(rune(i)))
+		}
+	}
+}
+
+func TestLlamaCPPPostGenerationLimitsRemainEnforced(t *testing.T) {
+	tooLong := GroundingEmission{
+		Answer: strings.Repeat("a", maxLlamaCPPAnswerRunes+1),
+		Claims: []GroundingClaim{{Kind: "presence", EvidenceID: "EVD-1", SegmentID: "SEG-1"}},
+	}
+	data, err := json.Marshal(tooLong)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := parseLlamaCPPEmission(data); err == nil || !strings.Contains(err.Error(), "unbounded") {
+		t.Fatalf("expected oversized answer rejection, got %v", err)
+	}
+
+	claim := GroundingClaim{
+		Kind:       "quote",
+		Text:       strings.Repeat("b", maxGroundingClaimText+1),
+		EvidenceID: "EVD-1",
+		SegmentID:  "SEG-1",
+	}
+	if err := validateGroundingClaim(claim, 1); err == nil || !strings.Contains(err.Error(), "unbounded") {
+		t.Fatalf("expected oversized claim rejection, got %v", err)
 	}
 }
 

@@ -25,7 +25,7 @@ const llamaCPPEmissionSchema = `{
   "additionalProperties": false,
   "required": ["answer", "claims"],
   "properties": {
-    "answer": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "answer": {"type": "string", "minLength": 1},
     "claims": {
       "type": "array",
       "minItems": 1,
@@ -36,7 +36,7 @@ const llamaCPPEmissionSchema = `{
         "required": ["kind", "evidence_id", "segment_id"],
         "properties": {
           "kind": {"type": "string", "enum": ["quote", "value", "presence"]},
-          "text": {"type": "string", "maxLength": 4096},
+          "text": {"type": "string"},
           "evidence_id": {"type": "string", "minLength": 1, "maxLength": 256},
           "segment_id": {"type": "string", "minLength": 1, "maxLength": 256}
         }
