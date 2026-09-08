@@ -50,3 +50,30 @@ jobs:
         env:
           GOTOOLCHAIN: local
         run: go test ./internal/app
+      - name: Prepare Windows acceptance package
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'eco-wails-v2-windows-acceptance'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item 'spikes/wails-v2-ui/eco-ui-spike.exe' $out
+          Copy-Item 'spikes/wails-v2-ui/WINDOWS_ACCEPTANCE.md' $out
+          Copy-Item 'spikes/wails-v2-ui/WINDOWS_ACCEPTANCE_RECEIPT_TEMPLATE.json' $out
+          Copy-Item 'spikes/wails-v2-ui/ACCEPTANCE_RUNBOOK.md' $out
+          $hash = (Get-FileHash (Join-Path $out 'eco-ui-spike.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *eco-ui-spike.exe" | Set-Content -Encoding ascii (Join-Path $out 'eco-ui-spike.sha256.txt')
+          @(
+            "ECO Wails v2 Windows acceptance package"
+            "Commit: $env:GITHUB_SHA"
+            "Run ID: $env:GITHUB_RUN_ID"
+            "Wails: v2.14.0"
+            "Spike Go: 1.25.0"
+            "ECO production Go acceptance: 1.23.12"
+            "Synthetic test data only. This is not a production ECO build."
+          ) | Set-Content -Encoding utf8 (Join-Path $out 'BUILD_INFO.txt')
+      - name: Upload Windows acceptance package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: eco-wails-v2-windows-acceptance-${{ github.sha }}
+          path: ${{ runner.temp }}/eco-wails-v2-windows-acceptance
+          if-no-files-found: error
+          retention-days: 14
