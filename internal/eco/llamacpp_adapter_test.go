@@ -13,7 +13,7 @@ func TestLlamaCPPArgsStayLocalAndDeterministic(t *testing.T) {
 	args := llamaCPPArgs(`C:\models\qwen.gguf`, `C:\work\prompt.txt`, `C:\work\schema.json`)
 	joined := strings.Join(args, " ")
 	for _, required := range []string{
-		"--offline", "--model", "--file", "--json-schema-file", "--simple-io",
+		"--offline", "--model", "--file", "--json-schema-file", "--simple-io", "--no-conversation",
 		"--no-display-prompt", "--seed 0", "--temp 0", "--n-predict 2048",
 		"--device none", "--n-gpu-layers 0", "--fit off", "--no-context-shift",
 	} {
@@ -21,9 +21,9 @@ func TestLlamaCPPArgsStayLocalAndDeterministic(t *testing.T) {
 			t.Fatalf("missing controlled llama.cpp argument %q in %q", required, joined)
 		}
 	}
-	for _, forbidden := range []string{"--model-url", "--hf-repo", "--hf-file", "--hf-token", "--docker-repo", "--rpc", "--server-base"} {
+	for _, forbidden := range []string{"--conversation", "--model-url", "--hf-repo", "--hf-file", "--hf-token", "--docker-repo", "--rpc", "--server-base"} {
 		if strings.Contains(joined, forbidden) {
-			t.Fatalf("llama.cpp adapter unexpectedly contains network-capable flag %q: %q", forbidden, joined)
+			t.Fatalf("llama.cpp adapter unexpectedly contains interactive/network-capable flag %q: %q", forbidden, joined)
 		}
 	}
 }

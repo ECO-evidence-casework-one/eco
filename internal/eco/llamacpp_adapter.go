@@ -223,6 +223,7 @@ func llamaCPPArgs(modelPath, promptPath, schemaPath string) []string {
 		"--file", promptPath,
 		"--json-schema-file", schemaPath,
 		"--simple-io",
+		"--no-conversation",
 		"--no-display-prompt",
 		"--color", "off",
 		"--log-disable",

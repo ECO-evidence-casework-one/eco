@@ -1,0 +1,52 @@
+name: Existing Qwen probe control
+
+on:
+  pull_request:
+    paths:
+      - 'internal/eco/llamacpp_adapter.go'
+      - 'internal/eco/llamacpp_adapter_test.go'
+      - 'scripts/probe-existing-rig-qwen.ps1'
+      - 'scripts/RUN_EXISTING_QWEN_PROBE.cmd'
+      - '.github/workflows/qwen-existing-probe.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'internal/eco/llamacpp_adapter.go'
+      - 'internal/eco/llamacpp_adapter_test.go'
+      - 'scripts/probe-existing-rig-qwen.ps1'
+      - 'scripts/RUN_EXISTING_QWEN_PROBE.cmd'
+      - '.github/workflows/qwen-existing-probe.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  windows-powershell-51:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Parse existing-model probe under Windows PowerShell 5.1
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $winPS = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+          $script = (Resolve-Path './scripts/probe-existing-rig-qwen.ps1').Path
+          $parseCheck = Join-Path $env:RUNNER_TEMP 'parse-probe.ps1'
+          @'
+          param([string]$Path)
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$null, [ref]$errors)
+          if ($errors.Count -ne 0) { $errors | Format-List | Out-String | Write-Error; exit 1 }
+          Write-Host 'Windows PowerShell 5.1 probe parse PASS.'
+          '@ | Set-Content -LiteralPath $parseCheck -Encoding ascii
+          & $winPS -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File $parseCheck -Path $script
+          if ($LASTEXITCODE -ne 0) { throw "Windows PowerShell 5.1 probe parse failed with exit code $LASTEXITCODE" }
+      - name: Require one-shot and hard-timeout controls
+        shell: pwsh
+        run: |
+          $text = Get-Content -LiteralPath './scripts/probe-existing-rig-qwen.ps1' -Raw
+          foreach ($required in @('--no-conversation','TimeoutSeconds','Kill()','QWEN OFFLINE GENERATION PASS','QWEN_OFFLINE_PROBE_PASS.txt')) {
+            if ($text -notmatch [regex]::Escape($required)) { throw "Probe control missing: $required" }
+          }
+          $cmd = Get-Content -LiteralPath './scripts/RUN_EXISTING_QWEN_PROBE.cmd' -Raw
+          if ($cmd -notmatch 'probe-existing-rig-qwen.ps1') { throw 'One-click probe launcher is not wired to the corrected probe.' }
