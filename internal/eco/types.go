@@ -214,6 +214,10 @@ type QuestionRecord struct {
 	SuspiciousSourcesExcluded    int        `json:"suspicious_sources_excluded"`
 	LowConfidenceSourcesExcluded int        `json:"low_confidence_sources_excluded"`
 	SourceVerificationFailures   int        `json:"source_verification_failures"`
+	VerifiedEvidenceIDs          []string   `json:"verified_evidence_ids,omitempty"`
+	SourceVerificationBytes      int64      `json:"source_verification_bytes"`
+	SourceVerificationLimit      bool       `json:"source_verification_limit_reached,omitempty"`
+	WorkspaceRevision            uint64     `json:"workspace_revision,omitempty"`
 }
 
 type Citation struct {

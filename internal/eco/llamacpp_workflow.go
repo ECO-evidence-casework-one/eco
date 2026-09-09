@@ -9,13 +9,16 @@ import (
 )
 
 type LlamaCPPAnswerResult struct {
-	Question      QuestionRecord     `json:"question"`
-	Grounding     GroundingReport    `json:"grounding"`
-	EngineVersion string             `json:"engine_version"`
-	ModelName     string             `json:"model_name"`
-	ModelSHA256   string             `json:"model_sha256"`
-	ContextID     string             `json:"context_id"`
-	Resources     ResourceAssessment `json:"resources"`
+	Question                   QuestionRecord     `json:"question"`
+	Grounding                  GroundingReport    `json:"grounding"`
+	EngineVersion              string             `json:"engine_version"`
+	ModelName                  string             `json:"model_name"`
+	ModelSHA256                string             `json:"model_sha256"`
+	ContextID                  string             `json:"context_id"`
+	Resources                  ResourceAssessment `json:"resources"`
+	sourceVerificationBytes    int64
+	sourceVerificationFailures int
+	sourceVerificationLimit    bool
 }
 
 type llamaCPPRunner func(context.Context, string, string, GroundingContext) (LlamaCPPModelResult, error)
@@ -34,6 +37,12 @@ func (v *Vault) AskWithLlamaCPPContext(ctx context.Context, question string, sco
 }
 
 func (v *Vault) askWithLlamaCPPRunner(ctx context.Context, question string, scopeIDs []string, executable, modelPath string, runner llamaCPPRunner) (LlamaCPPAnswerResult, error) {
+	v.opMu.RLock()
+	defer v.opMu.RUnlock()
+	return v.askWithLlamaCPPRunnerLocked(ctx, question, append([]string(nil), scopeIDs...), executable, modelPath, runner)
+}
+
+func (v *Vault) askWithLlamaCPPRunnerLocked(ctx context.Context, question string, scopeIDs []string, executable, modelPath string, runner llamaCPPRunner) (LlamaCPPAnswerResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -44,12 +53,18 @@ func (v *Vault) askWithLlamaCPPRunner(ctx context.Context, question string, scop
 	if runner == nil {
 		return LlamaCPPAnswerResult{}, errors.New("llama.cpp runner is required")
 	}
-	grounding, err := v.BuildGroundingContext(question, scopeIDs)
+	grounding, err := v.buildGroundingContextLocked(question, scopeIDs)
+	result := LlamaCPPAnswerResult{
+		ContextID:                  grounding.ContextID,
+		sourceVerificationBytes:    grounding.sourceVerificationBytes,
+		sourceVerificationFailures: grounding.SourceVerificationFailures,
+		sourceVerificationLimit:    grounding.sourceVerificationLimit,
+	}
 	if err != nil {
-		return LlamaCPPAnswerResult{}, err
+		return result, err
 	}
 	if err := ctx.Err(); err != nil {
-		return LlamaCPPAnswerResult{}, err
+		return result, err
 	}
 
 	modelResult, err := runner(ctx, executable, modelPath, grounding)
@@ -57,22 +72,25 @@ func (v *Vault) askWithLlamaCPPRunner(ctx context.Context, question string, scop
 		if modelResult.Resources.Blocked {
 			_ = v.recordLlamaResourceBlock(question, modelResult, grounding)
 		}
-		return LlamaCPPAnswerResult{
-			EngineVersion: modelResult.EngineVersion,
-			ModelName:     modelResult.ModelName,
-			ModelSHA256:   modelResult.ModelSHA256,
-			ContextID:     grounding.ContextID,
-			Resources:     modelResult.Resources,
-		}, err
+		result.EngineVersion = modelResult.EngineVersion
+		result.ModelName = modelResult.ModelName
+		result.ModelSHA256 = modelResult.ModelSHA256
+		result.Resources = modelResult.Resources
+		return result, err
 	}
-	report, citations, err := v.VerifyGroundingEmission(grounding, modelResult.Emission)
-	result := LlamaCPPAnswerResult{
-		Grounding:     report,
-		EngineVersion: modelResult.EngineVersion,
-		ModelName:     modelResult.ModelName,
-		ModelSHA256:   modelResult.ModelSHA256,
-		ContextID:     grounding.ContextID,
-		Resources:     modelResult.Resources,
+	var claimVerificationBytes int64
+	var claimVerificationFailures int
+	report, citations, err := v.verifyGroundingEmissionLocked(grounding, modelResult.Emission, &claimVerificationBytes, &claimVerificationFailures)
+	result = LlamaCPPAnswerResult{
+		Grounding:                  report,
+		EngineVersion:              modelResult.EngineVersion,
+		ModelName:                  modelResult.ModelName,
+		ModelSHA256:                modelResult.ModelSHA256,
+		ContextID:                  grounding.ContextID,
+		Resources:                  modelResult.Resources,
+		sourceVerificationBytes:    grounding.sourceVerificationBytes + claimVerificationBytes,
+		sourceVerificationFailures: grounding.SourceVerificationFailures + claimVerificationFailures,
+		sourceVerificationLimit:    grounding.sourceVerificationLimit,
 	}
 	if err != nil {
 		_ = v.recordLlamaGroundingRejection(question, modelResult, grounding, "verification_error")
@@ -102,11 +120,15 @@ func (v *Vault) askWithLlamaCPPRunner(ctx context.Context, question string, scop
 		Support:                      "Local llama.cpp selected the passages; ECO released only deterministically grounded source wording. Source truth, completeness, relevance and legal correctness remain unverified.",
 		ScopeIDs:                     append([]string(nil), scopeIDs...),
 		ReceiptID:                    NewID("AIR"),
-		EvidenceConsidered:           countVerifiedEvidenceForScope(v.Snapshot(), scopeIDs),
+		EvidenceConsidered:           len(grounding.verifiedEvidenceIDs),
 		RetrievedSegments:            len(grounding.Records),
 		SuspiciousSourcesExcluded:    grounding.SuspiciousSourcesExcluded,
 		LowConfidenceSourcesExcluded: grounding.LowConfidenceSourcesExcluded,
 		SourceVerificationFailures:   grounding.SourceVerificationFailures,
+		VerifiedEvidenceIDs:          append([]string(nil), grounding.verifiedEvidenceIDs...),
+		SourceVerificationBytes:      result.sourceVerificationBytes,
+		SourceVerificationLimit:      grounding.sourceVerificationLimit,
+		WorkspaceRevision:            grounding.workspaceRevision,
 	}
 	if err := v.persistLlamaQuestion(rec, modelResult, grounding, report); err != nil {
 		return result, err
@@ -183,7 +205,7 @@ func (v *Vault) persistLlamaQuestion(rec QuestionRecord, model LlamaCPPModelResu
 	oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
 	oldUpdatedAt := v.Workspace.UpdatedAt
 	oldBuildID := v.Workspace.BuildID
-	v.Workspace.Questions = append([]QuestionRecord{rec}, v.Workspace.Questions...)
+	v.Workspace.Questions = append([]QuestionRecord{cloneQuestionRecord(rec)}, v.Workspace.Questions...)
 	details := map[string]any{
 		"question_id":             rec.ID,
 		"receipt_id":              rec.ReceiptID,

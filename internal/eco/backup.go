@@ -919,6 +919,16 @@ func validateRestoredWorkspace(ws *Workspace) error {
 		if !safeRecordID(q.ID) || len(q.Question) > 20000 || len(q.Answer) > 200000 || len(q.Citations) > 10000 {
 			return errors.New("restored question record is unsafe")
 		}
+		if len(q.VerifiedEvidenceIDs) > maxAskVerificationItems || q.SourceVerificationBytes < 0 || q.SourceVerificationBytes > maxAskVerificationBytes || q.WorkspaceRevision > ws.Revision {
+			return errors.New("restored question verification receipt is unsafe")
+		}
+		verifiedIDs := make(map[string]bool, len(q.VerifiedEvidenceIDs))
+		for _, evidenceID := range q.VerifiedEvidenceIDs {
+			if !evidenceIDs[evidenceID] || verifiedIDs[evidenceID] {
+				return errors.New("restored question verification receipt references invalid evidence")
+			}
+			verifiedIDs[evidenceID] = true
+		}
 		for _, citation := range q.Citations {
 			if !evidenceIDs[citation.EvidenceID] || len(citation.Quote) > 10000 {
 				return errors.New("restored citation is invalid")

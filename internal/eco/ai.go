@@ -14,6 +14,11 @@ var suspiciousInstruction = regexp.MustCompile(`(?i)(ignore (all|any|the|previou
 var datePattern = regexp.MustCompile(`(?i)\b(?:\d{1,2}[/-]\d{1,2}[/-]\d{2,4}|\d{1,2}\s+(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{2,4}|(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{2,4})\b`)
 var actionPattern = regexp.MustCompile(`(?i)\b(must|should|need to|required to|please|respond|reply|provide|send|submit|complete|contact|attend|pay|appeal|review|check|confirm)\b`)
 
+const (
+	maxAskVerificationItems = 12
+	maxAskVerificationBytes = 64 * 1024 * 1024
+)
+
 type rankedSegment struct {
 	Evidence EvidenceItem
 	Segment  SourceSegment
@@ -21,43 +26,183 @@ type rankedSegment struct {
 }
 
 func (v *Vault) askDeterministic(question string, scopeIDs []string) QuestionRecord {
+	return v.askDeterministicWithBudget(question, scopeIDs, maxAskVerificationBytes, 0, false)
+}
+
+func (v *Vault) askDeterministicWithBudget(question string, scopeIDs []string, verificationBudget int64, priorFailures int, priorLimitReached bool) QuestionRecord {
 	question = strings.TrimSpace(question)
 	intent := classifyIntent(question)
-	verificationFailures := v.verifyEvidenceForUse(scopeIDs)
+	ranked := []rankedSegment(nil)
+	excluded, lowConfidenceExcluded := 0, 0
+	verification := evidenceVerificationResult{verifiedIDs: make(map[string]bool)}
+	var answer, support string
+	var citations []Citation
+	var workspaceRevision uint64
+	if workspaceOnlyIntent(intent) {
+		summary := v.askWorkspaceSummary(intent)
+		answer, support = workspaceOnlyAnswer(intent, summary)
+		workspaceRevision = summary.revision
+	} else {
+		var ws Workspace
+		ws, ranked, excluded, lowConfidenceExcluded, verification = v.retrieveVerifiedSegments(intent, question, scopeIDs, verificationBudget)
+		answer, citations, support = composeAnswer(intent, question, ranked, ws, scopeIDs)
+		workspaceRevision = ws.Revision
+	}
+	verification.failures += priorFailures
+	verification.limitReached = verification.limitReached || priorLimitReached
+	if verification.limitReached && len(citations) == 0 {
+		answer = "ECO could not find enough freshly verified support within this Ask's bounded 12-object, 64 MiB source-verification limit. Narrow the question or select specific evidence."
+		support = "Not sufficiently supported within bounded source verification"
+	}
+	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: append([]string(nil), scopeIDs...), ReceiptID: NewID("AIR"), EvidenceConsidered: len(verification.verified), RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded, SourceVerificationFailures: verification.failures, VerifiedEvidenceIDs: append([]string(nil), verification.verified...), SourceVerificationBytes: maxAskVerificationBytes - verificationBudget + verification.bytes, SourceVerificationLimit: verification.limitReached, WorkspaceRevision: workspaceRevision}
+	v.mu.Lock()
+	oldQuestions := append([]QuestionRecord(nil), v.Workspace.Questions...)
+	oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
+	oldUpdatedAt := v.Workspace.UpdatedAt
+	oldBuildID := v.Workspace.BuildID
+	v.Workspace.Questions = append([]QuestionRecord{cloneQuestionRecord(rec)}, v.Workspace.Questions...)
+	v.addChangeUnlocked("user", "question-asked", "Asked ECO a source-backed local question", map[string]any{"question": truncate(question, 300), "intent": intent, "sources": len(citations)})
+	if err := v.saveUnlocked(); err != nil {
+		v.Workspace.Questions = oldQuestions
+		v.Workspace.Changes = oldChanges
+		v.Workspace.UpdatedAt = oldUpdatedAt
+		v.Workspace.BuildID = oldBuildID
+		rec = QuestionRecord{AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: "ECO could not safely commit this answer. No answer or citation was retained.", Support: "Question was not committed"}
+	}
+	v.mu.Unlock()
+	return rec
+}
+
+func workspaceOnlyIntent(intent string) bool {
+	return intent == "status" || intent == "integrity" || intent == "help"
+}
+
+type workspaceAskSummary struct {
+	revision      uint64
+	evidence      int
+	readable      int
+	images        int
+	activeMatters int
+	attention     int
+}
+
+func (v *Vault) askWorkspaceSummary(intent string) workspaceAskSummary {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return summarizeWorkspaceForAsk(v.Workspace, intent)
+}
+
+// Keep workspace-only Ask independent of nested evidence, OCR and citation payloads.
+func summarizeWorkspaceForAsk(ws Workspace, intent string) workspaceAskSummary {
+	summary := workspaceAskSummary{revision: ws.Revision, evidence: len(ws.Evidence)}
+	if intent != "status" {
+		return summary
+	}
+	for _, item := range ws.Evidence {
+		if !preservationUsable(item) {
+			summary.attention++
+			continue
+		}
+		if item.Readable {
+			summary.readable++
+		}
+		if item.Image != nil {
+			summary.images++
+		}
+		if len(item.Warnings) > 0 || item.Status == "Quarantined" {
+			summary.attention++
+		}
+	}
+	for _, matter := range ws.Matters {
+		if strings.EqualFold(matter.Status, "active") {
+			summary.activeMatters++
+		}
+	}
+	return summary
+}
+
+func workspaceOnlyAnswer(intent string, summary workspaceAskSummary) (string, string) {
+	switch intent {
+	case "status":
+		return statusAnswerFromSummary(summary), "Workspace-derived"
+	case "integrity":
+		return integrityAnswerFromSummary(summary), "Workspace-derived"
+	default:
+		return helpAnswer(), "Application guidance"
+	}
+}
+
+func (v *Vault) retrieveVerifiedSegments(intent, question string, scopeIDs []string, maxVerificationBytes int64) (Workspace, []rankedSegment, int, int, evidenceVerificationResult) {
 	ws := v.Snapshot()
-	ranked, excluded, lowConfidenceExcluded := rankSegments(question, ws.Evidence, scopeIDs)
-	answer, citations, support := composeAnswer(intent, question, ranked, ws, scopeIDs)
+	candidateRanking, excluded, lowConfidenceExcluded := rankSegmentsLimit(question, ws.Evidence, scopeIDs, 0)
+	candidates, candidatesLimited := askEvidenceCandidates(intent, candidateRanking, ws.Evidence, scopeIDs)
+	verification := v.verifyEvidenceForUse(candidates, maxVerificationBytes)
+	verification.limitReached = verification.limitReached || candidatesLimited
+	ws = v.Snapshot()
+	verifiedEvidence := make([]EvidenceItem, 0, len(verification.verifiedIDs))
+	for _, item := range ws.Evidence {
+		if verification.verifiedIDs[item.ID] && preservationUsable(item) {
+			verifiedEvidence = append(verifiedEvidence, item)
+		}
+	}
+	ws.Evidence = verifiedEvidence
+	ranked, _, _ := rankSegments(question, ws.Evidence, nil)
+	return ws, ranked, excluded, lowConfidenceExcluded, verification
+}
+
+func askEvidenceCandidates(intent string, ranked []rankedSegment, evidence []EvidenceItem, scopeIDs []string) ([]EvidenceItem, bool) {
 	allowed := make(map[string]bool, len(scopeIDs))
 	for _, id := range scopeIDs {
 		allowed[id] = true
 	}
-	verifiedConsidered := 0
-	for _, item := range ws.Evidence {
-		if (len(allowed) == 0 || allowed[item.ID]) && preservationUsable(item) {
-			verifiedConsidered++
+	useScope := len(allowed) > 0
+	candidates := make([]EvidenceItem, 0, maxAskVerificationItems)
+	seen := make(map[string]bool, maxAskVerificationItems)
+	limited := false
+	add := func(item EvidenceItem) {
+		if seen[item.ID] {
+			return
+		}
+		if len(candidates) >= maxAskVerificationItems {
+			limited = true
+			return
+		}
+		seen[item.ID] = true
+		candidates = append(candidates, item)
+	}
+	if intent == "image" {
+		for _, item := range evidence {
+			if useScope && !allowed[item.ID] {
+				continue
+			}
+			if preservationUsable(item) && item.Image != nil && item.Image.SourceObject == item.ObjectFile && item.Image.SourceSHA256 == item.SHA256 {
+				add(item)
+				break
+			}
 		}
 	}
-	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: scopeIDs, ReceiptID: NewID("AIR"), EvidenceConsidered: verifiedConsidered, RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded, SourceVerificationFailures: verificationFailures}
-	v.mu.Lock()
-	v.Workspace.Questions = append([]QuestionRecord{rec}, v.Workspace.Questions...)
-	v.addChangeUnlocked("user", "question-asked", "Asked ECO a source-backed local question", map[string]any{"question": truncate(question, 300), "intent": intent, "sources": len(citations)})
-	_ = v.saveUnlocked()
-	v.mu.Unlock()
-	return rec
+	for _, candidate := range ranked {
+		add(candidate.Evidence)
+		if limited {
+			break
+		}
+	}
+	return candidates, limited
 }
 
 func classifyIntent(q string) string {
 	t := strings.ToLower(q)
 	tokens := tokenize(t)
-	scores := map[string]float64{"summary": 0.2, "dates": 0, "actions": 0, "compare": 0, "missing": 0, "status": 0, "explain": 0, "integrity": 0, "image": 0}
+	scores := map[string]float64{"summary": 0.2, "dates": 0, "actions": 0, "compare": 0, "missing": 0, "status": 0, "help": 0, "explain": 0, "integrity": 0, "image": 0}
 	weights := map[string]map[string]float64{
 		"dates":     {"date": 3, "when": 2.5, "timeline": 3, "chronology": 3, "happened": 1.5, "deadline": 2.5},
 		"actions":   {"action": 3, "next": 2, "do": 1.5, "must": 2.5, "should": 2, "respond": 2, "reply": 2, "required": 2},
 		"compare":   {"compare": 4, "difference": 3, "different": 2.5, "conflict": 3, "contradict": 3, "versus": 3, "vs": 3},
 		"missing":   {"missing": 4, "absent": 3, "gap": 3, "attachment": 2, "not included": 3, "what else": 2},
 		"status":    {"status": 4, "where": 1.5, "progress": 3, "current": 2, "overview": 2, "where are we": 4},
+		"help":      {"capabilities": 4},
 		"explain":   {"explain": 4, "meaning": 3, "mean": 3, "plain": 2, "understand": 2},
-		"integrity": {"hash": 4, "sha": 4, "integrity": 4, "changed": 2, "verified": 3},
+		"integrity": {"hash": 4, "sha": 4, "integrity": 4, "changed": 2},
 		"image":     {"image": 3, "photo": 3, "photograph": 3, "scan": 3, "quality": 3, "blur": 3, "resolution": 3},
 	}
 	for intent, m := range weights {
@@ -65,10 +210,10 @@ func classifyIntent(q string) string {
 			scores[intent] += m[tok]
 		}
 	}
-	for phrase, w := range map[string]float64{"where are we": 5, "what happened": 4, "what do i need to do": 5, "what is missing": 5, "image quality": 5, "next action": 5} {
+	for phrase, w := range map[string]float64{"where are we": 5, "current workspace": 5, "workspace status": 6, "workspace overview": 6, "what happened": 4, "what do i need to do": 5, "what is missing": 5, "image quality": 5, "next action": 5, "what can you do": 6, "how do i use eco": 6} {
 		if strings.Contains(t, phrase) {
 			switch phrase {
-			case "where are we":
+			case "where are we", "current workspace", "workspace status", "workspace overview":
 				scores["status"] += w
 			case "what happened":
 				scores["summary"] += w
@@ -78,8 +223,13 @@ func classifyIntent(q string) string {
 				scores["missing"] += w
 			case "image quality":
 				scores["image"] += w
+			case "what can you do", "how do i use eco":
+				scores["help"] += w
 			}
 		}
+	}
+	if strings.TrimSpace(t) == "help" {
+		scores["help"] += 6
 	}
 	best := "summary"
 	bestScore := scores[best]
@@ -92,6 +242,10 @@ func classifyIntent(q string) string {
 }
 
 func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSegment, int, int) {
+	return rankSegmentsLimit(q, evidence, scope, 12)
+}
+
+func rankSegmentsLimit(q string, evidence []EvidenceItem, scope []string, limit int) ([]rankedSegment, int, int) {
 	allowed := map[string]bool{}
 	for _, id := range scope {
 		allowed[id] = true
@@ -170,9 +324,9 @@ func rankSegments(q string, evidence []EvidenceItem, scope []string) ([]rankedSe
 			out = append(out, rankedSegment{d.e, d.s, score})
 		}
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Score > out[j].Score })
-	if len(out) > 12 {
-		out = out[:12]
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Score > out[j].Score })
+	if limit > 0 && len(out) > limit {
+		out = out[:limit]
 	}
 	return out, excluded, lowConfidenceExcluded
 }
@@ -183,6 +337,9 @@ func composeAnswer(intent, q string, ranked []rankedSegment, ws Workspace, scope
 	}
 	if intent == "integrity" {
 		return integrityAnswer(ws), nil, "Workspace-derived"
+	}
+	if intent == "help" {
+		return helpAnswer(), nil, "Application guidance"
 	}
 	if intent == "image" {
 		var scopeIDs []string
@@ -336,32 +493,19 @@ func tokenize(s string) []string {
 var stopwords = map[string]bool{"the": true, "and": true, "for": true, "that": true, "this": true, "with": true, "from": true, "are": true, "was": true, "were": true, "have": true, "has": true, "had": true, "you": true, "your": true, "what": true, "when": true, "where": true, "which": true, "who": true, "how": true, "into": true, "about": true, "can": true, "could": true, "would": true, "should": true, "not": true, "but": true, "all": true, "any": true, "its": true, "our": true, "they": true, "them": true, "then": true, "than": true, "been": true, "being": true, "also": true, "only": true, "there": true, "here": true}
 
 func statusAnswer(ws Workspace) string {
-	readable, images, attention := 0, 0, 0
-	for _, e := range ws.Evidence {
-		if !preservationUsable(e) {
-			attention++
-			continue
-		}
-		if e.Readable {
-			readable++
-		}
-		if e.Image != nil {
-			images++
-		}
-		if len(e.Warnings) > 0 || e.Status == "Quarantined" {
-			attention++
-		}
-	}
-	openMatters := 0
-	for _, m := range ws.Matters {
-		if strings.EqualFold(m.Status, "active") {
-			openMatters++
-		}
-	}
-	return fmt.Sprintf("Current local workspace: %d preserved evidence items, %d readable items, %d assessed images, %d active matters and %d items needing attention. The newest build is %s. No cloud or network service is used.", len(ws.Evidence), readable, images, openMatters, attention, BuildID)
+	return statusAnswerFromSummary(summarizeWorkspaceForAsk(ws, "status"))
+}
+func statusAnswerFromSummary(summary workspaceAskSummary) string {
+	return fmt.Sprintf("Current local workspace: %d preserved evidence items, %d readable items, %d assessed images, %d active matters and %d items needing attention. The newest build is %s. No cloud or network service is used.", summary.evidence, summary.readable, summary.images, summary.activeMatters, summary.attention, BuildID)
 }
 func integrityAnswer(ws Workspace) string {
-	return fmt.Sprintf("ECO has %d encrypted evidence objects recorded. Use Trust & settings → Verify encrypted evidence to recalculate each decrypted SHA-256 and authentication tag.", len(ws.Evidence))
+	return integrityAnswerFromSummary(summarizeWorkspaceForAsk(ws, "integrity"))
+}
+func integrityAnswerFromSummary(summary workspaceAskSummary) string {
+	return fmt.Sprintf("ECO has %d encrypted evidence objects recorded. Use Trust & settings → Verify encrypted evidence to recalculate each decrypted SHA-256 and authentication tag.", summary.evidence)
+}
+func helpAnswer() string {
+	return "Ask ECO can answer workspace-status questions without reading evidence, or search readable preserved evidence for source-backed passages. Select specific evidence to narrow a question. Always review cited material before relying on an answer."
 }
 func imageAnswer(ws Workspace, ranked []rankedSegment, scopeIDs []string) (string, []Citation) {
 	allowed := make(map[string]bool, len(scopeIDs))

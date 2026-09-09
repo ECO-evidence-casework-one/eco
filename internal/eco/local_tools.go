@@ -412,9 +412,15 @@ func (v *Vault) AskWithRegisteredLlamaCPP(question string, scopeIDs []string, mo
 }
 
 func (v *Vault) AskWithRegisteredLlamaCPPContext(ctx context.Context, question string, scopeIDs []string, modelPath string) (LlamaCPPAnswerResult, error) {
+	v.opMu.RLock()
+	defer v.opMu.RUnlock()
+	return v.askWithRegisteredLlamaCPPLocked(ctx, question, append([]string(nil), scopeIDs...), modelPath)
+}
+
+func (v *Vault) askWithRegisteredLlamaCPPLocked(ctx context.Context, question string, scopeIDs []string, modelPath string) (LlamaCPPAnswerResult, error) {
 	tool, err := v.VerifyRegisteredLocalToolContext(ctx, "llama.cpp")
 	if err != nil {
 		return LlamaCPPAnswerResult{}, err
 	}
-	return v.AskWithLlamaCPPContext(ctx, question, scopeIDs, tool.Executable, modelPath)
+	return v.askWithLlamaCPPRunnerLocked(ctx, question, scopeIDs, tool.Executable, modelPath, RunLlamaCPP)
 }

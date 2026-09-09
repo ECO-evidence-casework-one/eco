@@ -342,6 +342,9 @@ func (v *Vault) verifyPreservedObject(evidenceID, objectFile, expectedHash strin
 	if err != nil {
 		return SourceReceipt{}, err
 	}
+	if v.sourceVerificationBoundary != nil {
+		v.sourceVerificationBoundary(evidenceID)
+	}
 	f, err := os.Open(objectPath)
 	if err != nil {
 		return SourceReceipt{}, err
@@ -792,26 +795,45 @@ func (v *Vault) markEvidenceVerificationSuccess(evidenceID string, receipt Sourc
 	}
 }
 
-func (v *Vault) verifyEvidenceForUse(scopeIDs []string) int {
-	allowed := make(map[string]bool, len(scopeIDs))
-	for _, id := range scopeIDs {
-		allowed[id] = true
-	}
-	useScope := len(scopeIDs) > 0
-	ws := v.Snapshot()
-	failures := 0
-	for _, item := range ws.Evidence {
-		if useScope && !allowed[item.ID] {
+type evidenceVerificationResult struct {
+	verifiedIDs  map[string]bool
+	verified     []string
+	bytes        int64
+	failures     int
+	limitReached bool
+}
+
+// verifyEvidenceForUse verifies only pre-ranked candidates. Callers must use
+// verifiedIDs to prevent candidates skipped by either budget from supporting
+// retrieval, grounding or citation.
+func (v *Vault) verifyEvidenceForUse(candidates []EvidenceItem, maxBytes int64) evidenceVerificationResult {
+	result := evidenceVerificationResult{verifiedIDs: make(map[string]bool)}
+	attempted := make(map[string]bool, len(candidates))
+	for _, item := range candidates {
+		if attempted[item.ID] {
 			continue
 		}
+		if len(attempted) >= maxAskVerificationItems {
+			result.limitReached = true
+			break
+		}
+		if item.Size < 0 || item.Size > maxBytes-result.bytes {
+			result.limitReached = true
+			continue
+		}
+		attempted[item.ID] = true
+		result.bytes += item.Size
 		if !preservationUsable(item) {
-			failures++
+			result.failures++
 			continue
 		}
 		if _, err := v.verifyPreservedObject(item.ID, item.ObjectFile, item.SHA256, item.Size); err != nil {
 			v.markEvidenceVerificationFailure(item.ID, err)
-			failures++
+			result.failures++
+			continue
 		}
+		result.verifiedIDs[item.ID] = true
+		result.verified = append(result.verified, item.ID)
 	}
-	return failures
+	return result
 }

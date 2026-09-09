@@ -43,6 +43,9 @@ func TestLlamaCPPWorkflowReleasesOnlyGroundedSourceText(t *testing.T) {
 	if !result.Grounding.AllClaimsGrounded || result.Grounding.SemanticTruthVerified {
 		t.Fatalf("unexpected grounding report: %+v", result.Grounding)
 	}
+	if !QuestionUsedLocalAI(result.Question) {
+		t.Fatal("accepted grounded local-model answer no longer produces QWEN CHECKED status")
+	}
 	if len(result.Question.Citations) != 1 || result.Question.Citations[0].SourceSHA256 == "" {
 		t.Fatalf("released question is not bound to a verified source: %+v", result.Question)
 	}
