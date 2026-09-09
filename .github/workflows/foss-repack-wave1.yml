@@ -1,0 +1,166 @@
+name: FOSS donor repack wave 1
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/foss-repack-wave1.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  repack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Download completed Wave 1 harvest artifact from prior run
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          name: ECO-FOSS-DONORS-WAVE1-20260904
+          path: ${{ runner.temp }}/wave1
+          github-token: ${{ github.token }}
+          repository: ECO-evidence-casework-one/eco
+          run-id: 33875594677
+
+      - name: Repack to one ZIP and split below connector limit
+        shell: bash
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/wave1"
+          out="$RUNNER_TEMP/repack"
+          parts="$out/parts"
+          mkdir -p "$parts"
+          test -f "$src/HARVEST_COMPLETE.json"
+          test -f "$src/SOURCE_ARCHIVES.json"
+          test -f "$src/SHA256SUMS.txt"
+
+          bundle="$out/ECO_FOSS_DONORS_WAVE1_20260904.zip"
+          (
+            cd "$src"
+            zip -6 -r "$bundle" .
+          )
+          bundle_sha=$(sha256sum "$bundle" | awk '{print $1}')
+          bundle_bytes=$(stat -c '%s' "$bundle")
+
+          split -b 180M -d -a 2 "$bundle" "$parts/ECO_FOSS_DONORS_WAVE1_20260904.zip.part"
+
+          python3 - "$bundle" "$parts" "$bundle_sha" "$bundle_bytes" <<'PY'
+          import hashlib, json, os, pathlib, sys
+          bundle = pathlib.Path(sys.argv[1])
+          parts_dir = pathlib.Path(sys.argv[2])
+          bundle_sha = sys.argv[3]
+          bundle_bytes = int(sys.argv[4])
+          rows = []
+          for p in sorted(parts_dir.glob('ECO_FOSS_DONORS_WAVE1_20260904.zip.part*')):
+              h = hashlib.sha256()
+              with p.open('rb') as f:
+                  for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                      h.update(chunk)
+              rows.append({'name': p.name, 'bytes': p.stat().st_size, 'sha256': h.hexdigest()})
+          if not rows:
+              raise SystemExit('no split parts created')
+          if any(r['bytes'] > 200 * 1024 * 1024 for r in rows):
+              raise SystemExit('split part unexpectedly exceeded 200 MiB safety limit')
+          descriptor = {
+              'schema': 1,
+              'source_artifact_id': 9937780302,
+              'source_workflow_run_id': 33875594677,
+              'source_artifact_name': 'ECO-FOSS-DONORS-WAVE1-20260904',
+              'source_artifact_github_digest': 'sha256:8f0eba7e3ad2573fc38a6e8ab25802fa1d888fecb7e862c45116192123d10e8e',
+              'repacked_zip': bundle.name,
+              'repacked_zip_bytes': bundle_bytes,
+              'repacked_zip_sha256': bundle_sha,
+              'part_count': len(rows),
+              'parts': rows,
+              'recombine': 'concatenate parts in lexical filename order to recreate repacked_zip byte-for-byte'
+          }
+          out = parts_dir.parent / 'REPACK_DESCRIPTOR.json'
+          out.write_text(json.dumps(descriptor, indent=2) + '\n', encoding='utf-8')
+          print(json.dumps(descriptor, indent=2))
+          PY
+
+          echo "PARTS_DIR=$parts" >> "$GITHUB_ENV"
+          echo "DESCRIPTOR=$out/REPACK_DESCRIPTOR.json" >> "$GITHUB_ENV"
+
+      - name: Upload repack descriptor
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ECO-FOSS-WAVE1-REPACK-DESCRIPTOR-20260904
+          path: ${{ env.DESCRIPTOR }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 00
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART00-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part00
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 01
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART01-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part01
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 02
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART02-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part02
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 03
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART03-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part03
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 04
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART04-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part04
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 05
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART05-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part05
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 06
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART06-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part06
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload part 07
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: ECO-FOSS-WAVE1-PART07-20260904
+          path: ${{ env.PARTS_DIR }}/ECO_FOSS_DONORS_WAVE1_20260904.zip.part07
+          if-no-files-found: ignore
+          retention-days: 7
+          compression-level: 0
