@@ -32,20 +32,21 @@ var (
 
 type Vault struct {
 	// Per-instance, package-internal test observation; normal application leaves nil.
-	restoreBoundary     func(string)
-	Root                string
-	Objects             string
-	key                 []byte
-	owner               *workspaceOwnerLease
-	ownerTxn            string
-	persistedRevision   uint64
-	persistedMetaSHA256 string
-	persistedChangeHead string
-	persistedOwnerTxn   string
-	closed              bool
-	opMu                sync.RWMutex
-	mu                  sync.Mutex
-	Workspace           Workspace
+	restoreBoundary            func(string)
+	sourceVerificationBoundary func(string)
+	Root                       string
+	Objects                    string
+	key                        []byte
+	owner                      *workspaceOwnerLease
+	ownerTxn                   string
+	persistedRevision          uint64
+	persistedMetaSHA256        string
+	persistedChangeHead        string
+	persistedOwnerTxn          string
+	closed                     bool
+	opMu                       sync.RWMutex
+	mu                         sync.Mutex
+	Workspace                  Workspace
 }
 
 func OpenVault(root string) (*Vault, error) {
@@ -367,15 +368,22 @@ func (v *Vault) Snapshot() Workspace {
 	out.Changes = append([]ChangeRecord(nil), v.Workspace.Changes...)
 	out.Questions = append([]QuestionRecord(nil), v.Workspace.Questions...)
 	for i := range out.Questions {
-		out.Questions[i].Citations = append([]Citation(nil), v.Workspace.Questions[i].Citations...)
-		for j := range out.Questions[i].Citations {
-			if v.Workspace.Questions[i].Citations[j].Region != nil {
-				region := *v.Workspace.Questions[i].Citations[j].Region
-				out.Questions[i].Citations[j].Region = &region
-			}
-		}
-		out.Questions[i].ScopeIDs = append([]string(nil), v.Workspace.Questions[i].ScopeIDs...)
+		out.Questions[i] = cloneQuestionRecord(v.Workspace.Questions[i])
 	}
+	return out
+}
+
+func cloneQuestionRecord(record QuestionRecord) QuestionRecord {
+	out := record
+	out.Citations = append([]Citation(nil), record.Citations...)
+	for i := range out.Citations {
+		if record.Citations[i].Region != nil {
+			region := *record.Citations[i].Region
+			out.Citations[i].Region = &region
+		}
+	}
+	out.ScopeIDs = append([]string(nil), record.ScopeIDs...)
+	out.VerifiedEvidenceIDs = append([]string(nil), record.VerifiedEvidenceIDs...)
 	return out
 }
 

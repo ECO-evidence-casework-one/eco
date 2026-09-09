@@ -40,6 +40,10 @@ type GroundingContext struct {
 	LowConfidenceSourcesExcluded int               `json:"low_confidence_sources_excluded"`
 	SourceVerificationFailures   int               `json:"source_verification_failures"`
 	trusted                      map[string]groundingTrustedSource
+	verifiedEvidenceIDs          []string
+	sourceVerificationBytes      int64
+	sourceVerificationLimit      bool
+	workspaceRevision            uint64
 }
 
 type groundingTrustedSource struct {
@@ -93,23 +97,36 @@ type GroundingReport struct {
 // be shown to a local model. Suspicious document instructions and very-low-
 // confidence OCR are removed by the normal ECO retrieval path first.
 func (v *Vault) BuildGroundingContext(question string, scopeIDs []string) (GroundingContext, error) {
+	v.opMu.RLock()
+	defer v.opMu.RUnlock()
+	return v.buildGroundingContextLocked(question, append([]string(nil), scopeIDs...))
+}
+
+func (v *Vault) buildGroundingContextLocked(question string, scopeIDs []string) (GroundingContext, error) {
 	question = strings.TrimSpace(question)
 	if question == "" {
 		return GroundingContext{}, errors.New("grounding question is required")
 	}
-	verificationFailures := v.verifyEvidenceForUse(scopeIDs)
-	ws := v.Snapshot()
-	ranked, excluded, lowConfidenceExcluded := rankSegments(question, ws.Evidence, scopeIDs)
-	if len(ranked) == 0 {
-		return GroundingContext{}, errors.New("no verified source segments support a grounding context")
+	intent := classifyIntent(question)
+	if workspaceOnlyIntent(intent) {
+		return GroundingContext{}, errors.New("workspace-only questions do not require an evidence grounding context")
 	}
-
+	// Reserve half of the per-Ask byte budget for the mandatory post-model
+	// verification of every distinct source the model actually claims.
+	ws, ranked, excluded, lowConfidenceExcluded, verification := v.retrieveVerifiedSegments(intent, question, scopeIDs, maxAskVerificationBytes/2)
 	ctx := GroundingContext{
 		Question:                     question,
 		SuspiciousSourcesExcluded:    excluded,
 		LowConfidenceSourcesExcluded: lowConfidenceExcluded,
-		SourceVerificationFailures:   verificationFailures,
+		SourceVerificationFailures:   verification.failures,
 		trusted:                      make(map[string]groundingTrustedSource),
+		verifiedEvidenceIDs:          append([]string(nil), verification.verified...),
+		sourceVerificationBytes:      verification.bytes,
+		sourceVerificationLimit:      verification.limitReached,
+		workspaceRevision:            ws.Revision,
+	}
+	if len(ranked) == 0 {
+		return ctx, errors.New("no verified source segments support a grounding context")
 	}
 	for _, r := range ranked {
 		if !segmentBoundToPreservedSource(r.Evidence, r.Segment) {
@@ -157,7 +174,7 @@ func (v *Vault) BuildGroundingContext(question string, scopeIDs []string) (Groun
 		}
 	}
 	if len(ctx.Records) == 0 {
-		return GroundingContext{}, errors.New("no verified source text remained after grounding controls")
+		return ctx, errors.New("no verified source text remained after grounding controls")
 	}
 	ctx.ContextID = groundingContextID(ctx.trusted)
 	return ctx, nil
@@ -168,6 +185,12 @@ func (v *Vault) BuildGroundingContext(question string, scopeIDs []string) (Groun
 // claims fail the entire batch. Text mismatches return a negative report and
 // no releasable citations; callers must not regenerate merely to obtain green.
 func (v *Vault) VerifyGroundingEmission(ctx GroundingContext, emission GroundingEmission) (GroundingReport, []Citation, error) {
+	v.opMu.RLock()
+	defer v.opMu.RUnlock()
+	return v.verifyGroundingEmissionLocked(ctx, emission, nil, nil)
+}
+
+func (v *Vault) verifyGroundingEmissionLocked(ctx GroundingContext, emission GroundingEmission, verificationBytes *int64, verificationFailures *int) (GroundingReport, []Citation, error) {
 	report := GroundingReport{ContextID: ctx.ContextID, SemanticTruthVerified: false}
 	if ctx.ContextID == "" || len(ctx.trusted) == 0 || groundingContextID(ctx.trusted) != ctx.ContextID {
 		return report, nil, errors.New("grounding context is missing, reconstructed or mutated")
@@ -212,8 +235,14 @@ func (v *Vault) VerifyGroundingEmission(ctx GroundingContext, emission Grounding
 		}
 		if !verifiedEvidence[trusted.EvidenceID] {
 			item, _, _ := findGroundingSource(ws, trusted.EvidenceID, trusted.SegmentID)
+			if verificationBytes != nil {
+				*verificationBytes += item.Size
+			}
 			if _, err := v.verifyPreservedObject(item.ID, item.ObjectFile, item.SHA256, item.Size); err != nil {
 				v.markEvidenceVerificationFailure(item.ID, err)
+				if verificationFailures != nil {
+					*verificationFailures++
+				}
 				return report, nil, fmt.Errorf("claim %d: preserved source verification failed: %w", index, err)
 			}
 			verifiedEvidence[trusted.EvidenceID] = true

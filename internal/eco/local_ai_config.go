@@ -1,6 +1,7 @@
 package eco
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -28,6 +29,16 @@ type configuredLocalAI struct {
 // behaviour. A configured engine that cannot be verified or run is audited and
 // falls back rather than making Ask ECO unusable.
 func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
+	v.opMu.RLock()
+	defer v.opMu.RUnlock()
+	return v.askLocked(question, append([]string(nil), scopeIDs...))
+}
+
+// askLocked owns the complete Ask transaction beneath one opMu read lock.
+func (v *Vault) askLocked(question string, scopeIDs []string) QuestionRecord {
+	if workspaceOnlyIntent(classifyIntent(strings.TrimSpace(question))) {
+		return v.askDeterministic(question, scopeIDs)
+	}
 	cfg, configured, err := loadConfiguredLocalAI()
 	if !configured {
 		return v.askDeterministic(question, scopeIDs)
@@ -35,9 +46,9 @@ func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
 	if err == nil {
 		err = v.ensureConfiguredLlamaCPPRegistered(cfg)
 	}
+	var result LlamaCPPAnswerResult
 	if err == nil {
-		var result LlamaCPPAnswerResult
-		result, err = v.AskWithRegisteredLlamaCPP(question, scopeIDs, cfg.Model)
+		result, err = v.askWithRegisteredLlamaCPPLocked(context.Background(), question, scopeIDs, cfg.Model)
 		if err == nil && result.Question.ID != "" {
 			return result.Question
 		}
@@ -46,7 +57,11 @@ func (v *Vault) Ask(question string, scopeIDs []string) QuestionRecord {
 		}
 	}
 	_ = v.recordConfiguredLocalAIFallback(question, err)
-	return v.askDeterministic(question, scopeIDs)
+	remaining := maxAskVerificationBytes - result.sourceVerificationBytes
+	if remaining < 0 {
+		remaining = 0
+	}
+	return v.askDeterministicWithBudget(question, scopeIDs, remaining, result.sourceVerificationFailures, result.sourceVerificationLimit || remaining == 0)
 }
 
 func loadConfiguredLocalAI() (configuredLocalAI, bool, error) {
