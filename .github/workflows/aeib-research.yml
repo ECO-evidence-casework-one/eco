@@ -1,0 +1,28 @@
+name: AEIB research self-test
+
+on:
+  pull_request:
+    paths:
+      - 'research/aeib/**'
+      - '.github/workflows/aeib-research.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  aeib-self-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Generate deterministic synthetic corpus
+        run: python3 research/aeib/RUN_AEIB.py generate
+      - name: Validate generated corpus hashes and sizes
+        run: python3 research/aeib/RUN_AEIB.py validate
+      - name: Run AEIB self-tests
+        run: python3 -m unittest discover -s research/aeib/tests -v
+      - name: Confirm generated corpus is untracked and source tree unchanged
+        shell: bash
+        run: |
+          test -z "$(git status --porcelain)"
