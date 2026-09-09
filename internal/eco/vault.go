@@ -34,6 +34,7 @@ type Vault struct {
 	// Per-instance, package-internal test observation; normal application leaves nil.
 	restoreBoundary            func(string)
 	sourceVerificationBoundary func(string)
+	snapshotBoundary           func()
 	Root                       string
 	Objects                    string
 	key                        []byte
@@ -322,6 +323,9 @@ func workspaceChangeHead(ws Workspace) string {
 }
 
 func (v *Vault) Snapshot() Workspace {
+	if v.snapshotBoundary != nil {
+		v.snapshotBoundary()
+	}
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	// Do not serialise the complete encrypted workspace merely to paint or

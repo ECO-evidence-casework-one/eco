@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -34,17 +35,31 @@ func importSyntheticText(t *testing.T, v *Vault, name, text string) EvidenceItem
 
 func TestWorkspaceOnlyAskPerformsNoSourceVerification(t *testing.T) {
 	disableConfiguredLocalAI(t)
+	t.Setenv(envLlamaCPPExecutable, filepath.Join(t.TempDir(), "incomplete-llama-cli.exe"))
 	v, err := openTestVault(filepath.Join(t.TempDir(), "vault"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer v.Close()
-	for i := 0; i < 4; i++ {
-		importSyntheticText(t, v, fmt.Sprintf("source-%02d.txt", i), fmt.Sprintf("Synthetic evidence item %d.", i))
+	hash := strings.Repeat("a", 64)
+	v.mu.Lock()
+	v.Workspace.Evidence = []EvidenceItem{
+		{ID: "E-READABLE", ObjectFile: "E-READABLE.ecoobj", SHA256: hash, Preservation: preservationCommitted, SourceVerified: true, Readable: true},
+		{ID: "E-IMAGE", ObjectFile: "E-IMAGE.ecoobj", SHA256: hash, Preservation: preservationCommitted, SourceVerified: true, Image: &ImageAssessment{}, Warnings: []string{"synthetic warning"}},
+		{ID: "E-UNVERIFIED", ObjectFile: "E-UNVERIFIED.ecoobj", SHA256: hash, Preservation: preservationCommitted},
+		{ID: "E-QUARANTINED", ObjectFile: "E-QUARANTINED.ecoobj", SHA256: hash, Preservation: preservationCommitted, SourceVerified: true, Status: "Quarantined"},
 	}
+	v.Workspace.Matters = []Matter{{ID: "M-ACTIVE", Status: "ACTIVE"}, {ID: "M-CLOSED", Status: "Closed"}}
+	if err := v.saveUnlocked(); err != nil {
+		v.mu.Unlock()
+		t.Fatal(err)
+	}
+	v.mu.Unlock()
 
 	verified := 0
+	snapshots := 0
 	v.sourceVerificationBoundary = func(string) { verified++ }
+	v.snapshotBoundary = func() { snapshots++ }
 	questions := []struct {
 		text   string
 		intent string
@@ -53,7 +68,10 @@ func TestWorkspaceOnlyAskPerformsNoSourceVerification(t *testing.T) {
 		{"How do I use ECO and what can you do?", "help"},
 		{"What is the evidence integrity?", "integrity"},
 	}
-	for _, question := range questions {
+	for i, question := range questions {
+		v.mu.Lock()
+		wantRevision := v.Workspace.Revision
+		v.mu.Unlock()
 		record := v.Ask(question.text, nil)
 		if record.Intent != question.intent {
 			t.Fatalf("%q classified as %q, want %q", question.text, record.Intent, question.intent)
@@ -61,12 +79,67 @@ func TestWorkspaceOnlyAskPerformsNoSourceVerification(t *testing.T) {
 		if record.EvidenceConsidered != 0 || record.SourceVerificationBytes != 0 || len(record.VerifiedEvidenceIDs) != 0 {
 			t.Fatalf("workspace-only Ask reported source verification: %+v", record)
 		}
+		if record.WorkspaceRevision != wantRevision {
+			t.Fatalf("question %d recorded workspace revision %d, want %d", i, record.WorkspaceRevision, wantRevision)
+		}
+		if question.intent == "status" && !strings.Contains(record.Answer, "4 preserved evidence items, 1 readable items, 1 assessed images, 1 active matters and 3 items needing attention") {
+			t.Fatalf("status answer did not use the lightweight summary correctly: %q", record.Answer)
+		}
 	}
 	if verified != 0 {
 		t.Fatalf("workspace-only Ask verified %d preserved objects, want zero", verified)
 	}
-	if got := len(v.Snapshot().Questions); got != len(questions) {
+	if snapshots != 0 {
+		t.Fatalf("workspace-only Ask took %d full workspace snapshots, want zero", snapshots)
+	}
+	v.snapshotBoundary = nil
+	ws := v.Snapshot()
+	if got := len(ws.Questions); got != len(questions) {
 		t.Fatalf("persisted %d workspace-only questions, want %d", got, len(questions))
+	}
+	audits := 0
+	for _, change := range ws.Changes {
+		if change.Type == "question-asked" {
+			audits++
+		}
+		if change.Type == "configured-local-ai-fallback" {
+			t.Fatal("workspace-only Ask unexpectedly entered the configured local-AI path")
+		}
+	}
+	if audits != len(questions) {
+		t.Fatalf("persisted %d question audits, want %d", audits, len(questions))
+	}
+}
+
+func TestWorkspaceAskSummaryCannotCarryNestedPayloads(t *testing.T) {
+	typeOfSummary := reflect.TypeOf(workspaceAskSummary{})
+	for i := 0; i < typeOfSummary.NumField(); i++ {
+		kind := typeOfSummary.Field(i).Type.Kind()
+		if kind != reflect.Int && kind != reflect.Uint64 {
+			t.Fatalf("workspace summary field %q can retain non-scalar payload type %s", typeOfSummary.Field(i).Name, kind)
+		}
+	}
+	hash := strings.Repeat("b", 64)
+	v := &Vault{Workspace: newWorkspace()}
+	v.Workspace.Revision = 42
+	v.Workspace.Evidence = []EvidenceItem{{
+		ID:             "E-LARGE-NESTED",
+		ObjectFile:     "E-LARGE-NESTED.ecoobj",
+		SHA256:         hash,
+		Preservation:   preservationCommitted,
+		SourceVerified: true,
+		Readable:       true,
+		Segments:       make([]SourceSegment, 100000),
+		OCR:            &OCRReceipt{Words: make([]OCRWord, 100000), Lines: make([]OCRLine, 10000)},
+	}}
+	snapshots := 0
+	v.snapshotBoundary = func() { snapshots++ }
+	summary := v.askWorkspaceSummary("status")
+	if summary.revision != 42 || summary.evidence != 1 || summary.readable != 1 {
+		t.Fatalf("unexpected scalar summary: %+v", summary)
+	}
+	if snapshots != 0 {
+		t.Fatalf("lightweight summary invoked full Snapshot %d times", snapshots)
 	}
 }
 

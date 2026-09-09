@@ -32,21 +32,29 @@ func (v *Vault) askDeterministic(question string, scopeIDs []string) QuestionRec
 func (v *Vault) askDeterministicWithBudget(question string, scopeIDs []string, verificationBudget int64, priorFailures int, priorLimitReached bool) QuestionRecord {
 	question = strings.TrimSpace(question)
 	intent := classifyIntent(question)
-	ws := v.Snapshot()
 	ranked := []rankedSegment(nil)
 	excluded, lowConfidenceExcluded := 0, 0
 	verification := evidenceVerificationResult{verifiedIDs: make(map[string]bool)}
-	if !workspaceOnlyIntent(intent) {
+	var answer, support string
+	var citations []Citation
+	var workspaceRevision uint64
+	if workspaceOnlyIntent(intent) {
+		summary := v.askWorkspaceSummary(intent)
+		answer, support = workspaceOnlyAnswer(intent, summary)
+		workspaceRevision = summary.revision
+	} else {
+		var ws Workspace
 		ws, ranked, excluded, lowConfidenceExcluded, verification = v.retrieveVerifiedSegments(intent, question, scopeIDs, verificationBudget)
+		answer, citations, support = composeAnswer(intent, question, ranked, ws, scopeIDs)
+		workspaceRevision = ws.Revision
 	}
 	verification.failures += priorFailures
 	verification.limitReached = verification.limitReached || priorLimitReached
-	answer, citations, support := composeAnswer(intent, question, ranked, ws, scopeIDs)
 	if verification.limitReached && len(citations) == 0 {
 		answer = "ECO could not find enough freshly verified support within this Ask's bounded 12-object, 64 MiB source-verification limit. Narrow the question or select specific evidence."
 		support = "Not sufficiently supported within bounded source verification"
 	}
-	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: append([]string(nil), scopeIDs...), ReceiptID: NewID("AIR"), EvidenceConsidered: len(verification.verified), RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded, SourceVerificationFailures: verification.failures, VerifiedEvidenceIDs: append([]string(nil), verification.verified...), SourceVerificationBytes: maxAskVerificationBytes - verificationBudget + verification.bytes, SourceVerificationLimit: verification.limitReached, WorkspaceRevision: ws.Revision}
+	rec := QuestionRecord{ID: NewID("Q"), AskedAt: time.Now().UTC(), Question: question, Intent: intent, Answer: answer, Citations: citations, Support: support, ScopeIDs: append([]string(nil), scopeIDs...), ReceiptID: NewID("AIR"), EvidenceConsidered: len(verification.verified), RetrievedSegments: len(ranked), SuspiciousSourcesExcluded: excluded, LowConfidenceSourcesExcluded: lowConfidenceExcluded, SourceVerificationFailures: verification.failures, VerifiedEvidenceIDs: append([]string(nil), verification.verified...), SourceVerificationBytes: maxAskVerificationBytes - verificationBudget + verification.bytes, SourceVerificationLimit: verification.limitReached, WorkspaceRevision: workspaceRevision}
 	v.mu.Lock()
 	oldQuestions := append([]QuestionRecord(nil), v.Workspace.Questions...)
 	oldChanges := append([]ChangeRecord(nil), v.Workspace.Changes...)
@@ -67,6 +75,61 @@ func (v *Vault) askDeterministicWithBudget(question string, scopeIDs []string, v
 
 func workspaceOnlyIntent(intent string) bool {
 	return intent == "status" || intent == "integrity" || intent == "help"
+}
+
+type workspaceAskSummary struct {
+	revision      uint64
+	evidence      int
+	readable      int
+	images        int
+	activeMatters int
+	attention     int
+}
+
+func (v *Vault) askWorkspaceSummary(intent string) workspaceAskSummary {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return summarizeWorkspaceForAsk(v.Workspace, intent)
+}
+
+// Keep workspace-only Ask independent of nested evidence, OCR and citation payloads.
+func summarizeWorkspaceForAsk(ws Workspace, intent string) workspaceAskSummary {
+	summary := workspaceAskSummary{revision: ws.Revision, evidence: len(ws.Evidence)}
+	if intent != "status" {
+		return summary
+	}
+	for _, item := range ws.Evidence {
+		if !preservationUsable(item) {
+			summary.attention++
+			continue
+		}
+		if item.Readable {
+			summary.readable++
+		}
+		if item.Image != nil {
+			summary.images++
+		}
+		if len(item.Warnings) > 0 || item.Status == "Quarantined" {
+			summary.attention++
+		}
+	}
+	for _, matter := range ws.Matters {
+		if strings.EqualFold(matter.Status, "active") {
+			summary.activeMatters++
+		}
+	}
+	return summary
+}
+
+func workspaceOnlyAnswer(intent string, summary workspaceAskSummary) (string, string) {
+	switch intent {
+	case "status":
+		return statusAnswerFromSummary(summary), "Workspace-derived"
+	case "integrity":
+		return integrityAnswerFromSummary(summary), "Workspace-derived"
+	default:
+		return helpAnswer(), "Application guidance"
+	}
 }
 
 func (v *Vault) retrieveVerifiedSegments(intent, question string, scopeIDs []string, maxVerificationBytes int64) (Workspace, []rankedSegment, int, int, evidenceVerificationResult) {
@@ -430,32 +493,16 @@ func tokenize(s string) []string {
 var stopwords = map[string]bool{"the": true, "and": true, "for": true, "that": true, "this": true, "with": true, "from": true, "are": true, "was": true, "were": true, "have": true, "has": true, "had": true, "you": true, "your": true, "what": true, "when": true, "where": true, "which": true, "who": true, "how": true, "into": true, "about": true, "can": true, "could": true, "would": true, "should": true, "not": true, "but": true, "all": true, "any": true, "its": true, "our": true, "they": true, "them": true, "then": true, "than": true, "been": true, "being": true, "also": true, "only": true, "there": true, "here": true}
 
 func statusAnswer(ws Workspace) string {
-	readable, images, attention := 0, 0, 0
-	for _, e := range ws.Evidence {
-		if !preservationUsable(e) {
-			attention++
-			continue
-		}
-		if e.Readable {
-			readable++
-		}
-		if e.Image != nil {
-			images++
-		}
-		if len(e.Warnings) > 0 || e.Status == "Quarantined" {
-			attention++
-		}
-	}
-	openMatters := 0
-	for _, m := range ws.Matters {
-		if strings.EqualFold(m.Status, "active") {
-			openMatters++
-		}
-	}
-	return fmt.Sprintf("Current local workspace: %d preserved evidence items, %d readable items, %d assessed images, %d active matters and %d items needing attention. The newest build is %s. No cloud or network service is used.", len(ws.Evidence), readable, images, openMatters, attention, BuildID)
+	return statusAnswerFromSummary(summarizeWorkspaceForAsk(ws, "status"))
+}
+func statusAnswerFromSummary(summary workspaceAskSummary) string {
+	return fmt.Sprintf("Current local workspace: %d preserved evidence items, %d readable items, %d assessed images, %d active matters and %d items needing attention. The newest build is %s. No cloud or network service is used.", summary.evidence, summary.readable, summary.images, summary.activeMatters, summary.attention, BuildID)
 }
 func integrityAnswer(ws Workspace) string {
-	return fmt.Sprintf("ECO has %d encrypted evidence objects recorded. Use Trust & settings → Verify encrypted evidence to recalculate each decrypted SHA-256 and authentication tag.", len(ws.Evidence))
+	return integrityAnswerFromSummary(summarizeWorkspaceForAsk(ws, "integrity"))
+}
+func integrityAnswerFromSummary(summary workspaceAskSummary) string {
+	return fmt.Sprintf("ECO has %d encrypted evidence objects recorded. Use Trust & settings → Verify encrypted evidence to recalculate each decrypted SHA-256 and authentication tag.", summary.evidence)
 }
 func helpAnswer() string {
 	return "Ask ECO can answer workspace-status questions without reading evidence, or search readable preserved evidence for source-backed passages. Select specific evidence to narrow a question. Always review cited material before relying on an answer."
